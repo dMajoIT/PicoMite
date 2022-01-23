@@ -83,6 +83,8 @@ extern uint64_t TIM12count;
 extern char id_out[12];
 extern void WriteCommand(int cmd);
 extern void WriteData(int data);
+char *CSubInterrupt;
+volatile int CSubComplete=0;
 
 uint64_t timeroffset=0;
 void integersort(int64_t *iarray, int n, long long *index, int flags, int startpoint){
@@ -1353,10 +1355,38 @@ void printoptions(void){
         MMPrintString((char *)PinDef[Option.SerialTX].pinname);MMputchar(',',1);
         MMPrintString((char *)PinDef[Option.SerialRX].pinname);PRet();
     }
+    if(Option.SYSTEM_CLK){
+        PO("SYSTEM SPI");
+        MMPrintString((char *)PinDef[Option.SYSTEM_CLK].pinname);MMputchar(',',1);;
+        MMPrintString((char *)PinDef[Option.SYSTEM_MOSI].pinname);MMputchar(',',1);;
+        MMPrintString((char *)PinDef[Option.SYSTEM_MISO].pinname);MMPrintString("\r\n");
+    }
+    if(Option.SYSTEM_I2C_SDA){
+        PO("SYSTEM I2C");
+        MMPrintString((char *)PinDef[Option.SYSTEM_I2C_SDA].pinname);MMputchar(',',1);;
+        MMPrintString((char *)PinDef[Option.SYSTEM_I2C_SCL].pinname);MMPrintString("\r\n");
+    }
+    if(Option.Autorun>0 && Option.Autorun<=MAXFLASHSLOTS) PO2Int("AUTORUN", Option.Autorun);
+    if(Option.Autorun==MAXFLASHSLOTS+1)PO2Str("AUTORUN", "ON");
+    if(Option.Baudrate != CONSOLE_BAUDRATE) PO2Int("BAUDRATE", Option.Baudrate);
+    if(Option.Invert == true) PO2Str("CONSOLE", "INVERT");
+    if(Option.Invert == 2) PO2Str("CONSOLE", "AUTO");
+    if(Option.ColourCode == true) PO2Str("COLOURCODE", "ON");
+    if(Option.PWM == true) PO2Str("POWER PWM", "ON");
+    if(Option.Listcase != CONFIG_TITLE) PO2Str("CASE", CaseList[(int)Option.Listcase]);
+    if(Option.Tab != 2) PO2Int("TAB", Option.Tab);
+    if(Option.KeyboardConfig != NO_KEYBOARD){
+        PO("KEYBOARD"); MMPrintString((char *)KBrdList[(int)Option.KeyboardConfig]); 
+        if(Option.capslock || Option.numlock!=1 || Option.repeat!=0b00101100){
+            PIntComma(Option.capslock);PIntComma(Option.numlock);PIntComma(Option.repeat>>5);
+            PIntComma(Option.repeat & 0x1f);
+        }
+        PRet();
+    } 
+
 #ifdef PICOMITEVGA
-    if(Option.CPU_Speed==252000)PO2Str("CPU", "TURBO ON");
+    if(Option.CPU_Speed!=126000)PO2Int("CPUSPEED (KHz)", Option.CPU_Speed);
     if(Option.DISPLAY_TYPE==COLOURVGA)PO2Str("COLOUR VGA", "ON");
-    if(Option.DISPLAY_TYPE==MONOVGA)PO2Str("MONO VGA", "ON");
     if(Option.Height != 40 || Option.Width != 80) PO3Int("DISPLAY", Option.Height, Option.Width);
 #else
     if(Option.CPU_Speed!=133000)PO2Int("CPUSPEED (KHz)", Option.CPU_Speed);
@@ -1409,16 +1439,6 @@ void printoptions(void){
         }
     }
 #endif
-    if(Option.Autorun>0 && Option.Autorun<=MAXFLASHSLOTS) PO2Int("AUTORUN", Option.Autorun);
-    if(Option.Autorun==MAXFLASHSLOTS+1)PO2Str("AUTORUN", "ON");
-    if(Option.Baudrate != CONSOLE_BAUDRATE) PO2Int("BAUDRATE", Option.Baudrate);
-    if(Option.Invert == true) PO2Str("CONSOLE", "INVERT");
-    if(Option.Invert == 2) PO2Str("CONSOLE", "AUTO");
-    if(Option.ColourCode == true) PO2Str("COLOURCODE", "ON");
-    if(Option.PWM == true) PO2Str("POWER PWM", "ON");
-    if(Option.Listcase != CONFIG_TITLE) PO2Str("CASE", CaseList[(int)Option.Listcase]);
-    if(Option.Tab != 2) PO2Int("TAB", Option.Tab);
-    if(Option.KeyboardConfig != NO_KEYBOARD) PO2Str("KEYBOARD", KBrdList[(int)Option.KeyboardConfig]);
     if(Option.SD_CS){
         PO("SDCARD");
         MMPrintString((char *)PinDef[Option.SD_CS].pinname);
@@ -1429,24 +1449,13 @@ void printoptions(void){
         }
         MMPrintString("\r\n");
     }
-    if(Option.SYSTEM_CLK){
-        PO("SYSTEM SPI");
-        MMPrintString((char *)PinDef[Option.SYSTEM_CLK].pinname);MMputchar(',',1);;
-        MMPrintString((char *)PinDef[Option.SYSTEM_MOSI].pinname);MMputchar(',',1);;
-        MMPrintString((char *)PinDef[Option.SYSTEM_MISO].pinname);MMPrintString("\r\n");
-    }
-    if(Option.SYSTEM_I2C_SDA){
-        PO("SYSTEM I2C");
-        MMPrintString((char *)PinDef[Option.SYSTEM_I2C_SDA].pinname);MMputchar(',',1);;
-        MMPrintString((char *)PinDef[Option.SYSTEM_I2C_SCL].pinname);MMPrintString("\r\n");
-    }
     if(Option.AUDIO_L){
         PO("Audio");
         MMPrintString((char *)PinDef[Option.AUDIO_L].pinname);MMputchar(',',1);;
         MMPrintString((char *)PinDef[Option.AUDIO_R].pinname);MMPrintString(", on PWM channel ");
         PInt(Option.AUDIO_SLICE);MMPrintString("\r\n");
     }
-    if(Option.RTC)PO2Str("RTC AUTO", "ENABLED");
+    if(Option.RTC)PO2Str("RTC AUTO", "ENABLE");
 
     if(Option.INT1pin!=9 || Option.INT2pin!=10 || Option.INT3pin!=11 || Option.INT4pin!=12){
         PO("COUNT"); MMPrintString((char *)PinDef[Option.INT1pin].pinname);
@@ -1613,23 +1622,36 @@ void cmd_option(void) {
     	//if(CurrentLinePtr) error("Invalid in a program");
 		if(checkstring(tp, "DISABLE")){
 			Option.KeyboardConfig = NO_KEYBOARD;
+            Option.capslock=0;
+            Option.numlock=0;
             SaveOptions();
             _excep_code = RESET_COMMAND;
             SoftReset();
-		}
+		} else {
+        getargs(&tp,9,",");
         if(ExtCurrentConfig[KEYBOARD_CLOCK] != EXT_NOT_CONFIG && Option.KeyboardConfig == NO_KEYBOARD)  error("Pin % is in use",KEYBOARD_CLOCK);
         if(ExtCurrentConfig[KEYBOARD_DATA] != EXT_NOT_CONFIG && Option.KeyboardConfig == NO_KEYBOARD)  error("Pin % is in use",KEYBOARD_DATA);
-        else if(checkstring(tp, "US"))	Option.KeyboardConfig = CONFIG_US;
-		else if(checkstring(tp, "FR"))	Option.KeyboardConfig = CONFIG_FR;
-		else if(checkstring(tp, "GR"))	Option.KeyboardConfig = CONFIG_GR;
-		else if(checkstring(tp, "IT"))	Option.KeyboardConfig = CONFIG_IT;
-		else if(checkstring(tp, "BE"))	Option.KeyboardConfig = CONFIG_BE;
-		else if(checkstring(tp, "UK"))	Option.KeyboardConfig = CONFIG_UK;
-		else if(checkstring(tp, "ES"))	Option.KeyboardConfig = CONFIG_ES;
+        else if(checkstring(argv[0], "US"))	Option.KeyboardConfig = CONFIG_US;
+		else if(checkstring(argv[0], "FR"))	Option.KeyboardConfig = CONFIG_FR;
+		else if(checkstring(argv[0], "GR"))	Option.KeyboardConfig = CONFIG_GR;
+		else if(checkstring(argv[0], "IT"))	Option.KeyboardConfig = CONFIG_IT;
+		else if(checkstring(argv[0], "BE"))	Option.KeyboardConfig = CONFIG_BE;
+		else if(checkstring(argv[0], "UK"))	Option.KeyboardConfig = CONFIG_UK;
+		else if(checkstring(argv[0], "ES"))	Option.KeyboardConfig = CONFIG_ES;
         else error("Syntax");
+        Option.capslock=0;
+        Option.numlock=1;
+        int rs=0b00100000;
+        int rr=0b00001100;
+        if(argc>=3 && *argv[2])Option.capslock=getint(argv[2],0,1);
+        if(argc>=5 && *argv[4])Option.numlock=getint(argv[4],0,1);
+        if(argc>=7 && *argv[6])rs=getint(argv[6],0,3)<<5;
+        if(argc==9 && *argv[8])rr=getint(argv[8],0,31);
+        Option.repeat = rs | rr;
         SaveOptions();
         _excep_code = RESET_COMMAND;
         SoftReset();
+        }
 	}
 
     tp = checkstring(cmdline, "BAUDRATE");
@@ -1769,18 +1791,15 @@ void cmd_option(void) {
 
 
 #ifdef PICOMITEVGA
-    tp = checkstring(cmdline, "CPU TURBO");
+    tp = checkstring(cmdline, "CPUSPEED");
     if(tp) {
-        if(checkstring(tp, "ON")){
-            Option.CPU_Speed = 252000; 
-        }  
-        else if(checkstring(tp, "OFF")) {
-            Option.CPU_Speed = 126000; 
-        }
-        else error("Syntax");
+        int CPU_Speed=getinteger(tp);
+        if(!(CPU_Speed==126000 || CPU_Speed==252000))error("Speed must be 126000 or 252000");
+        Option.CPU_Speed=CPU_Speed;
         SaveOptions();
         _excep_code = RESET_COMMAND;
         SoftReset();
+        return;
     }
 
     tp = checkstring(cmdline, "COLOUR VGA");
@@ -2499,7 +2518,19 @@ void cmd_cpu(void) {
          }*/
     } else error("Syntax");
 }
-
+void cmd_csubinterrupt(void){
+    getargs(&cmdline,1,",");
+    if(argc != 0){
+        if(checkstring(argv[0],"0")){
+            CSubInterrupt = NULL;
+            CSubComplete=0;  
+        } else {
+            CSubInterrupt = GetIntAddress(argv[0]); 
+            CSubComplete=0;  
+            InterruptUsed = true;
+        }
+    } else CSubComplete=1;  
+}
 void cmd_cfunction(void) {
     char *p, EndToken;
     EndToken = GetCommandValue("End DefineFont");           // this terminates a DefineFont
@@ -2543,8 +2574,10 @@ void cmd_poke(void) {
         if(!Option.DISPLAY_TYPE)error("Display not configured");
         if(q=checkstring(p,"HRES")){ 
             HRes=getint(q,0,1920);
+            return;
         } else if(q=checkstring(p,"VRES")){
             VRes=getint(q,0,1200);
+            return;
 #ifndef PICOMITEVGA
         } else {
             getargs(&p,(MAX_ARG_COUNT * 2) - 3,",");
@@ -2564,6 +2597,7 @@ void cmd_poke(void) {
             } else if(Option.DISPLAY_TYPE<=I2C_PANEL){
                 if(argc>1)error("UNsupported command");
                 I2C_Send_Command(getinteger(argv[0]));
+                return;
             } else 
             error("Display not supported");
 #endif
@@ -2807,10 +2841,17 @@ int checkdetailinterrupts(void) {
     static char rti[2];
 
     // check for an  ON KEY loc  interrupt
+    if(KeyInterrupt != NULL && Keycomplete) {
+		Keycomplete=false;
+		intaddr = KeyInterrupt;									    // set the next stmt to the interrupt location
+		goto GotAnInterrupt;
+	}
+
     if(OnKeyGOSUB && kbhitConsole()) {
         intaddr = OnKeyGOSUB;                                       // set the next stmt to the interrupt location
         goto GotAnInterrupt;
     }
+
 #ifndef PICOMITEVGA
     if(Ctrl!=NULL){
         if(gui_int_down && GuiIntDownVector) {                          // interrupt on pen down
@@ -2882,18 +2923,8 @@ int checkdetailinterrupts(void) {
         intaddr = com1_interrupt;                                   // set the next stmt to the interrupt location
         goto GotAnInterrupt;
     }
-    if(com1_TX_interrupt && com1_TX_complete){
-        intaddr=com1_TX_interrupt;
-        com1_TX_complete=false;
-        goto GotAnInterrupt;
-    }
     if(com2_interrupt != NULL && SerialRxStatus(2) >= com2_ilevel) {// do we need to interrupt?
         intaddr = com2_interrupt;                                   // set the next stmt to the interrupt location
-        goto GotAnInterrupt;
-    }
-    if(com2_TX_interrupt && com2_TX_complete){
-        intaddr=com2_TX_interrupt;
-        com2_TX_complete=false;
         goto GotAnInterrupt;
     }
     if(IrGotMsg && IrInterrupt != NULL) {
@@ -2901,14 +2932,14 @@ int checkdetailinterrupts(void) {
         intaddr = IrInterrupt;                                      // set the next stmt to the interrupt location
         goto GotAnInterrupt;
     }
-    if(KeyInterrupt != NULL && Keycomplete) {
-		Keycomplete=false;
-		intaddr = KeyInterrupt;									    // set the next stmt to the interrupt location
-		goto GotAnInterrupt;
-	}
-
     if(KeypadInterrupt != NULL && KeypadCheck()) {
         intaddr = KeypadInterrupt;                                  // set the next stmt to the interrupt location
+        goto GotAnInterrupt;
+    }
+
+    if(CSubInterrupt != NULL && CSubComplete) {
+        intaddr = CSubInterrupt;                                  // set the next stmt to the interrupt location
+        CSubComplete=0;
         goto GotAnInterrupt;
     }
 
