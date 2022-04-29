@@ -285,13 +285,13 @@ void __not_in_flash_func(routinechecks)(void){
 	if(GPSchannel)processgps();
     if(diskchecktimer== 0 || CurrentlyPlaying == P_WAV)CheckSDCard();
 #ifndef PICOMITEVGA
-    if(Ctrl)ProcessTouch();
+        if(Ctrl)ProcessTouch();
 #endif
         if(tud_cdc_connected() && USBKeepalive==0){
             SSPrintString(alive);
         }
     if(clocktimer==0 && Option.RTC){
-        RtcGetTime();
+        RtcGetTime(0);
         clocktimer=(1000*60*60);
     }
 }
@@ -365,7 +365,7 @@ int __not_in_flash_func(MMInkey)(void) {
     }
 
     c = getConsole();                                               // do discarded chars so get the char
-    if(!(c==0x1b))return c;
+if(!(c==0x1b))return c;
     InkeyTimer = 0;                                             // start the timer
     while((c = getConsole()) == -1 && InkeyTimer < 30);         // get the second char with a delay of 30mS to allow the next char to arrive
     if(c == 'O'){   //support for many linux terminal emulators
@@ -414,6 +414,7 @@ int __not_in_flash_func(MMInkey)(void) {
     c1 = '['; c2 = c; c3 = tc; c4 = ttc;
     return 0x1b;
 }
+
 // get a line from the keyboard or a serial file handle
 // filenbr == 0 means the console input
 void MMgetline(int filenbr, char *p) {
@@ -1497,6 +1498,12 @@ int main(){
     if(_excep_code == WATCHDOG_TIMEOUT) {
         WatchdogSet = true;                                 // remember if it was a watchdog timeout
         MMPrintString("\r\n\nWatchdog timeout\r\n");
+    }
+    if(noRTC){
+        noRTC=0;
+        Option.RTC=0;
+        SaveOptions();
+        MMPrintString("RTC not found, OPTION RTC AUTO disabled\r\n");
     }
  	*tknbuf = 0;
      ContinuePoint = nextstmt;                               // in case the user wants to use the continue command

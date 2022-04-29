@@ -86,6 +86,9 @@ extern void WriteData(int data);
 char *CSubInterrupt;
 volatile int CSubComplete=0;
 uint64_t timeroffset=0;
+int SaveOptionErrorSkip=0;
+char SaveErrorMessage[MAXERRMSG] = { 0 };
+int Saveerrno = 0;
 void integersort(int64_t *iarray, int n, long long *index, int flags, int startpoint){
     int i, j = n, s = 1;
     int64_t t;
@@ -1291,6 +1294,9 @@ void cmd_ireturn(void){
         DelayedDrawFmtBox = false;
     }
 #endif
+	if(SaveOptionErrorSkip>0)OptionErrorSkip=SaveOptionErrorSkip+1;
+    strcpy(MMErrMsg , SaveErrorMessage);
+    if(SaveOptionErrorSkip>0)OptionErrorSkip=SaveOptionErrorSkip+1;
 }
 
 
@@ -1816,6 +1822,7 @@ void cmd_option(void) {
             for(int yp=0;yp<30;yp++){
                 tilefcols[yp*40+xp]=(uint16_t)fcolour;
                 tilebcols[yp*40+xp]=(uint16_t)bcolour;
+
             }
         }
         Option.VGAFC=fcolour;
@@ -2068,7 +2075,7 @@ void cmd_option(void) {
 
     tp = checkstring(cmdline, "RTC AUTO");
     if(tp) {
-        if(checkstring(tp, "ENABLE"))       { Option.RTC = true; SaveOptions(); RtcGetTime(); return; }
+        if(checkstring(tp, "ENABLE"))       { Option.RTC = true; SaveOptions(); RtcGetTime(0); return; }
         if(checkstring(tp, "DISABLE"))      { Option.RTC = false; SaveOptions(); return;  }
     }
 
@@ -2159,7 +2166,7 @@ void cmd_option(void) {
             gpio_set_irq_enabled(PinDef[Option.INT1pin].GPno, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false);
             CallBackEnabled &= (~2);
         }
-        if(CallBackEnabled==2) gpio_set_irq_enabled_with_callback(PinDef[Option.INT2pin].GPno, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false, &gpio_callback);
+        if(CallBackEnabled==4) gpio_set_irq_enabled_with_callback(PinDef[Option.INT2pin].GPno, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false, &gpio_callback);
         else if(CallBackEnabled & 4){
             gpio_set_irq_enabled(PinDef[Option.INT2pin].GPno, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false);
             CallBackEnabled &= (~4);
@@ -2308,7 +2315,7 @@ void cmd_option(void) {
 }
 
 void fun_device(void){
-  sret = GetTempMemory(STRINGSIZE);                                        // this will last for the life of the command
+    sret = GetTempMemory(STRINGSIZE);                                        // this will last for the life of the command
 #ifdef PICOMITEVGA
     strcpy(sret, "PicoMiteVGA");
 #else
@@ -2391,8 +2398,6 @@ void fun_info(void){
 		memset(&djd,0,sizeof(DIR));
 		memset(&fnod,0,sizeof(FILINFO));
 		char *p = getCstring(tp);
-
-		ErrorCheck(0);
 		FSerror = f_stat(p, &fnod);
 		if(FSerror != FR_OK){ iret=-1; targ=T_INT; strcpy(MMErrMsg,FErrorMsg[4]); return;}
 		if((fnod.fattrib & AM_DIR)){ iret=-2; targ=T_INT; strcpy(MMErrMsg,FErrorMsg[4]); return;}
@@ -2408,7 +2413,6 @@ void fun_info(void){
 		memset(&djd,0,sizeof(DIR));
 		memset(&fnod,0,sizeof(FILINFO));
 		char *p = getCstring(tp);
-		ErrorCheck(0);
 		FSerror = f_stat(p, &fnod);
 		if(FSerror != FR_OK){ iret=-1; targ=T_STR; strcpy(MMErrMsg,FErrorMsg[4]); return;}
 //		if((fnod.fattrib & AM_DIR)){ iret=-2; targ=T_INT; strcpy(MMErrMsg,FErrorMsg[4]); return;}
@@ -3083,6 +3087,13 @@ int checkdetailinterrupts(void) {
     // an interrupt was found if we jumped to here
 GotAnInterrupt:
     LocalIndex++;                                                   // IRETURN will decrement this
+    if(OptionErrorSkip>0)SaveOptionErrorSkip=OptionErrorSkip;
+    else SaveOptionErrorSkip = 0;
+    OptionErrorSkip=0;
+    strcpy(SaveErrorMessage , MMErrMsg);
+    Saveerrno = MMerrno;
+    *MMErrMsg = 0;
+    MMerrno = 0;
     InterruptReturn = nextstmt;                                     // for when IRETURN is executed
     // if the interrupt is pointing to a SUB token we need to call a subroutine
     if(*intaddr == cmdSUB) {
