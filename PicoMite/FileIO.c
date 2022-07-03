@@ -953,7 +953,7 @@ void ForceFileClose(int fnbr) {
 // finds the first available free file number.  Throws an error if no free file numbers
 int FindFreeFileNbr(void) {
     int i;
-    for(i = 1; i <= MAXOPENFILES; i++)
+    for(i = MAXOPENFILES; i >= 1; i--)
         if(FileTable[i].com == 0) return i;
     error("Too many files open");
     return 0;
@@ -961,6 +961,11 @@ int FindFreeFileNbr(void) {
 
 void CloseAllFiles(void) {
   int i;
+#ifdef PICOMITEVGA
+  closeall3d();
+  closeallsprites();
+  closeframebuffer();
+#endif
   for(i = 1; i <= MAXOPENFILES; i++) {
         if(FileTable[i].com != 0) {
             if(FileTable[i].com > MAXCOMPORTS) {
@@ -1210,6 +1215,12 @@ void cmd_files(void){
     if(CurrentLinePtr) error("Invalid in a program");
     if(!InitSDCard()) error((char *)FErrorMsg[20]);					// setup the SD card
     if(flist)FreeMemorySafe((void **)&flist);
+    #ifdef PICOMITEVGA
+        closeallsprites();
+        closeframebuffer();
+  		closeall3d();
+    #endif
+    CloseAudio(1);
     flist=GetMemory(sizeof(s_flist)*MAXFILES);
     fullpath(q);
     MMPrintString("A:");

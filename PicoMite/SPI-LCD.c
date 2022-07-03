@@ -28,7 +28,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "Hardware_Includes.h"
 int CurrentSPIDevice=NONE_SPI_DEVICE;
 #ifndef PICOMITEVGA
-const struct Displays display_details[34]={
+const struct Displays display_details[35]={
 		{"", SDCARD_SPI_SPEED, 0, 0, 0, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
 		{"", SDCARD_SPI_SPEED, 0, 0, 0, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
 		{"SSD1306I2C", 400, 128, 64, 1, 1, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
@@ -45,6 +45,7 @@ const struct Displays display_details[34]={
 		{"ST7789_320", 20000000, 320, 240, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
 		{"ILI9488W", 40000000, 480, 320, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
 		{"GC9A01", LCD_SPI_SPEED, 240, 240, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
+		{"ILI9481N", 20000000, 480, 320, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
 		{"N5110", NOKIA_SPI_SPEED, 84, 48, 1, 1, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
 		{"SSD1306SPI", LCD_SPI_SPEED, 128, 64, 1, 1, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
 		{"ST7920", ST7920_SPI_SPEED, 128, 64, 1, 1, SPI_POLARITY_HIGH, SPI_PHASE_2EDGE},
@@ -67,37 +68,11 @@ const struct Displays display_details[34]={
 int LCD_CS_PIN=0;
 int LCD_CD_PIN=0;
 int LCD_Reset_PIN=0;
-int LCD_E_INKbusy=0;
 
 unsigned char LCDBuffer[1440]={0};
 
-const uint8_t GDEH029A1_LUTDefault_full[] =
-{
-  WRITE_LUT_REGISTER,  // command
-  0x02, 0x02, 0x01, 0x11, 0x12, 0x12, 0x22, 0x22,
-  0x66, 0x69, 0x69, 0x59, 0x58, 0x99, 0x99, 0x88,
-  0x00, 0x00, 0x00, 0x00, 0xF8, 0xB4, 0x13, 0x51,
-  0x35, 0x51, 0x51, 0x19, 0x01, 0x00
-};
-
-const uint8_t GDEH029A1_LUTDefault_part[] =
-{
-  WRITE_LUT_REGISTER,  // command
-  0x10, 0x18, 0x18, 0x08, 0x18, 0x18, 0x08, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x13, 0x14, 0x44, 0x12,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
-
-const uint8_t GDEH029A1_GDOControl[] = {TERMINATE_FRAME_READ_WRITE, (GDEH029A1_Y_PIXELS - 1) % 256, (GDEH029A1_Y_PIXELS - 1) / 256, 0x00}; //for 2.9inch
-const uint8_t GDEH029A1_softstart[] = {TERMINATE_FRAME_READ_WRITE, 0xd7, 0xd6, 0x9d};
-const uint8_t GDEH029A1_VCOMVol[] = {TERMINATE_FRAME_READ_WRITE, 0xa8};  // VCOM 7c
-const uint8_t GDEH029A1_DummyLine[] = {TERMINATE_FRAME_READ_WRITE, 0x1a}; // 4 dummy line per gate
-const uint8_t GDEH029A1_Gatetime[] = {SET_GATE_TIME, 0x08};  // 2us per line
-const uint8_t GDEH029A1_DataEntryMode[] = {DATA_ENTRY_MODE_SETTING, 0x03};  // 2us per line
 
 
-void SetCS(void);
 void DefineRegionSPI(int xstart, int ystart, int xend, int yend, int rw);
 void DrawBitmapSPI(int x1, int y1, int width, int height, int scale, int fc, int bc, unsigned char *bitmap);
 extern const int SPISpeeds[];
@@ -107,9 +82,9 @@ void I2C_Send_Command(char command);
 extern int mmI2Cvalue;												// value of MM.I2C
 void waitwhilebusy(void);
 #define SPIsend(a) {uint8_t b=a;xmit_byte_multi(&b,1);}
-#define SPIqueue(a) {Option.DISPLAY_TYPE==ILI9488? xmit_byte_multi(a,3) : xmit_byte_multi(a,2) ;}
+#define SPIqueue(a) {(Option.DISPLAY_TYPE==ILI9488 || Option.DISPLAY_TYPE==ILI9481N) ? xmit_byte_multi(a,3) : xmit_byte_multi(a,2) ;}
 #define SPIsend2(a) {SPIsend(0);SPIsend(a);}
-int E_INK=0;
+int PackHorizontal=0;
 int fullrefreshcount=0;
 void DrawRectangleMEM(int x1, int y1, int x2, int y2, int c);
 void DrawBitmapMEM(int x1, int y1, int width, int height, int scale, int fc, int bc, unsigned char *bitmap);
@@ -144,6 +119,8 @@ void ConfigDisplaySPI(unsigned char *p) {
         DISPLAY_TYPE = ST7789A;
     } else if(checkstring(argv[0], "ST7789_320")) {
         DISPLAY_TYPE = ST7789B;
+    } else if(checkstring(argv[0], "ILI9481N")) {
+        DISPLAY_TYPE = ILI9481N;
     } else if(checkstring(argv[0], "ILI9481")) {
         DISPLAY_TYPE = ILI9481;
     } else if(checkstring(argv[0], "ILI9488")) {
@@ -160,8 +137,6 @@ void ConfigDisplaySPI(unsigned char *p) {
         DISPLAY_TYPE = SSD1306SPI;
     } else if(checkstring(argv[0], "ST7920")) {
         DISPLAY_TYPE = ST7920;
-    } else if(checkstring(argv[0], "GDEH029A1")) {
-        DISPLAY_TYPE = GDEH029A1;
 	} else return;
 	if(!Option.SYSTEM_CLK)error("System SPI not configured");
     if(!(argc == 7 || argc == 9 || argc==11 || argc==13)) error("Argument count");
@@ -190,14 +165,7 @@ void ConfigDisplaySPI(unsigned char *p) {
 		if(argc>=11){
 			if(DISPLAY_TYPE == N5110)Option.LCDVOP=getint(argv[10],0,255);
 			else if(DISPLAY_TYPE == SSD1306SPI)Option.I2Coffset=getint(argv[10],0,10);
-			else if(DISPLAY_TYPE == GDEH029A1){
-				if(!(code=codecheck(argv[10])))argv[10]+=2;
-				BUSY = getinteger(argv[10]);
-				if(!code)BUSY=codemap(BUSY);
-				Option.fullrefresh=0;
-				if(argc==13)Option.fullrefresh=getint(argv[12],0,10000);
-			
-			} else  {
+			else  {
 				if(!(code=codecheck(argv[10])))argv[10]+=2;
 				BACKLIGHT = getinteger(argv[10]);
 				if(!code)BACKLIGHT=codemap(BACKLIGHT);
@@ -240,7 +208,7 @@ void InitDisplaySPI(int InitOnly) {
         	DrawRectangle = DrawRectangleSPI;
         	DrawBitmap = DrawBitmapSPI;
         	DrawBuffer = DrawBufferSPI;
-        	if(Option.DISPLAY_TYPE == ILI9341 || Option.DISPLAY_TYPE == ILI9488 || Option.DISPLAY_TYPE == ST7789B){
+        	if(Option.DISPLAY_TYPE == ILI9341 || Option.DISPLAY_TYPE == ILI9481N || Option.DISPLAY_TYPE == ILI9488 || Option.DISPLAY_TYPE == ST7789B){
 				ReadBuffer = ReadBufferSPI;
 				ScrollLCD = ScrollLCDSPI;
 			}
@@ -396,6 +364,172 @@ void InitDisplaySPI(int InitOnly) {
 				case RPORTRAIT:     spi_write_cd(ILI9341_MEMCONTROL,1,ILI9341_Portrait180); break;
 			}
  			break;
+		case ILI9481N:
+			DisplayHRes = 480;
+			DisplayVRes = 320;
+			ResetController();
+			//************* Start Initial Sequence **********//
+			spi_write_command(0x11);
+			uSec(20000);
+			spi_write_command(0xD0);
+			spi_write_data(0x07);
+			spi_write_data(0x42);
+			spi_write_data(0x1B);
+
+			spi_write_command(0xD1);
+			spi_write_data(0x00);
+			spi_write_data(0x14);
+			spi_write_data(0x1B);
+
+			spi_write_command(0xD2);
+			spi_write_data(0x01);
+			spi_write_data(0x12);
+
+			spi_write_command(0xC0);
+			spi_write_data(0x10);
+			spi_write_data(0x3B);
+			spi_write_data(0x00);
+			spi_write_data(0x02);
+			spi_write_data(0x01);
+
+			spi_write_command(0xC5);
+			spi_write_data(0x03);
+
+			spi_write_command(0xC8);
+			spi_write_data(0x00);
+			spi_write_data(0x46);
+			spi_write_data(0x44);
+			spi_write_data(0x50);
+			spi_write_data(0x04);
+			spi_write_data(0x16);
+			spi_write_data(0x33);
+			spi_write_data(0x13);
+			spi_write_data(0x77);
+			spi_write_data(0x05);
+			spi_write_data(0x0F);
+			spi_write_data(0x00);
+
+			spi_write_command(0x36);
+			spi_write_data(0x0A);
+
+			spi_write_command(0x3A);
+			spi_write_data(0x66);
+
+			spi_write_command(0x22);
+			spi_write_data(0x00);
+			spi_write_data(0x00);
+			spi_write_data(0x01);
+			spi_write_data(0x3F);
+
+			spi_write_command(0x2B);
+			spi_write_data(0x00);
+			spi_write_data(0x00);
+			spi_write_data(0x01);
+			spi_write_data(0xE0);
+			uSec(120000);
+			spi_write_command(0x29);
+
+
+			//3.5IPS ILI9481+CMI	
+			spi_write_command(0x01); //Soft_rese
+			uSec(220000);
+
+			spi_write_command(0x11);
+			uSec(280000);
+
+			spi_write_command(0xd0); //Power_Setting
+			spi_write_data(0x07);//07  VC[2:0] Sets the ratio factor of Vci to generate the reference voltages Vci1
+			spi_write_data(0x44);//41  BT[2:0] Sets the Step up factor and output voltage level from the reference voltages Vci1
+			spi_write_data(0x1E);//1f  17   1C  VRH[3:0]: Sets the factor to generate VREG1OUT from VCILVL
+			uSec(220000);
+
+			spi_write_command(0xd1); //VCOM Control
+			spi_write_data(0x00);//00
+			spi_write_data(0x0C);//1A   VCM [6:0] is used to set factor to generate VCOMH voltage from the reference voltage VREG1OUT  15    09
+			spi_write_data(0x1A);//1F   VDV[4:0] is used to set the VCOM alternating amplitude in the range of VREG1OUT x 0.70 to VREG1OUT   1F   18
+
+			spi_write_command(0xC5);  //Frame Rate
+			spi_write_data(0x03); // 03   02
+
+			spi_write_command(0xd2);  //Power_Setting for Normal Mode 
+			spi_write_data(0x01);  //01
+			spi_write_data(0x11);  //11
+
+			spi_write_command(0xE4);  //?
+			spi_write_data(0xa0);
+			spi_write_command(0xf3);
+			spi_write_data(0x00);
+			spi_write_data(0x2a);
+
+			//1  OK
+			spi_write_command(0xc8);
+			spi_write_data(0x00);
+			spi_write_data(0x26);
+			spi_write_data(0x21);
+			spi_write_data(0x00);
+			spi_write_data(0x00);
+			spi_write_data(0x1f);
+			spi_write_data(0x65);
+			spi_write_data(0x23);
+			spi_write_data(0x77);
+			spi_write_data(0x00);
+			spi_write_data(0x0f);
+			spi_write_data(0x00);
+			//GAMMA SETTING
+
+			spi_write_command(0xC0);	//Panel Driving Setting																          
+			spi_write_data(0x00); //1//00  REV  SM  GS
+			spi_write_data(0x3B); //2//NL[5:0]: Sets the number of lines to drive the LCD at an interval of 8 lines. 
+			spi_write_data(0x00); //3//SCN[6:0]
+			spi_write_data(0x02); //4//PTV: Sets the Vcom output in non-display area drive period
+			spi_write_data(0x11); //5//NDL: Sets the source output level in non-display area.  PTG: Sets the scan mode in non-display area.
+
+			spi_write_command(0xc6); //Interface Control 
+			spi_write_data(0x83);
+			//GAMMA SETTING 
+
+			spi_write_command(0xf0); //?
+			spi_write_data(0x01);
+
+			spi_write_command(0xE4);//?
+			spi_write_data(0xa0);
+
+			spi_write_command(0x36);   
+			spi_write_data(0x0A); //  
+
+
+			spi_write_command(0x3a);
+			spi_write_data(0x66);
+
+			spi_write_command(0xb4);//Display Mode and Frame Memory Write Mode Setting
+			spi_write_data(0x02);
+			spi_write_data(0x00); //?
+			spi_write_data(0x00);
+			spi_write_data(0x01);
+
+			uSec(280000);
+
+			spi_write_command(0x2a);
+			spi_write_data(0x00);
+			spi_write_data(0x00);
+			spi_write_data(0x01);
+			spi_write_data(0x3F); //3F
+
+			spi_write_command(0x2b);
+			spi_write_data(0x00);
+			spi_write_data(0x00);
+			spi_write_data(0x01);
+			spi_write_data(0xDf); //DF
+
+			//spi_write_command(0x21);
+			spi_write_command(0x29);	
+			switch(Option.DISPLAY_ORIENTATION) {
+            	case LANDSCAPE:     spi_write_cd(ILI9341_MEMCONTROL,1,ILI9341_Landscape); break;
+            	case PORTRAIT:      spi_write_cd(ILI9341_MEMCONTROL,1,ILI9341_Portrait); break;
+            	case RLANDSCAPE:    spi_write_cd(ILI9341_MEMCONTROL,1,ILI9341_Landscape180); break;
+            	case RPORTRAIT:     spi_write_cd(ILI9341_MEMCONTROL,1,ILI9341_Portrait180); break;
+			}
+			break;
 		case ILI9481:
 			DisplayHRes = 480;
 			DisplayVRes = 320;
@@ -691,7 +825,7 @@ void InitDisplaySPI(int InitOnly) {
             spi_write_command(0xAF);//DISPLAYON
         	break;
         case ST7920:
-            E_INK=1;
+            PackHorizontal=1;
             gpio_put(LCD_CD_PIN,GPIO_PIN_RESET);
             uSec(40000);
             SetCS();
@@ -706,24 +840,6 @@ void InitDisplaySPI(int InitOnly) {
             uSec(20000);
 			ClearCS(Option.LCD_CD);
         	break;
-        case GDEH029A1:
-            E_INK=1;
-            ResetController();
-            spi_write_CommandData(GDEH029A1_GDOControl, sizeof(GDEH029A1_GDOControl));  // Panel configuration, Gate selection
-    		waitwhilebusy();
-            spi_write_CommandData(GDEH029A1_softstart, sizeof(GDEH029A1_softstart));  // X decrease, Y decrease
-    		waitwhilebusy();
-            spi_write_CommandData(GDEH029A1_VCOMVol, sizeof(GDEH029A1_VCOMVol));    // VCOM setting
-    		waitwhilebusy();
-            spi_write_CommandData(GDEH029A1_DummyLine, sizeof(GDEH029A1_DummyLine));  // dummy line per gate
-    		waitwhilebusy();
-            spi_write_CommandData(GDEH029A1_Gatetime, sizeof(GDEH029A1_Gatetime));    // Gate time setting
-    		waitwhilebusy();
-            spi_write_CommandData(GDEH029A1_DataEntryMode, sizeof(GDEH029A1_DataEntryMode)); //X increment; Y increment
-    		waitwhilebusy();
-            spi_write_CommandData(GDEH029A1_LUTDefault_full, sizeof(GDEH029A1_LUTDefault_part));    // Send the LUT
-    		waitwhilebusy();
-			break;
     }
     if(Option.DISPLAY_ORIENTATION & 1) {
         VRes=DisplayVRes;
@@ -784,12 +900,7 @@ void spi_write_cd(unsigned char command, int data, ...){
    for(i = 0; i < data; i++) spi_write_data((char)va_arg(ap, int));
    va_end(ap);
 }
-void waitwhilebusy(void){
-//	initusclock();
-//	while(HAL_GPIO_ReadPin(PinDef[Option.E_INKbusy].sfr, PinDef[Option.E_INKbusy].bitnbr)==GPIO_PIN_SET){
-//		if(readusclock()>10000000)error("Display busy timeout");
-//	}
-}
+
 void spi_write_CommandData(const uint8_t* pCommandData, uint8_t datalen){
 	int i;
 	spi_write_command(*pCommandData++);
@@ -959,7 +1070,7 @@ void DrawRectangleSPI(int x1, int y1, int x2, int y2, int c){
 	    if(y1 < 0) return;
 	    if(y1 >= VRes) return;
 		DefineRegionSPI(x1, y1, x2, y2, 1);
-		if(Option.DISPLAY_TYPE==ILI9488){
+		if(Option.DISPLAY_TYPE==ILI9488 || Option.DISPLAY_TYPE==ILI9481N ){
 			col[0]=(c>>16);
 			col[1]=(c>>8) & 0xFF;
 			col[2]=(c & 0xFF);
@@ -987,7 +1098,7 @@ void DrawRectangleSPI(int x1, int y1, int x2, int y2, int c){
 		if(y2 < 0) y2 = 0;
 		if(y2 >= VRes) y2 = VRes - 1;
 		DefineRegionSPI(x1, y1, x2, y2, 1);
-		if(Option.DISPLAY_TYPE==ILI9488){
+		if(Option.DISPLAY_TYPE==ILI9488 || Option.DISPLAY_TYPE==ILI9481N ){
 			i = x2 - x1 + 1;
 			i*=3;
 			p=LCDBuffer;
@@ -1042,7 +1153,7 @@ void DrawBitmapSPI(int x1, int y1, int width, int height, int scale, int fc, int
         ReadBuffer(XStart, y1, XEnd, YEnd, p);
     }
     // convert the colours to 565 format
-	if(Option.DISPLAY_TYPE==ILI9488){
+	if(Option.DISPLAY_TYPE==ILI9488 || Option.DISPLAY_TYPE==ILI9481N ){
 		f[0]=(fc>>16);
 		f[1]=(fc>>8) & 0xFF;
 		f[2]=(fc & 0xFF);
@@ -1086,7 +1197,7 @@ void DrawBitmapSPI(int x1, int y1, int width, int height, int scale, int fc, int
                             c.rgbbytes[0] = p[n];
                             c.rgbbytes[1] = p[n+1];
                             c.rgbbytes[2] = p[n+2];
-							if(Option.DISPLAY_TYPE==ILI9488){
+							if(Option.DISPLAY_TYPE==ILI9488 || Option.DISPLAY_TYPE==ILI9481N ){
 								b[0]=c.rgbbytes[2];
 								b[1]=c.rgbbytes[1];
 								b[2]=c.rgbbytes[0];
@@ -1129,7 +1240,7 @@ void ReadBufferSPI(int x1, int y1, int x2, int y2, unsigned char* p) {
     N=(x2- x1+1) * (y2- y1+1) * 3;
     if(Option.DISPLAY_TYPE==ILI9341 || Option.DISPLAY_TYPE==ST7789B )spi_write_cd(ILI9341_PIXELFORMAT,1,0x66); //change to RDB666 for read
     DefineRegionSPI(x1, y1, x2, y2, 0);
-	SPISpeedSet( Option.DISPLAY_TYPE==ST7789B ? ST7789RSpeed : SPIReadSpeed); //need to slow SPI for read on this display
+	SPISpeedSet( (Option.DISPLAY_TYPE==ST7789B || Option.DISPLAY_TYPE==ILI9481N) ? ST7789RSpeed : SPIReadSpeed); //need to slow SPI for read on this display
 	rcvr_byte_multi((uint8_t *)p, 1);
     r=0;
 	rcvr_byte_multi((uint8_t *)p,N);
@@ -1176,7 +1287,7 @@ void DrawBufferSPI(int x1, int y1, int x2, int y2, unsigned char* p) {
 		c.rgbbytes[2]=*p++;
 	// convert the colours to 565 format
 		// convert the colours to 565 format
-		if(Option.DISPLAY_TYPE==ILI9488){
+		if(Option.DISPLAY_TYPE==ILI9488 || Option.DISPLAY_TYPE==ILI9481N ){
 			q[0]=c.rgbbytes[2];
 			q[1]=c.rgbbytes[1];
 			q[2]=c.rgbbytes[0];
@@ -1237,7 +1348,7 @@ void DrawRectangleMEM(int x1, int y1, int x2, int y2, int c){
     if(x2>high_x)high_x=x2;
      for(x=x1;x<=x2;x++){
         for(y=y1;y<=y2;y++){
-           if(!E_INK){
+           if(!PackHorizontal){
         	   loc=x+(y/8)*DisplayHRes; //get the byte address for this bit
                mask=1<<(y % 8); //get the bit position for this bit
            } else {
@@ -1281,7 +1392,7 @@ void DrawBitmapMEM(int x1, int y1, int width, int height, int scale, int fc, int
                     if(y>high_y)high_y=y;
                     if(x<low_x)low_x=x;
                     if(x>high_x)high_x=x;
-                    if(!E_INK){
+                    if(!PackHorizontal){
                  	   loc=x+(y/8)*DisplayHRes; //get the byte address for this bit
                        omask=1<<(y % 8); //get the bit position for this bit
                        amask=~omask;
@@ -1401,48 +1512,6 @@ void Display_Refresh(void){
 //			HAL_SPI_Transmit(&hspi3,x_array,33,500);
 			ClearCS(Option.LCD_CD);
 		}
-	}
-	if(Option.DISPLAY_TYPE==GDEH029A1){
-		int i;
-		if(Option.fullrefresh>=2){
-			if(fullrefreshcount==0){
-				spi_write_CommandData(GDEH029A1_LUTDefault_full, sizeof(GDEH029A1_LUTDefault_full));    // Send the LUT
-				waitwhilebusy();
-			}
-			if(fullrefreshcount==1){
-				spi_write_CommandData(GDEH029A1_LUTDefault_part, sizeof(GDEH029A1_LUTDefault_full));    // Send the LUT
-				waitwhilebusy();
-			}
-			fullrefreshcount++;
-			if(fullrefreshcount==Option.fullrefresh)fullrefreshcount=0;
-		}
-		unsigned char* p=(void *)((unsigned int)LCDBuffer);
-//Set memory area
-		spi_write_command(SET_RAM_X_ADD_START_END_POS);
-		spi_write_data(0);
-		spi_write_data((GDEH029A1_WIDTH-1) >> 3);
-		spi_write_command(SET_RAM_Y_ADD_START_END_POS);
-		spi_write_data(0);
-		spi_write_data(0);
-		spi_write_data((GDEH029A1_HEIGHT-1) & 0xff);
-		spi_write_data((GDEH029A1_HEIGHT-1)>>8);
-// Set memory pointer
-		spi_write_command(SET_RAM_X_ADDRESS_COUNTER);
-		spi_write_data(0);
-		spi_write_command(SET_RAM_Y_ADDRESS_COUNTER);
-		spi_write_data(0);
-		spi_write_data(0);
-// Write data
-		spi_write_command(WRITE_RAM);
-		for(i=0;i<GDEH029A1_HEIGHT*GDEH029A1_WIDTH;i+=8){
-			spi_write_data(~(*p++));
-		}
-// display frame
-		spi_write_command(DISPLAY_UPDATE_CONTROL_2);
-		spi_write_data(0xC4);
-		spi_write_command(MASTER_ACTIVATION);
-		spi_write_command(TERMINATE_FRAME_READ_WRITE);
-		waitwhilebusy();
 	}
     low_y=2000; high_y=0; low_x=2000; high_x=0;
 

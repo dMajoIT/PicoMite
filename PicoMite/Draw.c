@@ -110,7 +110,7 @@ int PrintPixelMode=0;
 
 int CurrentX=0, CurrentY=0;                                             // the current default position for the next char to be written
 int DisplayHRes, DisplayVRes;                                       // the physical characteristics of the display
-char * blitbuffptr[MAXBLITBUF];                                  //Buffer pointers for the BLIT command
+struct blitbuffer blitbuff[MAXBLITBUF+1] = { 0 };	
 int CMM1=0;
 // the MMBasic programming characteristics of the display
 // note that HRes == 0 is an indication that a display is not configured
@@ -123,19 +123,32 @@ int gui_font_width, gui_font_height, last_bcolour, last_fcolour;
 volatile int CursorTimer=0;               // used to time the flashing cursor
 void (*DrawPixel)(int x1, int y1, int c) = (void (*)(int , int , int ))DisplayNotSet;
 extern volatile int QVgaScanLine;
+struct D3D* struct3d[MAX3D + 1] = { NULL };
+s_camera camera[MAXCAM + 1];
+int layer_in_use[MAXLAYER + 1];
+unsigned char LIFO[MAXBLITBUF];
+unsigned char zeroLIFO[MAXBLITBUF];
+int LIFOpointer = 0;
+int zeroLIFOpointer = 0;
+int sprites_in_use = 0;
+char* COLLISIONInterrupt = NULL;
+int CollisionFound = false;
+int sprite_which_collided = -1;
+static int hideall = 0;
 #endif
 void (*DrawRectangle)(int x1, int y1, int x2, int y2, int c) = (void (*)(int , int , int , int , int ))DisplayNotSet;
 void (*DrawBitmap)(int x1, int y1, int width, int height, int scale, int fc, int bc, unsigned char *bitmap) = (void (*)(int , int , int , int , int , int , int , unsigned char *))DisplayNotSet;
 void (*ScrollLCD) (int lines) = (void (*)(int ))DisplayNotSet;
 void (*DrawBuffer)(int x1, int y1, int x2, int y2, unsigned char *c) = (void (*)(int , int , int , int , unsigned char * ))DisplayNotSet;
 void (*ReadBuffer)(int x1, int y1, int x2, int y2, unsigned char *c) = (void (*)(int , int , int , int , unsigned char * ))DisplayNotSet;
-void (*DrawBufferFast)(int x1, int y1, int x2, int y2, unsigned char *c) = (void (*)(int , int , int , int , unsigned char * ))DisplayNotSet;
+void (*DrawBufferFast)(int x1, int y1, int x2, int y2, int blank, unsigned char *c) = (void (*)(int , int , int , int , int, unsigned char * ))DisplayNotSet;
 void (*ReadBufferFast)(int x1, int y1, int x2, int y2, unsigned char *c) = (void (*)(int , int , int , int , unsigned char * ))DisplayNotSet;
 void DrawTriangle(int x0, int y0, int x1, int y1, int x2, int y2, int c, int fill);
 // these are the GUI commands that are common to the MX170 and MX470 versions
 // in the case of the MX170 this function is called directly by MMBasic when the GUI command is used
 // in the case of the MX470 it is called by MX470GUI in GUI.c
 const int colours[16]={0x00,0xFF,0x4000,0x40ff,0x8000,0x80ff,0xff00,0xffff,0xff0000,0xff00FF,0xff4000,0xff40ff,0xff8000,0xff80ff,0xffff00,0xffffff};
+
 void cmd_guiMX170(void) {
     unsigned char *p;
 
@@ -737,16 +750,84 @@ void ClearTriangle(int x0, int y0, int x1, int y1, int x2, int y2, int ints_per_
                 y = y + 1;
             }
 }
-/**********************************************************************************************
-Draw a triangle
-    Thanks to Peter Mather (matherp on the Back Shed forum)
-     x0, y0 - the first corner
-     x1, y1 - the second corner
-     x2, y2 - the third corner
-     c      - the colour to use for sides of the triangle
-     fill   - the colour to fill the triangle (-1 for no fill)
-***********************************************************************************************/
-void DrawTriangle(int x0, int y0, int x1, int y1, int x2, int y2, int c, int fill) {
+#define ABS(X) ((X)>0 ? (X) : (-(X)))
+
+void CalcLine(int x1, int y1, int x2, int y2, short *xmin, short *xmax) {
+
+    if(y1 == y2) {
+    	if(y1<0)y1=0;
+    	if(y1>=480)y1=479;
+    	if(y2<0)y2=0;
+    	if(y2>=480)y2=479;
+		if(x1<xmin[y1])xmin[y1]=x1;
+		if(x2<xmin[y1])xmin[y1]=x2;
+		if(x1>xmax[y1])xmax[y1]=x1;
+		if(x2>xmax[y1])xmax[y1]=x2;
+        return;
+    }
+    if(x1 == x2) {
+		if(y2<y1)swap(y2,y1);
+    	if(y1<0)y1=0;
+    	if(y1>=480)y1=479;
+    	if(y2<0)y2=0;
+    	if(y2>=480)y2=479;
+		for(int y=y1;y<=y2;y++) {
+			if(x1<xmin[y])xmin[y]=x1;
+			if(x1>xmax[y])xmax[y]=x1;
+		}
+        return;
+    }
+	// uses a variant of Bresenham's line algorithm:
+	//   https://en.wikipedia.org/wiki/Talk:Bresenham%27s_line_algorithm
+	if (y1 > y2) {
+		swap(y1, y2);
+		swap(x1, x2);
+	}
+	if(y1<0)y1=0;
+	if(y1>=480)y1=479;
+	if(y2<0)y2=0;
+	if(y2>=480)y2=479;
+	int absX = ABS(x1-x2);          // absolute value of coordinate distances
+	int absY = ABS(y1-y2);
+	int offX = x2<x1 ? 1 : -1;      // line-drawing direction offsets
+	int offY = y2<y1 ? 1 : -1;
+	int x = x2;                     // incremental location
+	int y = y2;
+	int err;
+	if(x<xmin[y])xmin[y]=x;
+	if(x>xmax[y])xmax[y]=x;
+	if (absX > absY) {
+
+		// line is more horizontal; increment along x-axis
+		err = absX / 2;
+		while (x != x1) {
+			err = err - absY;
+			if (err < 0) {
+				y   += offY;
+				err += absX;
+			}
+			x += offX;
+    		if(x<xmin[y])xmin[y]=x;
+    		if(x>xmax[y])xmax[y]=x;
+		}
+	} else {
+
+		// line is more vertical; increment along y-axis
+		err = absY / 2;
+		while (y != y1) {
+			err = err - absX;
+			if (err < 0) {
+				x   += offX;
+				err += absY;
+			}
+			y += offY;
+    		if(x<xmin[y])xmin[y]=x;
+    		if(x>xmax[y])xmax[y]=x;
+		}
+	}
+}
+
+void DrawTriangle(int x0, int y0, int x1, int y1, int x2, int y2, int c, int f) {
 	if(x0 * (y1 - y2) +  x1 * (y2 - y0) +  x2 * (y0 - y1)==0){ // points are co-linear i.e zero area
 		if (y0 > y1) {
 			swap(y0, y1);
@@ -762,55 +843,50 @@ void DrawTriangle(int x0, int y0, int x1, int y1, int x2, int y2, int c, int fil
 		}
 		DrawLine(x0,y0,x2,y2,1,c);
 	} else {
-    if(fill == -1){
-        // draw only the outline
-        DrawLine(x0, y0, x1, y1, 1, c);
-        DrawLine(x1, y1, x2, y2, 1, c);
-        DrawLine(x2, y2, x0, y0, 1, c);
-    } else {
-        //we are drawing a filled triangle which may also have an outline
-        int a, b, y, last;
+		if(f == -1){
+			// draw only the outline
+			DrawLine(x0, y0, x1, y1, 1, c);
+			DrawLine(x1, y1, x2, y2, 1, c);
+			DrawLine(x2, y2, x0, y0, 1, c);
+		} else {
+			if (y0 > y1) {
+				swap(y0, y1);
+				swap(x0, x1);
+			}
+			if (y1 > y2) {
+				swap(y2, y1);
+				swap(x2, x1);
+			}
+			if (y0 > y1) {
+				swap(y0, y1);
+				swap(x0, x1);
+			}
+			short *xmin=(short *)GetMemory(480*sizeof(short));
+			short *xmax=(short *)GetMemory(480*sizeof(short));
 
-        if (y0 > y1) {
-            swap(y0, y1);
-            swap(x0, x1);
-        }
-        if (y1 > y2) {
-            swap(y2, y1);
-            swap(x2, x1);
-        }
-        if (y0 > y1) {
-            swap(y0, y1);
-            swap(x0, x1);
-        }
-
-            if(y1 == y2) {
-                last = y1;                                          //Include y1 scanline
-            } else {
-                last = y1 - 1;                                      // Skip it
+			int y;
+			for(y=y0; y<=y2; y++){
+				if(y>=0 && y<480){
+					xmin[y]=32767;
+					xmax[y]=-1;
+				}
+			}
+			CalcLine(x0, y0, x1, y1, xmin, xmax);
+			CalcLine(x1, y1, x2, y2, xmin, xmax);
+			CalcLine(x2, y2, x0, y0, xmin, xmax);
+			for(y=y0;y<=y2;y++){
+				if(y>=0 && y<VRes)DrawRectangle(xmin[y], y, xmax[y], y, c);
+			}
+            if(c!=f){
+				DrawLine(x0, y0, x1, y1, 1, c);
+				DrawLine(x1, y1, x2, y2, 1, c);
+				DrawLine(x2, y2, x0, y0, 1, c);
             }
-            for (y = y0; y <= last; y++){
-                a = x0 + (x1 - x0) * (y - y0) / (y1 - y0);
-                b = x0 + (x2 - x0) * (y - y0) / (y2 - y0);
-                if(a > b)swap(a, b);
-                DrawRectangle(a, y, b, y, fill);
-            }
-            while (y <= y2){
-                a = x1 + (x2 - x1) * (y - y1) / (y2 - y1);
-                b = x0 + (x2 - x0) * (y - y0) / (y2 - y0);
-                if(a > b) swap(a, b);
-                DrawRectangle(a, y, b, y, fill);
-                y = y + 1;
-            }
-            // we also need an outline but we do this last to overwrite the edge of the fill area
-            if(c!=fill){
-	            DrawLine(x0, y0, x1, y1, 1, c);
-	            DrawLine(x1, y1, x2, y2, 1, c);
-	            DrawLine(x2, y2, x0, y0, 1, c);
-	        }
-	    }
-    if(Option.Refresh)Display_Refresh();
+            FreeMemory((unsigned char *)xmin);
+            FreeMemory((unsigned char *)xmax);
+		}
 	}
+
 }
 
 
@@ -2143,19 +2219,1090 @@ void fun_mmvres(void) {
 extern BYTE BDEC_bReadHeader(BMPDECODER *pBmpDec, int fnbr);
 extern BYTE BMP_bDecode_memory(int x, int y, int xlen, int ylen, int fnbr, char *p);
 #ifdef PICOMITEVGA
+void LIFOadd(int n) {
+    int i, j = 0;
+    for (i = 0; i < LIFOpointer; i++) {
+        if (LIFO[i] != n) {
+            LIFO[j] = LIFO[i];
+            j++;
+        }
+    }
+    LIFO[j] = n;
+    LIFOpointer = j + 1;
+}
+void LIFOremove(int n) {
+    int i, j = 0;
+    for (i = 0; i < LIFOpointer; i++) {
+        if (LIFO[i] != n) {
+            LIFO[j] = LIFO[i];
+            j++;
+        }
+    }
+    LIFOpointer = j;
+}
+void LIFOswap(int n, int m) {
+    int i;
+    for (i = 0; i < LIFOpointer; i++) {
+        if (LIFO[i] == n)LIFO[i] = m;
+    }
+}
+void zeroLIFOadd(int n) {
+    int i, j = 0;
+    for (i = 0; i < zeroLIFOpointer; i++) {
+        if (zeroLIFO[i] != n) {
+            zeroLIFO[j] = zeroLIFO[i];
+            j++;
+        }
+    }
+    zeroLIFO[j] = n;
+    zeroLIFOpointer = j + 1;
+}
+void zeroLIFOremove(int n) {
+    int i, j = 0;
+    for (i = 0; i < zeroLIFOpointer; i++) {
+        if (zeroLIFO[i] != n) {
+            zeroLIFO[j] = zeroLIFO[i];
+            j++;
+        }
+    }
+    zeroLIFOpointer = j;
+}
+void zeroLIFOswap(int n, int m) {
+    int i;
+    for (i = 0; i < zeroLIFOpointer; i++) {
+        if (zeroLIFO[i] == n)zeroLIFO[i] = m;
+    }
+}
+void closeallsprites(void) {
+    int i;
+    for (i = 0; i <= MAXBLITBUF; i++) {
+        if (i <= MAXLAYER)layer_in_use[i] = 0;
+        if (i) {
+            if (blitbuff[i].mymaster == -1) {
+                if (blitbuff[i].blitbuffptr != NULL) {
+                    FreeMemory((unsigned char *)blitbuff[i].blitbuffptr);
+                    blitbuff[i].blitbuffptr = NULL;
+                }
+            }
+            if (blitbuff[i].blitstoreptr != NULL) {
+                FreeMemory((unsigned char*)blitbuff[i].blitstoreptr);
+                blitbuff[i].blitstoreptr = NULL;
+            }
+        }
+        blitbuff[i].blitbuffptr = NULL;
+        blitbuff[i].blitstoreptr = NULL;
+        blitbuff[i].master = -1;
+        blitbuff[i].mymaster = -1;
+        blitbuff[i].x = 10000;
+        blitbuff[i].y = 10000;
+        blitbuff[i].w = 0;
+        blitbuff[i].h = 0;
+        blitbuff[i].next_x = 10000;
+        blitbuff[i].next_y = 10000;
+        blitbuff[i].bc = 0;
+        blitbuff[i].layer = -1;
+        blitbuff[i].active = false;
+        blitbuff[i].edges = 0;
+    }
+    LIFOpointer = 0;
+    zeroLIFOpointer = 0;
+    sprites_in_use = 0;
+    hideall = 0;
+}
+void checklimits(int bnbr, int* n) {
+    int maxW = HRes;
+    int maxH = VRes;
+    blitbuff[bnbr].collisions[*n] = 0;
+    if (blitbuff[bnbr].x < 0) {
+        if (!(blitbuff[bnbr].edges & 1)) {
+            blitbuff[bnbr].edges |= 1;
+            blitbuff[bnbr].collisions[*n] = (char)0xF1;
+            (*n)++;
+        }
+    }
+    else blitbuff[bnbr].edges &= ~1;
+
+    if (blitbuff[bnbr].y < 0) {
+        if (!(blitbuff[bnbr].edges & 2)) {
+            blitbuff[bnbr].edges |= 2;
+            if (blitbuff[bnbr].collisions[*n] & 0xF0)blitbuff[bnbr].collisions[*n] |= 0xF2;
+            else {
+                blitbuff[bnbr].collisions[*n] = (char)0xF2;
+                (*n)++;
+            }
+        }
+    }
+    else blitbuff[bnbr].edges &= ~2;
+
+    if (blitbuff[bnbr].x + blitbuff[bnbr].w > maxW) {
+        if (!(blitbuff[bnbr].edges & 4)) {
+            blitbuff[bnbr].edges |= 4;
+            if (blitbuff[bnbr].collisions[*n] & 0xF0)blitbuff[bnbr].collisions[*n] |= 0xF4;
+            else {
+                blitbuff[bnbr].collisions[*n] = (char)0xF4;
+                (*n)++;
+            }
+        }
+    }
+    else blitbuff[bnbr].edges &= ~4;
+
+    if (blitbuff[bnbr].y + blitbuff[bnbr].h > maxH) {
+        if (!(blitbuff[bnbr].edges & 8)) {
+            blitbuff[bnbr].edges |= 8;
+            if (blitbuff[bnbr].collisions[*n] & 0xF0)blitbuff[bnbr].collisions[*n] |= 0xF8;
+            else {
+                blitbuff[bnbr].collisions[*n] = (char)0xF8;
+                (*n)++;
+            }
+        }
+    }
+    else blitbuff[bnbr].edges &= ~8;
+}
+void ProcessCollisions(int bnbr) {
+    int k, j = 1, n = 1, bcol = 1;
+    //We know that any collision is caused by movement of sprite bnbr
+    // a value of zero indicates that we are processing movement of layer 0 and any
+    // sprites on that layer
+    CollisionFound = false;
+    sprite_which_collided = -1;
+    uint64_t mask, mymask = (uint64_t)1 << ((uint64_t)bnbr - (uint64_t)1);
+    memset(blitbuff[0].collisions, 0, MAXCOLLISIONS);
+    if (bnbr != 0) { // a specific sprite has moved
+        memset(blitbuff[bnbr].collisions, 0, MAXCOLLISIONS); //clear our previous collisions
+        if (blitbuff[bnbr].layer != 0) {
+            if (layer_in_use[blitbuff[bnbr].layer] + layer_in_use[0] > 1) { //other sprites in this layer
+                for (k = 1; k <= MAXBLITBUF; k++) {
+                    mask = (uint64_t)1 << ((uint64_t)k - (uint64_t)1);
+                    if (!(blitbuff[k].active)) {
+                        blitbuff[bnbr].lastcollisions &= ~mask;
+                        continue;
+                    }
+                    if (k == bnbr) continue;
+                    if (j == layer_in_use[blitbuff[bnbr].layer] + layer_in_use[0]) break; //nothing left to process
+                    if ((blitbuff[k].layer == blitbuff[bnbr].layer || blitbuff[k].layer == 0)) {
+                        j++;
+                        if (!(blitbuff[k].x + blitbuff[k].w < blitbuff[bnbr].x ||
+                            blitbuff[k].x > blitbuff[bnbr].x + blitbuff[bnbr].w ||
+                            blitbuff[k].y + blitbuff[k].h < blitbuff[bnbr].y ||
+                            blitbuff[k].y > blitbuff[bnbr].y + blitbuff[bnbr].h)) {
+                            if (n < MAXCOLLISIONS && !(blitbuff[bnbr].lastcollisions & mask))blitbuff[bnbr].collisions[n++] = k;
+                            blitbuff[bnbr].lastcollisions |= mask;
+                            blitbuff[k].lastcollisions |= mymask;
+                        }
+                        else {
+                            blitbuff[bnbr].lastcollisions &= ~mask;
+                            blitbuff[k].lastcollisions &= ~mymask;
+                        }
+                    }
+                }
+            }
+        }
+        else {
+            for (k = 1; k <= MAXBLITBUF; k++) {
+                if (j == sprites_in_use) break; //nothing left to process
+                if (k == bnbr) continue;
+                mask = (uint64_t)1 << ((uint64_t)k - (uint64_t)1);
+                if (!(blitbuff[k].active)) {
+                    blitbuff[bnbr].lastcollisions &= ~mask;
+                    continue;
+                }
+                else j++;
+                if (!(blitbuff[k].x + blitbuff[k].w < blitbuff[bnbr].x ||
+                    blitbuff[k].x > blitbuff[bnbr].x + blitbuff[bnbr].w ||
+                    blitbuff[k].y + blitbuff[k].h < blitbuff[bnbr].y ||
+                    blitbuff[k].y > blitbuff[bnbr].y + blitbuff[bnbr].h)) {
+                    if (n < MAXCOLLISIONS && !(blitbuff[bnbr].lastcollisions & mask))blitbuff[bnbr].collisions[n++] = k;
+                    blitbuff[bnbr].lastcollisions |= mask;
+                    blitbuff[k].lastcollisions |= mymask;
+                }
+                else {
+                    blitbuff[bnbr].lastcollisions &= ~mask;
+                    blitbuff[k].lastcollisions &= ~mymask;
+                }
+            }
+
+        }
+        // now look for collisions with the edge of the screen
+        checklimits(bnbr, &n);
+        if (n > 1) {
+            CollisionFound = true;
+            sprite_which_collided = bnbr;
+            blitbuff[bnbr].collisions[0] = n - 1;
+        }
+    }
+    else { //the background layer has moved
+        j = 0;
+        for (k = 1; k <= MAXBLITBUF; k++) { //loop through all sprites
+            mask = (uint64_t)1 << ((uint64_t)k - (uint64_t)1);
+            n = 1;
+            int kk, jj = 1;
+            if (j == sprites_in_use) break; //nothing left to process
+            if (blitbuff[k].active) { //sprite found
+                memset(blitbuff[k].collisions, 0, MAXCOLLISIONS);
+                j++;
+                if (layer_in_use[blitbuff[k].layer] + layer_in_use[0] > 1) { //other sprites in this layer
+                    for (kk = 1; kk <= MAXBLITBUF; kk++) {
+                        if (kk == k) continue;
+                        if (jj == layer_in_use[blitbuff[k].layer] + layer_in_use[0]) break; //nothing left to process
+                        if ((blitbuff[kk].layer == blitbuff[k].layer || blitbuff[kk].layer == 0)) {
+                            jj++;
+                            if (!(blitbuff[kk].x + blitbuff[kk].w < blitbuff[k].x ||
+                                blitbuff[kk].x > blitbuff[k].x + blitbuff[k].w ||
+                                blitbuff[kk].y + blitbuff[kk].h < blitbuff[k].y ||
+                                blitbuff[kk].y > blitbuff[k].y + blitbuff[k].h)) {
+                                if (n < MAXCOLLISIONS && !(blitbuff[k].lastcollisions & mask))blitbuff[k].collisions[n++] = kk;
+                                blitbuff[k].lastcollisions |= mask;
+                            }
+                            else {
+                                blitbuff[k].lastcollisions &= ~mask;
+                            }
+                        }
+                    }
+                }
+                checklimits(k, &n);
+                if (n > 1 && n < MAXCOLLISIONS && bcol < MAXCOLLISIONS) {
+                    blitbuff[0].collisions[bcol] = k;
+                    bcol++;
+                    blitbuff[k].collisions[0] = n - 1;
+                }
+            }
+        }
+        if (bcol > 1) {
+            CollisionFound = true;
+            sprite_which_collided = 0;
+            blitbuff[0].collisions[0] = bcol - 1;
+        }
+    }
+}
+void blithide(int bnbr, int free) {
+    int w, h, x1, y1;
+    w = blitbuff[bnbr].w;
+    h = blitbuff[bnbr].h;
+    x1 = blitbuff[bnbr].x;
+    y1 = blitbuff[bnbr].y;
+    blitbuff[bnbr].active = 0;
+    DrawBufferFast(x1, y1, x1 + w - 1, y1 + h - 1, -1, blitbuff[bnbr].blitstoreptr);
+}
+void expandpixel(char *ii, char *oo, int n, int mode){
+    char *o=oo,*i=ii;
+    int toggle=0;
+    if(mode==0){
+        while(n--){
+            if(toggle){
+                *o++=(*i++ >>4);
+            } else {
+                *o++=*i & 0xF;
+            }
+            toggle=!toggle;
+        }
+    } else {
+        while(n--){
+           *o++=(*i >> toggle++) & 0x1;
+            if(toggle==8){
+                i++;
+                toggle=0;
+            }
+        }
+    }
+
+}
+void contractpixel(char *ii, char *oo, int n, int mode){
+    int toggle=0;
+    char *o=oo,*i=ii;
+    if(mode==0){
+        while(n--){
+            if(toggle){
+                *o++ |= (*i++ <<4);
+            } else {
+                *o= *i++ & 0xF;
+            }
+            toggle=!toggle;
+        }
+    } else {
+        while(n--){
+            if(toggle==0)*o=0;
+            *o|=(*i++ << toggle++);
+            if(toggle==8){
+                toggle=0;
+                o++;
+            }
+        }
+    }
+}
+
+void BlitShowBuffer(int bnbr, int x1, int y1, int mode) {
+    char* current;
+    int x, xx, y, yy, rotation;
+    rotation = blitbuff[bnbr].rotation;
+    current = blitbuff[bnbr].blitstoreptr;
+    int w, h;
+    if (blitbuff[bnbr].blitbuffptr != NULL) {
+        w = blitbuff[bnbr].w;
+        h = blitbuff[bnbr].h;
+        if (!(mode == 0 || mode & 4) && blitbuff[bnbr].active) {
+            DrawBufferFast(blitbuff[bnbr].x, blitbuff[bnbr].y, blitbuff[bnbr].x + w - 1, blitbuff[bnbr].y + h - 1, -1, current);
+        }
+        blitbuff[bnbr].x = x1;
+        blitbuff[bnbr].y = y1;
+        if (!(mode == 2))ReadBufferFast(x1, y1, x1 + w - 1, y1 + h - 1, current);
+        // we now have the old screen image stored together with the coordinates
+        if(rotation){
+            char *d=GetTempMemory(w*h);
+            char *r=GetTempMemory((w*h+1)>>1);
+            expandpixel(blitbuff[bnbr].blitbuffptr,d,w*h,0);
+            if(rotation & 1){ //swap left/write
+                for (y = 0; y < h; y++) {
+                    for (x = 0,xx=w-1; x < (w>>1); x++,xx--) {
+                        swap(d[y*w+x],d[y*w+xx]);
+                    }
+                }
+            }
+            if(rotation & 2){
+                for(x=0;x<w;x++){
+                    for(y=0,yy=h-1;y<(h>>1);y++,yy--){
+                        swap(d[x+y*w],d[x+yy*w]);
+                    }
+                }
+            }
+            contractpixel(d,r,w*h,0);
+            DrawBufferFast(x1, y1, x1 + w - 1, y1 + h - 1, ((mode & 8)==0 ? 0 : -1), r);
+        } else {
+            DrawBufferFast(x1, y1, x1 + w - 1, y1 + h - 1,((mode & 8)==0 ? 0 : -1) , blitbuff[bnbr].blitbuffptr);
+        }
+        if (!(mode & 4))blitbuff[bnbr].active = 1;
+    }
+}
+int sumlayer(void) {
+    int i, j = 0;
+    for (i = 0; i <= MAXLAYER; i++)j += layer_in_use[i];
+    return j;
+}
+void hidesafe(int bnbr) {
+    int found = 0;
+    int i;
+    for (i = LIFOpointer - 1; i >= 0; i--) {
+        if (LIFO[i] == bnbr) {
+            blithide(LIFO[i], 0);
+            found = i;
+            break;
+        }
+        blithide(LIFO[i], 0);
+    }
+    if (!found) {
+        for (i = zeroLIFOpointer - 1; i >= 0; i--) {
+            if (zeroLIFO[i] == bnbr) {
+                blithide(zeroLIFO[i], 0);
+                found = -i;
+                break;
+            }
+            blithide(zeroLIFO[i], 0);
+        }
+    }
+    sprites_in_use--;
+    layer_in_use[blitbuff[bnbr].layer]--;
+    blitbuff[bnbr].x = 10000;
+    blitbuff[bnbr].y = 10000;
+    if (blitbuff[bnbr].layer == 0)zeroLIFOremove(bnbr);
+    else LIFOremove(bnbr);
+    blitbuff[bnbr].layer = -1;
+    blitbuff[bnbr].next_x = 10000;
+    blitbuff[bnbr].next_y = 10000;
+    blitbuff[bnbr].lastcollisions = 0;
+    blitbuff[bnbr].edges = 0;
+    if (found < 0) {
+        found = -found;
+        for (i = found; i < zeroLIFOpointer; i++) {
+            BlitShowBuffer(zeroLIFO[i], blitbuff[zeroLIFO[i]].x, blitbuff[zeroLIFO[i]].y, 0);
+        }
+        for (i = 0; i < LIFOpointer; i++) {
+            BlitShowBuffer(LIFO[i], blitbuff[LIFO[i]].x, blitbuff[LIFO[i]].y, 0);
+        }
+    }
+    else {
+        for (i = found; i < LIFOpointer; i++) {
+            BlitShowBuffer(LIFO[i], blitbuff[LIFO[i]].x, blitbuff[LIFO[i]].y, 0);
+        }
+    }
+}
+
+void showsafe(int bnbr, int x, int y) {
+    int found = 0;
+    int i;
+    for (i = LIFOpointer - 1; i >= 0; i--) {
+        if (LIFO[i] == bnbr) {
+            blithide(LIFO[i], 0);
+            found = i;
+            break;
+        }
+        blithide(LIFO[i], 0);
+    }
+    if (!found) {
+        for (i = zeroLIFOpointer - 1; i >= 0; i--) {
+            if (zeroLIFO[i] == bnbr) {
+                blithide(zeroLIFO[i], 0);
+                found = -i;
+                break;
+            }
+            blithide(zeroLIFO[i], 0);
+        }
+    }
+    BlitShowBuffer(bnbr, x, y, 1);
+    if (found < 0) {
+        found = -found;
+        for (i = found + 1; i < zeroLIFOpointer; i++) {
+            BlitShowBuffer(zeroLIFO[i], blitbuff[zeroLIFO[i]].x, blitbuff[zeroLIFO[i]].y, 0);
+        }
+        for (i = 0; i < LIFOpointer; i++) {
+            BlitShowBuffer(LIFO[i], blitbuff[LIFO[i]].x, blitbuff[LIFO[i]].y, 0);
+        }
+    }
+    else {
+        for (i = found + 1; i < LIFOpointer; i++) {
+            BlitShowBuffer(LIFO[i], blitbuff[LIFO[i]].x, blitbuff[LIFO[i]].y, 0);
+        }
+    }
+
+}
+void loadsprite(unsigned char* p) {
+    int fnbr, width, number, height = 0, newsprite = 1, startsprite = 1, bnbr, lc, i, toggle=0;;
+    char *q, *fname;
+    char buff[256];
+    uint32_t data;
+    getargs(&p, 3, (unsigned char *)",");
+    fnbr = FindFreeFileNbr();
+    if(!InitSDCard()) return;
+    fname = (char*)getCstring(argv[0]);
+    if (argc == 3)startsprite = (int)getint(argv[2], 1, 64);
+    if(strchr(fname, '.') == NULL) strcat(fname, ".SPR");
+    if (!BasicFileOpen(fname, fnbr, FA_READ)) error((char *)"File not found");
+    MMgetline(fnbr, (char*)buff);							    // get the input line
+    while (buff[0] == 39)MMgetline(fnbr, (char*)buff);
+    sscanf((char*)buff, "%d,%d, %d", &width, &number, &height);
+    if (height == 0)height = width;
+    bnbr = startsprite;
+    if (number + startsprite > MAXBLITBUF) {
+        FileClose(fnbr);
+        error((char *)"Maximum of % sprites",MAXBLITBUF);
+    }
+    while (!MMfeof(fnbr) && bnbr <= number + startsprite) {                                     // while waiting for the end of file
+        if (newsprite) {
+            newsprite = 0;
+            if (blitbuff[bnbr].blitbuffptr == NULL)blitbuff[bnbr].blitbuffptr = (char *)GetMemory((width * height + 1)>>1);
+            if (blitbuff[bnbr].blitstoreptr == NULL)blitbuff[bnbr].blitstoreptr = (char*)GetMemory((width * height + 1)>>1);
+            blitbuff[bnbr].bc = 0;
+            blitbuff[bnbr].w = width;
+            blitbuff[bnbr].h = height;
+            blitbuff[bnbr].master = 0;
+            blitbuff[bnbr].mymaster = -1;
+            blitbuff[bnbr].x = 10000;
+            blitbuff[bnbr].y = 10000;
+            blitbuff[bnbr].layer = -1;
+            blitbuff[bnbr].next_x = 10000;
+            blitbuff[bnbr].next_y = 10000;
+            blitbuff[bnbr].active = false;
+            blitbuff[bnbr].lastcollisions = 0;
+            blitbuff[bnbr].edges = 0;
+            q = blitbuff[bnbr].blitbuffptr;
+            lc = height;
+        }
+        while (lc--) {
+            MMgetline(fnbr, (char*)buff);									    // get the input line
+            while (buff[0] == 39)MMgetline(fnbr, (char*)buff);
+            if ((int)strlen(buff) < width)memset(&buff[strlen(buff)], 32, width - strlen(buff));
+                 for (i = 0; i < width; i++) {
+                    if (buff[i] == ' ')data = 0;
+                    else if (buff[i] == '0')data = BLACK;
+                    else if (buff[i] == '1')data = BLUE;
+                    else if (buff[i] == '2')data = GREEN;
+                    else if (buff[i] == '3')data = CYAN;
+                    else if (buff[i] == '4')data = RED;
+                    else if (buff[i] == '5')data = MAGENTA;
+                    else if (buff[i] == '6')data = YELLOW;
+                    else if (buff[i] == '7')data = WHITE;
+                    else if (buff[i] == '8')data = MYRTLE;
+                    else if (buff[i] == '9')data = COBALT;
+                    else if (buff[i] == 'A' || buff[i] == 'a')data = MIDGREEN;
+                    else if (buff[i] == 'B' || buff[i] == 'b')data = CERULEAN;
+                    else if (buff[i] == 'C' || buff[i] == 'c')data = RUST;
+                    else if (buff[i] == 'D' || buff[i] == 'd')data = FUCHSIA;
+                    else if (buff[i] == 'E' || buff[i] == 'e')data = BROWN;
+                    else if (buff[i] == 'F' || buff[i] == 'f')data = LILAC;
+                    else data = 0;
+                    if(toggle){
+                        *q++ |= ((data & 0x800000)>> 16) | ((data & 0xC000)>>9) | ((data & 0x80)>>3);
+                    } else {
+                        *q=((data & 0x800000)>> 20) | ((data & 0xC000)>>13) | ((data & 0x80)>>7);
+                    }
+                    toggle=!toggle;
+                }
+            }
+        bnbr++;
+        newsprite = 1;
+    }
+    FileClose(fnbr);
+}
+void loadarray(unsigned char* p) {
+    int bnbr, w, h, size, i, toggle=0;
+    int maxH = VRes;
+    int maxW =HRes;
+    void* ptr1 = NULL;
+    MMFLOAT* a3float = NULL;
+    int64_t* a3int = NULL;
+    char* q;
+    uint16_t* qq;
+    uint32_t* qqq;
+    getargs(&p, 7, (unsigned char *)",");
+    if (*argv[0] == '#') argv[0]++;
+    bnbr = (int)getint(argv[0], 1, MAXBLITBUF);
+    if (blitbuff[bnbr].blitbuffptr == NULL) {
+        w = (int)getint(argv[2], 1, maxW);
+        h = (int)getint(argv[4], 1, maxH);
+        ptr1 = findvar(argv[6], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+        if (vartbl[VarIndex].type & T_NBR) {
+            if (vartbl[VarIndex].dims[1] != 0) error((char *)"Invalid variable");
+            if (vartbl[VarIndex].dims[0] <= 0) {		// Not an array
+                error((char *)"Argument 1 must be array");
+            }
+            a3float = (MMFLOAT*)ptr1;
+        }
+        else if (vartbl[VarIndex].type & T_INT) {
+            if (vartbl[VarIndex].dims[1] != 0) error((char *)"Invalid variable");
+            if (vartbl[VarIndex].dims[0] <= 0) {		// Not an array
+                error((char *)"Argument 1 must be array");
+            }
+            a3int = (int64_t*)ptr1;
+        }
+        else error((char *)"Argument 1 must be array");
+        size = (vartbl[VarIndex].dims[0] - OptionBase);
+        if (size < w * h - 1)error((char *)"Array Dimensions");
+        blitbuff[bnbr].blitbuffptr = (char *)GetMemory((w * h + 1)>>1);
+        blitbuff[bnbr].blitstoreptr = (char *)GetMemory((w * h + 1)>>1);
+        blitbuff[bnbr].bc = 0;
+        blitbuff[bnbr].w = w;
+        blitbuff[bnbr].h = h;
+        blitbuff[bnbr].master = 0;
+        blitbuff[bnbr].mymaster = -1;
+        blitbuff[bnbr].x = 10000;
+        blitbuff[bnbr].y = 10000;
+        blitbuff[bnbr].layer = -1;
+        blitbuff[bnbr].next_x = 10000;
+        blitbuff[bnbr].next_y = 10000;
+        blitbuff[bnbr].active = false;
+        blitbuff[bnbr].lastcollisions = 0;
+        blitbuff[bnbr].edges = 0;
+        q = blitbuff[bnbr].blitbuffptr;
+        int c;
+        for (i = 0; i < w * h; i++) {
+            if (a3float)c = (int)a3float[i];
+            else c = (int)a3int[i];
+            if(toggle){
+                *q++ |= ((c & 0x800000)>> 16) | ((c & 0xC000)>>9) | ((c & 0x80)>>3);
+            } else {
+                *q=((c & 0x800000)>> 20) | ((c & 0xC000)>>13) | ((c & 0x80)>>7);
+            }
+            toggle=!toggle;
+        }
+    }
+    else error((char *)"Buffer already in use");
+}
+void ScrollBufferH(int pixels) {
+    if (!pixels)return;
+    uint8_t *s, *d, *l, *ss, *dd;
+    int y;
+    if(HRes==320 && !(pixels & 1)){
+        if (pixels > 0) {
+            for (y = 0; y < VRes; y++) {
+                s = (((y * HRes )>>1) + FrameBuf);
+                d = s + (pixels>>1);
+                memmove(d,s,160-(pixels>>1));
+            }
+        } else {
+            pixels = -pixels;
+            for (y = 0; y < VRes; y++) {
+                s = (((y * HRes )>>1) + FrameBuf);
+                d=s;
+                s+=(pixels>>1);
+                memmove(d,s,160-(pixels>>1));
+            }
+        }
+    } else {
+	    ss=GetTempMemory(HRes);
+	    dd=GetTempMemory(HRes);
+	    if (pixels > 0) {
+	        for (y = 0; y < VRes; y++) {
+	            l = (((y * HRes )>>(HRes==320?1:3)) + FrameBuf);
+	            s=ss;
+	            d=dd + pixels;
+	            expandpixel(l,s,HRes,(HRes==320?0:1));
+	            memcpy(d,s,(HRes - pixels));
+	            contractpixel(dd,l,HRes,(HRes==320?0:1));
+	        }
+	    } else {
+	        pixels = -pixels;
+	        for (y = 0; y < VRes; y++) {
+	            l = (((y * HRes )>>(HRes==320?1:3)) + FrameBuf);
+	            s=ss;
+	            d=dd;
+	            expandpixel(l,s,HRes,(HRes==320?0:1));
+	            s += pixels;
+	            memcpy(d,s,(HRes - pixels));
+	            contractpixel(d,l,HRes,(HRes==320?0:1));
+	        }
+	    }
+	}
+}
+
+void ScrollBufferV(int lines, int blank) {
+    uint8_t* s, * d;
+    int y, yy;
+    if(HRes==320){
+        int n = (HRes>>1);
+        if (lines > 0) {
+            for (y = 0; y < VRes - lines; y++) {
+                yy = y + lines;
+                d = (uint8_t*)(((y * HRes )>>1) + FrameBuf);
+                s = (uint8_t*)(((yy * HRes )>>1) + FrameBuf);
+                memcpy(d, s, n);
+            }
+            if (blank) {
+                DrawRectangle(0, VRes - lines, HRes - 1, VRes - 1, gui_bcolour); // erase the line to be scrolled off
+            }
+        }
+        else if (lines < 0) {
+            lines = -lines;
+            for (y = VRes - 1; y >= lines; y--) {
+                yy = y - lines;
+                d = (uint8_t*)(((y * HRes)>>1) + FrameBuf);
+                s = (uint8_t*)(((yy * HRes )>>1) + FrameBuf);
+                memcpy(d, s, n);
+            }
+            if (blank)DrawRectangle(0, 0, HRes - 1, lines - 1, gui_bcolour); // erase the line to be scrolled off
+        }
+    } else {
+        int n = (HRes>>3);
+        if (lines > 0) {
+            for (y = 0; y < VRes - lines; y++) {
+                yy = y + lines;
+                d = (uint8_t*)(((y * HRes )>>3) + FrameBuf);
+                s = (uint8_t*)(((yy * HRes )>>3) + FrameBuf);
+                memcpy(d, s, n);
+            }
+            if (blank) {
+                DrawRectangle(0, VRes - lines, HRes - 1, VRes - 1, gui_bcolour); // erase the line to be scrolled off
+            }
+        }
+        else if (lines < 0) {
+            lines = -lines;
+            for (y = VRes - 1; y >= lines; y--) {
+                yy = y - lines;
+                d = (uint8_t*)(((y * HRes)>>3) + FrameBuf);
+                s = (uint8_t*)(((yy * HRes )>>3) + FrameBuf);
+                memcpy(d, s, n);
+            }
+            if (blank)DrawRectangle(0, 0, HRes - 1, lines - 1, gui_bcolour); // erase the line to be scrolled off
+        }
+    }
+}
+
 void cmd_blit(void) {
     int x1, y1, x2, y2, w, h, bnbr;
     unsigned char *buff = NULL;
     unsigned char *p;
+    int maxW = HRes;
+    int maxH = VRes;
+    int newb = 0;
     if(Option.DISPLAY_TYPE == 0) error("Display not configured");
-    if((p = checkstring(cmdline, "LOAD"))) {
-        int fnbr;
+    if ((p = checkstring(cmdline, (unsigned char *)"SHOW SAFE"))) {
+        int layer;
+        getargs(&p, 11, (unsigned char*)",");
+        if (!(argc == 7 || argc == 9 || argc == 11)) error((char *)"Syntax");
+        if (hideall)error((char *)"Sprites are hidden");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);									// get the number
+        if (blitbuff[bnbr].blitbuffptr != NULL) {
+            x1 = (int)getint(argv[2], -blitbuff[bnbr].w + 1, maxW - 1);
+            y1 = (int)getint(argv[4], -blitbuff[bnbr].h + 1, maxH - 1);
+            layer = (int)getint(argv[6], 0, MAXLAYER);
+            if (argc >= 9 && *argv[8])blitbuff[bnbr].rotation = (char)getint(argv[8], 0, 3);
+            else blitbuff[bnbr].rotation = 0;
+            if (argc == 11 && *argv[10]) {
+                newb = (int)getint(argv[10], 0, 1);
+            }
+//            q = blitbuff[bnbr].blitbuffptr;
+            w = blitbuff[bnbr].w;
+            h = blitbuff[bnbr].h;
+            if (blitbuff[bnbr].active) {
+                if (newb) {
+                    hidesafe(bnbr);
+                    blitbuff[bnbr].layer = layer;
+                    layer_in_use[blitbuff[bnbr].layer]++;
+                    if (blitbuff[bnbr].layer == 0) zeroLIFOadd(bnbr);
+                    else LIFOadd(bnbr);
+                    sprites_in_use++;
+                    BlitShowBuffer(bnbr, x1, y1, 1);
+                }
+                else {
+                    showsafe(bnbr, x1, y1);
+                }
+            }
+            else {
+                blitbuff[bnbr].layer = layer;
+                layer_in_use[blitbuff[bnbr].layer]++;
+                if (blitbuff[bnbr].layer == 0) zeroLIFOadd(bnbr);
+                else LIFOadd(bnbr);
+                sprites_in_use++;
+                BlitShowBuffer(bnbr, x1, y1, 1);
+            }
+            ProcessCollisions(bnbr);
+            if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
+        }
+        else error((char *)"Buffer not in use");
+    }
+    else if ((p = checkstring(cmdline, (unsigned char*)"SHOW"))) {
+        int layer;
+        getargs(&p, 9, (unsigned char*)",");
+        if (!(argc == 7 || argc == 9)) error((char *)"Syntax");
+        if (hideall)error((char *)"Sprites are hidden");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);									// get the number
+        if (blitbuff[bnbr].blitbuffptr != NULL) {
+            x1 = (int)getint(argv[2], -blitbuff[bnbr].w + 1, maxW - 1);
+            y1 = (int)getint(argv[4], -blitbuff[bnbr].h + 1, maxH - 1);
+            layer = (int)getint(argv[6], 0, MAXLAYER);
+            if (argc == 9)blitbuff[bnbr].rotation = (int)getint(argv[8], 0, 3);
+            else blitbuff[bnbr].rotation = 0;
+            w = blitbuff[bnbr].w;
+            h = blitbuff[bnbr].h;
+            if (blitbuff[bnbr].active) {
+                layer_in_use[blitbuff[bnbr].layer]--;
+                if (blitbuff[bnbr].layer == 0)zeroLIFOremove(bnbr);
+                else LIFOremove(bnbr);
+                sprites_in_use--;
+            }
+            blitbuff[bnbr].layer = layer;
+            layer_in_use[blitbuff[bnbr].layer]++;
+            if (blitbuff[bnbr].layer == 0) zeroLIFOadd(bnbr);
+            else LIFOadd(bnbr);
+            sprites_in_use++;
+            int cursorhidden = 0;
+            BlitShowBuffer(bnbr, x1, y1, 1);
+            ProcessCollisions(bnbr);
+            if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
+        }
+        else error((char *)"Buffer not in use");
+    }
+    else if ((p = checkstring(cmdline, (unsigned char*)"HIDE ALL"))) {
+        if (hideall)error((char *)"Sprites are hidden");
+        int i;
+        int cursorhidden = 0;
+        for (i = LIFOpointer - 1; i >= 0; i--) {
+            blithide(LIFO[i], 0);
+        }
+        for (i = zeroLIFOpointer - 1; i >= 0; i--) {
+            blithide(zeroLIFO[i], 0);
+        }
+        hideall = 1;
+    }
+    else if ((p = checkstring(cmdline, (unsigned char*)"RESTORE"))) {
+        if (!hideall)error((char *)"Sprites are not hidden");
+        int i;
+        int cursorhidden = 0;
+        for (i = 0; i < zeroLIFOpointer; i++) {
+            BlitShowBuffer(zeroLIFO[i], blitbuff[zeroLIFO[i]].x, blitbuff[zeroLIFO[i]].y, 0);
+        }
+        for (i = 0; i < LIFOpointer; i++) {
+            if (blitbuff[LIFO[i]].next_x != 10000) {
+                blitbuff[LIFO[i]].x = blitbuff[LIFO[i]].next_x;
+                blitbuff[LIFO[i]].next_x = 10000;
+            }
+            if (blitbuff[LIFO[i]].next_y != 10000) {
+                blitbuff[LIFO[i]].y = blitbuff[LIFO[i]].next_y;
+                blitbuff[LIFO[i]].next_y = 10000;
+            }
+            BlitShowBuffer(LIFO[i], blitbuff[LIFO[i]].x, blitbuff[LIFO[i]].y, 0);
+        }
+        hideall = 0;
+        ProcessCollisions(0);
+    }
+    else if ((p = checkstring(cmdline, (unsigned char*)"HIDE SAFE"))) {
+        getargs(&p, 1, (unsigned char*)",");
+        if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
+        if (argc != 1) error((char *)"Syntax");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);									// get the number
+        if (hideall)error((char *)"Sprites are hidden");
+        if (blitbuff[bnbr].blitbuffptr != NULL) {
+            if (blitbuff[bnbr].active) {
+                int cursorhidden = 0;
+                hidesafe(bnbr);
+                if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
+            }
+            else error((char *)"Not Showing");
+        }
+        else error((char *)"Buffer not in use");
+    }
+    else if ((p = checkstring(cmdline, (unsigned char*)"HIDE"))) {
+        getargs(&p, 1, (unsigned char*)",");
+        if (argc != 1) error((char *)"Syntax");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);									// get the number
+        if (blitbuff[bnbr].blitbuffptr != NULL) {
+            if (blitbuff[bnbr].active) {
+                sprites_in_use--;
+                int cursorhidden = 0;
+                blithide(bnbr, 0);
+                layer_in_use[blitbuff[bnbr].layer]--;
+                blitbuff[bnbr].x = 10000;
+                blitbuff[bnbr].y = 10000;
+                if (blitbuff[bnbr].layer == 0)zeroLIFOremove(bnbr);
+                else LIFOremove(bnbr);
+                blitbuff[bnbr].layer = -1;
+                blitbuff[bnbr].next_x = 10000;
+                blitbuff[bnbr].next_y = 10000;
+                blitbuff[bnbr].lastcollisions = 0;
+                blitbuff[bnbr].edges = 0;
+            }
+            else error((char *)"Not Showing");
+        }
+        else error((char *)"Buffer not in use");
+        if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
+        //
+    }
+   else if ((p = checkstring(cmdline, (unsigned char*)"SWAP"))) {
+        int rbnbr=0;
+        getargs(&p, 5, (unsigned char*)",");
+        if (argc < 3) error((char *)"Syntax");
+        if (hideall)error((char *)"Sprites are hidden");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);									// get the number
+        if (*argv[2] == '#') argv[0]++;
+        rbnbr = (int)getint(argv[2], 1, MAXBLITBUF);									// get the number
+        if (blitbuff[bnbr].blitbuffptr == NULL || blitbuff[bnbr].active == false) error((char *)"Original buffer not displayed");
+        if (!blitbuff[bnbr].active)error((char *)"Original buffer not displayed");
+        if (blitbuff[rbnbr].active) error((char *)"New buffer already displayed");
+        if (!(blitbuff[rbnbr].w == blitbuff[bnbr].w && blitbuff[rbnbr].h == blitbuff[bnbr].h)) error((char *)"Size mismatch");
+        // copy the relevant data
+        blitbuff[rbnbr].blitstoreptr = blitbuff[bnbr].blitstoreptr;
+        blitbuff[rbnbr].x = blitbuff[bnbr].x;
+        blitbuff[rbnbr].y = blitbuff[bnbr].y;
+        blitbuff[rbnbr].layer = blitbuff[bnbr].layer;
+        blitbuff[rbnbr].lastcollisions = blitbuff[bnbr].lastcollisions;
+        if (blitbuff[rbnbr].layer == 0)zeroLIFOswap(bnbr, rbnbr);
+        else LIFOswap(bnbr, rbnbr);
+        // "Hide" the old sprite
+        blitbuff[bnbr].x = 10000;
+        blitbuff[bnbr].y = 10000;
+        blitbuff[bnbr].layer = -1;
+        blitbuff[bnbr].next_x = 10000;
+        blitbuff[bnbr].next_y = 10000;
+        blitbuff[bnbr].active = 0;
+        blitbuff[bnbr].lastcollisions = 0;
+        if (argc == 5)blitbuff[rbnbr].rotation = (char)getint(argv[4], 0, 3);
+        else blitbuff[rbnbr].rotation = 0;
+        BlitShowBuffer(rbnbr, blitbuff[rbnbr].x, blitbuff[rbnbr].y, 2);
+        if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
+
+    }
+    else if ((p = checkstring(cmdline, (unsigned char*)"READ"))) {
+        getargs(&p, 11, (unsigned char*)",");
+        if (!(argc == 9)) error((char *)"Syntax");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);									// get the number
+        x1 = (int)getinteger(argv[2]);
+        y1 = (int)getinteger(argv[4]);
+        w = (int)getinteger(argv[6]);
+        h = (int)getinteger(argv[8]);
+        if (w < 1 || h < 1) return;
+        blitbuff[bnbr].bc = 0;
+        if (blitbuff[bnbr].blitbuffptr == NULL) {
+            blitbuff[bnbr].blitbuffptr = (char *)GetMemory((w * h +1)>>1 );
+            blitbuff[bnbr].blitstoreptr = (char*)GetMemory((w * h +1)>>1 );
+            blitbuff[bnbr].bc = 0;
+            blitbuff[bnbr].w = w;
+            blitbuff[bnbr].h = h;
+            blitbuff[bnbr].master = 0;
+            blitbuff[bnbr].mymaster = -1;
+            blitbuff[bnbr].x = 10000;
+            blitbuff[bnbr].y = 10000;
+            blitbuff[bnbr].layer = -1;
+            blitbuff[bnbr].next_x = 10000;
+            blitbuff[bnbr].next_y = 10000;
+            blitbuff[bnbr].active = false;
+            blitbuff[bnbr].lastcollisions = 0;
+            blitbuff[bnbr].edges = 0;
+        }
+        else {
+            if (blitbuff[bnbr].mymaster != -1) error((char *)"Can't read into a copy", bnbr);
+            if (blitbuff[bnbr].master > 0) error((char *)"Copies exist", bnbr);
+            if (!(blitbuff[bnbr].w == w && blitbuff[bnbr].h == h))error((char *)"Existing buffer is incorrect size");
+        }
+        ReadBufferFast(x1, y1, x1 + w - 1, y1 + h - 1,blitbuff[bnbr].blitbuffptr);
+    }
+    else if ((p = checkstring(cmdline, (unsigned char*)"COPY"))) {
+        int cpy, nbr, c1, n1;
+        getargs(&p, 5, (unsigned char*)",");
+        if (argc != 5) error((char *)"Syntax");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);									// get the number
+        if (blitbuff[bnbr].blitbuffptr != NULL) {
+            if (*argv[2] == '#') argv[2]++;
+            c1 = cpy = (int)getint(argv[2], 1, MAXBLITBUF);
+            n1 = nbr = (int)getint(argv[4], 1, MAXBLITBUF - 1);
+
+            while (n1) {
+                if (blitbuff[c1].blitbuffptr != NULL)error((char *)"Buffer already in use %", c1);
+                if (blitbuff[bnbr].master == -1)error((char *)"Can't copy a copy");;
+                n1--;
+                c1++;
+            }
+            while (nbr) {
+                blitbuff[cpy].blitbuffptr = blitbuff[bnbr].blitbuffptr;
+                blitbuff[cpy].w = blitbuff[bnbr].w;
+                blitbuff[cpy].h = blitbuff[bnbr].h;
+                blitbuff[cpy].blitstoreptr = (char *)GetMemory((blitbuff[cpy].w * blitbuff[cpy].h +1)>>1);
+                blitbuff[cpy].bc = blitbuff[bnbr].bc;
+                blitbuff[cpy].x = 10000;
+                blitbuff[cpy].y = 10000;
+                blitbuff[cpy].next_x = 10000;
+                blitbuff[cpy].next_y = 10000;
+                blitbuff[cpy].layer = -1;
+                blitbuff[cpy].mymaster = bnbr;
+                blitbuff[cpy].master = -1;
+                blitbuff[cpy].edges = 0;
+                blitbuff[bnbr].master |= ((int64_t)1 << (int64_t)cpy);
+                blitbuff[bnbr].lastcollisions = 0;
+                blitbuff[cpy].active = false;
+                nbr--;
+                cpy++;
+            }
+        }
+        else error((char *)"Buffer not in use");
+    }      else if ((p = checkstring(cmdline, (unsigned char*)"LOADARRAY"))) {
+        loadarray(p);
+
+    } else if (p = checkstring(cmdline, "LOAD")) {
+        loadsprite(p);
+        return;
+
+    }  else if ((p = checkstring(cmdline, (unsigned char*)"INTERRUPT"))) {
+        getargs(&p, 1, (unsigned char*)",");
+        COLLISIONInterrupt = (char*)GetIntAddress(argv[0]);					// get the interrupt location
+        InterruptUsed = true;
+        return;
+
+    }
+    else if ((p = checkstring(cmdline, (unsigned char*)"NOINTERRUPT"))) {
+        COLLISIONInterrupt = NULL;					// get the interrupt location
+        return;
+
+    }
+    else if ((p = checkstring(cmdline, (unsigned char*)"CLOSE ALL"))) {
+        closeallsprites();
+
+    } else if ((p = checkstring(cmdline, (unsigned char*)"CLOSE"))) {
+        getargs(&p, 1, (unsigned char*)",");
+        if (hideall)error((char *)"Sprites are hidden");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);
+        if (blitbuff[bnbr].master > 0) error((char *)"Copies still open");
+        if (blitbuff[bnbr].blitbuffptr != NULL) {
+            if (blitbuff[bnbr].active) {
+               blithide(bnbr, 1);
+                if (blitbuff[bnbr].layer == 0)zeroLIFOremove(bnbr);
+                else LIFOremove(bnbr);
+                layer_in_use[blitbuff[bnbr].layer]--;
+                sprites_in_use--;
+            }
+            if (blitbuff[bnbr].mymaster == -1)FreeMemorySafe((void**)&blitbuff[bnbr].blitbuffptr);
+            else blitbuff[blitbuff[bnbr].mymaster].master &= ~(1 << bnbr);
+            FreeMemorySafe((void**)&blitbuff[bnbr].blitstoreptr);
+            blitbuff[bnbr].blitbuffptr = NULL;
+            blitbuff[bnbr].blitstoreptr = NULL;
+            blitbuff[bnbr].master = -1;
+            blitbuff[bnbr].mymaster = -1;
+            blitbuff[bnbr].x = 10000;
+            blitbuff[bnbr].y = 10000;
+            blitbuff[bnbr].w = 0;
+            blitbuff[bnbr].h = 0;
+            blitbuff[bnbr].next_x = 10000;
+            blitbuff[bnbr].next_y = 10000;
+            blitbuff[bnbr].bc = 0;
+            blitbuff[bnbr].layer = -1;
+            blitbuff[bnbr].active = false;
+            blitbuff[bnbr].edges = 0;
+        }
+        else error((char *)"Buffer not in use");
+        if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
+    } else if ((p = checkstring(cmdline, (unsigned char*)"NEXT"))) {
+        getargs(&p, 5, (unsigned char*)",");
+        if (!(argc == 5)) error((char *)"Syntax");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);									// get the number
+        blitbuff[bnbr].next_x = (short)getint(argv[2], -blitbuff[bnbr].w + 1, maxW - 1);
+        blitbuff[bnbr].next_y = (short)getint(argv[4], -blitbuff[bnbr].h + 1, maxH - 1);
+        //
+    } else if ((p = checkstring(cmdline, (unsigned char*)"WRITE"))) {
+        int mode = 4;
+        getargs(&p, 7, (unsigned char*)",");
+        if (!(argc == 5 || argc == 7)) error((char *)"Syntax");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);									// get the number
+        if (blitbuff[bnbr].blitbuffptr != NULL) {
+            x1 = (int)getint(argv[2], -blitbuff[bnbr].w + 1, maxW);
+            y1 = (int)getint(argv[4], -blitbuff[bnbr].h + 1, maxH);
+            if (argc == 7)blitbuff[bnbr].rotation = (char)getint(argv[6], 0, 7);
+            else blitbuff[bnbr].rotation = 4;
+            if ((blitbuff[bnbr].rotation & 4) == 0)mode |= 8;
+            blitbuff[bnbr].rotation &= 3;
+            w = blitbuff[bnbr].w;
+            h = blitbuff[bnbr].h;
+            int cursorhidden = 0;
+            BlitShowBuffer(bnbr, x1, y1, mode);
+        }
+        else error((char *)"Buffer not in use");
+    } else if ((p = checkstring(cmdline, (unsigned char*)"CLOSE"))) {
+        getargs(&p, 1, (unsigned char*)",");
+        if (hideall)error((char *)"Sprites are hidden");
+        if (*argv[0] == '#') argv[0]++;
+        bnbr = (int)getint(argv[0], 1, MAXBLITBUF);
+        if (blitbuff[bnbr].master > 0) error((char *)"Copies still open");
+        if (blitbuff[bnbr].blitbuffptr != NULL) {
+            if (blitbuff[bnbr].active) {
+               blithide(bnbr, 1);
+                if (blitbuff[bnbr].layer == 0)zeroLIFOremove(bnbr);
+                else LIFOremove(bnbr);
+                layer_in_use[blitbuff[bnbr].layer]--;
+                sprites_in_use--;
+            }
+            if (blitbuff[bnbr].mymaster == -1)FreeMemorySafe((void**)&blitbuff[bnbr].blitbuffptr);
+            else blitbuff[blitbuff[bnbr].mymaster].master &= ~(1 << bnbr);
+            FreeMemorySafe((void**)&blitbuff[bnbr].blitstoreptr);
+            blitbuff[bnbr].blitbuffptr = NULL;
+            blitbuff[bnbr].blitstoreptr = NULL;
+            blitbuff[bnbr].master = -1;
+            blitbuff[bnbr].mymaster = -1;
+            blitbuff[bnbr].x = 10000;
+            blitbuff[bnbr].y = 10000;
+            blitbuff[bnbr].w = 0;
+            blitbuff[bnbr].h = 0;
+            blitbuff[bnbr].next_x = 10000;
+            blitbuff[bnbr].next_y = 10000;
+            blitbuff[bnbr].bc = 0;
+            blitbuff[bnbr].layer = -1;
+            blitbuff[bnbr].active = false;
+            blitbuff[bnbr].edges = 0;
+        }
+        else error((char *)"Buffer not in use");
+        if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
+    }
+    else if((p = checkstring(cmdline, "LOADBMP"))) {
+        int fnbr,toggle=0;
         int xOrigin, yOrigin, xlen, ylen;
         BMPDECODER BmpDec;
         // get the command line arguments
         getargs(&p, 11, ",");                                            // this MUST be the first executable line in the function
         if(*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
-        bnbr = getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
+        bnbr = getint(argv[0], 1, MAXBLITBUF);                  // get the buffer number
         if(argc == 0) error("Argument count");
         if(!InitSDCard()) return;
         p = getCstring(argv[2]);                                        // get the file name
@@ -2176,82 +3323,150 @@ void cmd_blit(void) {
         if(ylen==-1)ylen=BmpDec.lHeight;
         if(xlen+xOrigin>BmpDec.lWidth || ylen+yOrigin>BmpDec.lHeight)error("Coordinates");
         char *q=GetTempMemory(xlen * ylen * 3);
-        blitbuffptr[bnbr] = GetMemory(xlen * ylen +4 );
+        blitbuff[bnbr].blitbuffptr = GetMemory((xlen * ylen +4 )>>1);
+        blitbuff[bnbr].blitstoreptr = GetMemory((xlen * ylen +4 )>>1);
         memset(q,0xFF,xlen * ylen * 3);
         fnbr = FindFreeFileNbr();
         if(!BasicFileOpen(p, fnbr, FA_READ)) return;
         BMP_bDecode_memory(xOrigin, yOrigin, xlen, ylen, fnbr, q);
-        short *bw=(short *)&blitbuffptr[bnbr][0];
-        short *bh=(short *)&blitbuffptr[bnbr][2];
-        *bw=xlen;
-        *bh=ylen;
-        char *t=&blitbuffptr[bnbr][4];
+        blitbuff[bnbr].w=xlen;
+        blitbuff[bnbr].h=ylen;
+        blitbuff[bnbr].bc = 0;
+        blitbuff[bnbr].master = 0;
+        blitbuff[bnbr].mymaster = -1;
+        blitbuff[bnbr].x = 10000;
+        blitbuff[bnbr].y = 10000;
+        blitbuff[bnbr].layer = -1;
+        blitbuff[bnbr].next_x = 10000;
+        blitbuff[bnbr].next_y = 10000;
+        blitbuff[bnbr].active = false;
+        blitbuff[bnbr].lastcollisions = 0;
+        blitbuff[bnbr].edges = 0;
+        char *t=blitbuff[bnbr].blitbuffptr;
         int i=xlen*ylen;
         while(i--){
-            if(HRes==320)*t = ((q[2] & 0x80)>> 4) | ((q[1] & 0xC0)>>5) | ((q[0] & 0x80)>>7);
-            else *t=(char)(((uint16_t)q[2]+(uint16_t)q[1]+(uint16_t)q[0])<0x180? 0 : 1);
-            t++;
+            if(HRes==320){
+                if(toggle){
+                    *t |= ((q[2] & 0x80)) | ((q[1] & 0xC0)>>1) | ((q[0] & 0x80)>>3);
+                } else {
+                    *t = ((q[2] & 0x80)>> 4) | ((q[1] & 0xC0)>>5) | ((q[0] & 0x80)>>7);
+                }
+            } else {
+                if(toggle){
+                    *t |= (char)(((uint16_t)q[2]+(uint16_t)q[1]+(uint16_t)q[0])<0x180? 0 : 0xF0);
+                } else {
+                    *t= (char)(((uint16_t)q[2]+(uint16_t)q[1]+(uint16_t)q[0])<0x180? 0 : 0xF);
+                }
+            }
+            if(toggle) t++;
+            toggle=!toggle;
             q+=3;
         }
         FileClose(fnbr);
         return;
-    }
-    if((p = checkstring(cmdline, "READ"))) {
-        getargs(&p, 9, ",");
-        if((void *)ReadBuffer == (void *)DisplayNotSet) error("Invalid on this display");
-        if(argc !=9) error("Syntax");
-        if(*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
-        bnbr = getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
-        x1 = getinteger(argv[2]);
-        y1 = getinteger(argv[4]);
-        w = getinteger(argv[6]);
-        h = getinteger(argv[8]);
-        if(w < 1 || h < 1) return;
-        if(x1 < 0) { x2 -= x1; w += x1; x1 = 0; }
-        if(y1 < 0) { y2 -= y1; h += y1; y1 = 0; }
-        if(x1 + w > HRes) w = HRes - x1;
-        if(y1 + h > VRes) h = VRes - y1;
-        if(w < 1 || h < 1 || x1 < 0 || x1 + w > HRes || y1 < 0 || y1 + h > VRes ) return;
-        if(blitbuffptr[bnbr] == NULL){
-            blitbuffptr[bnbr] = GetMemory(w * h + 4);
-            ReadBufferFast(x1, y1, x1 + w - 1, y1 + h - 1, &blitbuffptr[bnbr][4]);
-            short *bw=(short *)&blitbuffptr[bnbr][0];
-            short *bh=(short *)&blitbuffptr[bnbr][2];
-            *bw=w;
-            *bh=h;
-        } else error("Buffer in use");
-    } else if((p = checkstring(cmdline, "WRITE"))) {
-        getargs(&p, 9, ",");
-        if(!(argc == 9 || argc==5)) error("Syntax");
-        if(*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
-        bnbr = getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
-        x1 = getinteger(argv[2]);
-        y1 = getinteger(argv[4]);
-        short *bw=(short *)&blitbuffptr[bnbr][0];
-        short *bh=(short *)&blitbuffptr[bnbr][2];
-        w=*bw;
-        h=*bh;
-        if(argc >= 7 && *argv[6])w = getinteger(argv[6]);
-        if(argc >= 9 && *argv[8])h = getinteger(argv[8]);
-        if(w < 1 || h < 1) return;
-        if(x1 < 0) { x2 -= x1; w += x1; x1 = 0; }
-        if(y1 < 0) { y2 -= y1; h += y1; y1 = 0; }
-        if(x1 + w > HRes) w = HRes - x1;
-        if(y1 + h > VRes) h = VRes - y1;
-        if(w < 1 || h < 1 || x1 < 0 || x1 + w > HRes || y1 < 0 || y1 + h > VRes ) return;
-        if(blitbuffptr[bnbr] != NULL){
-            DrawBufferFast(x1, y1, x1 + w - 1, y1 + h - 1, &blitbuffptr[bnbr][4]);
-        } else error("Buffer not in use");
-    } else if((p = checkstring(cmdline, "CLOSE"))) {
-        getargs(&p, 1, ",");
-        if(*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
-        bnbr = getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
-        if(blitbuffptr[bnbr] != NULL){
-            FreeMemory(blitbuffptr[bnbr]);
-            blitbuffptr[bnbr] = NULL;
-        } else error("Buffer not in use");
-        // get the number
-     } else {
+   } else if ((p = checkstring(cmdline, (unsigned char*)"MOVE"))) {
+        if (hideall)error((char *)"Sprites are hidden");
+        int i;
+        int cursorhidden = 0;
+        for (i = LIFOpointer - 1; i >= 0; i--) blithide(LIFO[i], 0);
+        for (i = zeroLIFOpointer - 1; i >= 0; i--)blithide(zeroLIFO[i], 0);
+        //
+        for (i = 0; i < zeroLIFOpointer; i++) {
+            if (blitbuff[zeroLIFO[i]].next_x != 10000) {
+                blitbuff[zeroLIFO[i]].x = blitbuff[zeroLIFO[i]].next_x;
+                blitbuff[zeroLIFO[i]].next_x = 10000;
+            }
+            if (blitbuff[zeroLIFO[i]].next_y != 10000) {
+                blitbuff[zeroLIFO[i]].y = blitbuff[zeroLIFO[i]].next_y;
+                blitbuff[zeroLIFO[i]].next_y = 10000;
+            }
+            BlitShowBuffer(zeroLIFO[i], blitbuff[zeroLIFO[i]].x, blitbuff[zeroLIFO[i]].y, 0);
+        }
+        for (i = 0; i < LIFOpointer; i++) {
+            if (blitbuff[LIFO[i]].next_x != 10000) {
+                blitbuff[LIFO[i]].x = blitbuff[LIFO[i]].next_x;
+                blitbuff[LIFO[i]].next_x = 10000;
+            }
+            if (blitbuff[LIFO[i]].next_y != 10000) {
+                blitbuff[LIFO[i]].y = blitbuff[LIFO[i]].next_y;
+                blitbuff[LIFO[i]].next_y = 10000;
+            }
+            BlitShowBuffer(LIFO[i], blitbuff[LIFO[i]].x, blitbuff[LIFO[i]].y, 0);
+
+        }
+        ProcessCollisions(0);
+    }  else if ((p = checkstring(cmdline, (unsigned char*)"SCROLL"))) {
+        int i, n, m = 0, blank = -2, x, y;
+        char* current = NULL;
+        getargs(&p, 5, (unsigned char*)",");
+        if (hideall)error((char *)"Sprites are hidden");
+        x = (int)getint(argv[0], -maxW / 2 - 1, maxW);
+        y = (int)getint(argv[2], -maxH / 2 - 1, maxH);
+        if (argc == 5)blank = (int)getColour(argv[2], 1);
+        if (!(x == 0 && y == 0)) {
+           m = ((maxW * (y > 0 ? y : -y)+1) >>1);
+            n = ((maxH * (x > 0 ? x : -x)+1) >>1);
+            if (n > m)m = n;
+            if (blank == -2)current = (char *)GetMemory(m);
+            for (i = LIFOpointer - 1; i >= 0; i--) blithide(LIFO[i], 0);
+            for (i = zeroLIFOpointer - 1; i >= 0; i--) {
+                int xs = blitbuff[zeroLIFO[i]].x + (blitbuff[zeroLIFO[i]].w >> 1);
+                int ys = blitbuff[zeroLIFO[i]].y + (blitbuff[zeroLIFO[i]].h >> 1);
+                blithide(zeroLIFO[i], 0);
+                xs += x;
+                if (xs >= maxW)xs -= maxW;
+                if (xs < 0)xs += maxW;
+                blitbuff[zeroLIFO[i]].x = xs - (blitbuff[zeroLIFO[i]].w >> 1);
+                ys -= y;
+                if (ys >= maxH)ys -= maxH;
+                if (ys < 0)ys += maxH;
+                blitbuff[zeroLIFO[i]].y = ys - (blitbuff[zeroLIFO[i]].h >> 1);
+            }
+            if (x > 0) {
+                if (blank == -2)ReadBufferFast(maxW - x, 0, maxW - 1, maxH - 1, current);
+                ScrollBufferH(x);
+                if (blank == -2)DrawBufferFast(0, 0, x - 1, maxH - 1, -1, current);
+                else if (blank != -1)DrawRectangle(0, 0, x - 1, maxH - 1, blank);
+            }
+            else if (x < 0) {
+                x = -x;
+                if (blank == -2)ReadBufferFast(0, 0, x - 1, maxH - 1, current);
+                ScrollBufferH(-x);
+                if (blank == -2)DrawBufferFast(maxW - x, 0, maxW - 1, maxH - 1, -1, current);
+                else if (blank != -1)DrawRectangle(maxW - x, 0, maxW - 1, maxH - 1, blank);
+            }
+            if (y > 0) {
+                if (blank == -2)ReadBufferFast(0, 0, maxW - 1, y - 1, current);
+                ScrollBufferV(y, 0);
+                if (blank == -2)DrawBufferFast(0, maxH - y, maxW - 1, maxH - 1, -1, current);
+                else if (blank != -1)DrawRectangle(0, maxH - y, maxW - 1, maxH - 1, blank);
+            }
+            else if (y < 0) {
+                y = -y;
+                if (blank == -2)ReadBufferFast(0, maxH - y, maxW - 1, maxH - 1, current);
+                ScrollBufferV(-y, 0);
+                if (blank == -2)DrawBufferFast(0, 0, maxW - 1, y - 1, -1, current);
+                else if (blank != -1)DrawRectangle(0, 0, maxW - 1, y - 1, blank);
+            }
+            for (i = 0; i < zeroLIFOpointer; i++) {
+                BlitShowBuffer(zeroLIFO[i], blitbuff[zeroLIFO[i]].x, blitbuff[zeroLIFO[i]].y, 0);
+            }
+            for (i = 0; i < LIFOpointer; i++) {
+                if (blitbuff[LIFO[i]].next_x != 10000) {
+                    blitbuff[LIFO[i]].x = blitbuff[LIFO[i]].next_x;
+                    blitbuff[LIFO[i]].next_x = 10000;
+                }
+                if (blitbuff[LIFO[i]].next_y != 10000) {
+                    blitbuff[LIFO[i]].y = blitbuff[LIFO[i]].next_y;
+                    blitbuff[LIFO[i]].next_y = 10000;
+                }
+
+                BlitShowBuffer(LIFO[i], blitbuff[LIFO[i]].x, blitbuff[LIFO[i]].y, 0);
+            }
+            ProcessCollisions(0);
+            if (current)FreeMemory((unsigned char *)current);
+        }
+    }else {
         int memory, max_x;
         getargs(&cmdline, 11, ",");
         if((void *)ReadBuffer == (void *)DisplayNotSet) error("Invalid on this display");
@@ -2274,16 +3489,16 @@ void cmd_blit(void) {
         if(w < 1 || h < 1 || x1 < 0 || x1 + w > HRes || x2 < 0 || x2 + w > HRes || y1 < 0 || y1 + h > VRes || y2 < 0 || y2 + h > VRes) return;
         if(x1 >= x2) {
             max_x = 1;
-            buff = GetMemory(max_x * h);
+            buff = GetMemory((max_x * h)>>1);
             while(w > max_x){
                 ReadBufferFast(x1, y1, x1 + max_x - 1, y1 + h - 1, buff);
-                DrawBufferFast(x2, y2, x2 + max_x - 1, y2 + h - 1, buff);
+                DrawBufferFast(x2, y2, x2 + max_x - 1, y2 + h - 1, -1, buff);
                 x1 += max_x;
                 x2 += max_x;
                 w -= max_x;
             }
             ReadBufferFast(x1, y1, x1 + w - 1, y1 + h - 1, buff);
-            DrawBufferFast(x2, y2, x2 + w - 1, y2 + h - 1, buff);
+            DrawBufferFast(x2, y2, x2 + w - 1, y2 + h - 1, -1, buff);
             FreeMemory(buff);
             return;
         }
@@ -2295,18 +3510,139 @@ void cmd_blit(void) {
             start_x2 = x2 + w - max_x;
             while(w > max_x){
                 ReadBufferFast(start_x1, y1, start_x1 + max_x - 1, y1 + h - 1, buff);
-                DrawBufferFast(start_x2, y2, start_x2 + max_x - 1, y2 + h - 1, buff);
+                DrawBufferFast(start_x2, y2, start_x2 + max_x - 1, y2 + h - 1, -1, buff);
                 w -= max_x;
                 start_x1 -= max_x;
                 start_x2 -= max_x;
             }
             ReadBufferFast(x1, y1, x1 + w - 1, y1 + h - 1, buff);
-            DrawBufferFast(x2, y2, x2 + w - 1, y2 + h - 1, buff);
+            DrawBufferFast(x2, y2, x2 + w - 1, y2 + h - 1, -1, buff);
             FreeMemory(buff);
             return;
         }
     }
 }
+void fun_sprite(void) {
+    int bnbr = 0, w = -1, h = -1, t = 0, x = 10000, y = 10000, l = 0, n, c = 0;
+    getargs(&ep, 5, (unsigned char *)",");
+    if (checkstring(argv[0], (unsigned char*)"W")) t = 1;
+    else if (checkstring(argv[0], (unsigned char*)"H")) t = 2;
+    else if (checkstring(argv[0], (unsigned char*)"X")) t = 3;
+    else if (checkstring(argv[0], (unsigned char*)"Y")) t = 4;
+    else if (checkstring(argv[0], (unsigned char*)"L")) t = 5;
+    else if (checkstring(argv[0], (unsigned char*)"C")) t = 6;
+    else if (checkstring(argv[0], (unsigned char*)"V")) t = 7;
+    else if (checkstring(argv[0], (unsigned char*)"T")) t = 8;
+    else if (checkstring(argv[0], (unsigned char*)"E")) t = 9;
+    else if (checkstring(argv[0], (unsigned char*)"D")) t = 10;
+    else if (checkstring(argv[0], (unsigned char*)"A")) t = 11;
+    else if (checkstring(argv[0], (unsigned char*)"N")) t = 12;
+    else if (checkstring(argv[0], (unsigned char*)"S")) t = 13;
+    else error((char *)"Syntax");
+    if (t < 12) {
+        if (argc < 3)error((char *)"Syntax");
+        if (*argv[2] == '#') argv[2]++;
+        bnbr = (int)getint(argv[2], 0, MAXBLITBUF);
+        if (bnbr == 0) {
+            if (argc == 5 && !(t == 7 || t == 10)) {
+                n = (int)getint(argv[4], 1, blitbuff[0].collisions[0]);
+                c = blitbuff[0].collisions[n];
+            }
+            else c = blitbuff[0].collisions[0];
+        }
+        if (blitbuff[bnbr].blitbuffptr != NULL) {
+            w = blitbuff[bnbr].w;
+            h = blitbuff[bnbr].h;
+        }
+        if (blitbuff[bnbr].active) {
+            x = blitbuff[bnbr].x;
+            y = blitbuff[bnbr].y;
+            l = blitbuff[bnbr].layer;
+            if (argc == 5 && !(t == 7 || t == 10)) {
+                n = (int)getint(argv[4], 1, blitbuff[bnbr].collisions[0]);
+                c = blitbuff[bnbr].collisions[n];
+            }
+            else c = blitbuff[bnbr].collisions[0];
+        }
+    }
+    if (t == 1)iret = w;
+    else if (t == 2)iret = h;
+    else if (t == 3) { if (blitbuff[bnbr].active)iret = x; else iret = 10000; }
+    else if (t == 4) { if (blitbuff[bnbr].active)iret = y; else iret = 10000; }
+    else if (t == 5) { if (blitbuff[bnbr].active)iret = l; else iret = -1; }
+    else if (t == 8) { if (blitbuff[bnbr].active)iret = blitbuff[bnbr].lastcollisions; else iret = 0; }
+    else if (t == 9) { if (blitbuff[bnbr].active)iret = blitbuff[bnbr].edges; else iret = 0; }
+    else if (t == 6) { if (blitbuff[bnbr].collisions[0])iret = c; else iret = -1; }
+    else if (t == 11) iret = (int64_t)((uint32_t)blitbuff[bnbr].blitbuffptr);
+    else if (t == 7) {
+        int rbnbr = 0;
+        int x1 = 0, y1 = 0, h1 = 0, w1 = 0;
+        double vector;
+        if (argc < 5)error((char *)"Syntax");
+        if (*argv[4] == '#') argv[4]++;
+        rbnbr = (int)getint(argv[4], 1, MAXBLITBUF);
+        if (blitbuff[rbnbr].blitbuffptr != NULL) {
+            w1 = blitbuff[rbnbr].w;
+            h1 = blitbuff[rbnbr].h;
+        }
+        if (blitbuff[rbnbr].active) {
+            x1 = blitbuff[rbnbr].x;
+            y1 = blitbuff[rbnbr].y;
+        }
+        if (!(blitbuff[bnbr].active && blitbuff[rbnbr].active))fret = -1.0;
+        else {
+            x += w / 2;
+            y += h / 2;
+            x1 += w1 / 2;
+            y1 += h1 / 2;
+            y1 -= y;
+            x1 -= x;
+            vector = atan2(y1, x1);
+            vector += PI_VALUE / 2.0;
+            if (vector < 0)vector += PI_VALUE * 2.0;
+            fret = vector;
+        }
+        targ = T_NBR;
+        return;
+    }
+    else if (t == 10) {
+        int rbnbr = 0;
+        int x1 = 0, y1 = 0, h1 = 0, w1 = 0;
+        if (argc < 5)error((char *)"Syntax");
+        if (*argv[4] == '#') argv[4]++;
+        rbnbr = (int)getint(argv[4], 1, MAXBLITBUF);
+        if (blitbuff[rbnbr].blitbuffptr != NULL) {
+            w1 = blitbuff[rbnbr].w;
+            h1 = blitbuff[rbnbr].h;
+        }
+        if (blitbuff[rbnbr].active) {
+            x1 = blitbuff[rbnbr].x;
+            y1 = blitbuff[rbnbr].y;
+        }
+        if (!(blitbuff[bnbr].active && blitbuff[rbnbr].active))fret = -1.0;
+        else {
+            x += w / 2;
+            y += h / 2;
+            x1 += w1 / 2;
+            y1 += h1 / 2;
+            fret = sqrt((x1 - x) * (x1 - x) + (y1 - y) * (y1 - y));
+        }
+        targ = T_NBR;
+        return;
+    }
+    else if (t == 12) {
+        if (argc == 3) {
+            n = (int)getint(argv[2], 0, MAXLAYER);
+            iret = layer_in_use[n];
+        }
+        else iret = sprites_in_use;
+    }
+    else if (t == 13) iret = sprite_which_collided;
+    else {
+    }
+    targ = T_INT;
+}
+
 #else
 void cmd_blit(void) {
     int x1, y1, x2, y2, w, h, bnbr;
@@ -2340,15 +3676,13 @@ void cmd_blit(void) {
         if(xlen==-1)xlen=BmpDec.lWidth;
         if(ylen==-1)ylen=BmpDec.lHeight;
         if(xlen+xOrigin>BmpDec.lWidth || ylen+yOrigin>BmpDec.lHeight)error("Coordinates");
-        blitbuffptr[bnbr] = GetMemory(xlen * ylen * 3 +4 );
-        memset(blitbuffptr[bnbr],0xFF,xlen * ylen * 3 +4 );
+        blitbuff[bnbr].blitbuffptr = GetMemory(xlen * ylen * 3 +4 );
+        memset(blitbuff[bnbr].blitbuffptr,0xFF,xlen * ylen * 3 +4 );
         fnbr = FindFreeFileNbr();
         if(!BasicFileOpen(p, fnbr, FA_READ)) return;
-        BMP_bDecode_memory(xOrigin, yOrigin, xlen, ylen, fnbr, &blitbuffptr[bnbr][4]);
-        short *bw=(short *)&blitbuffptr[bnbr][0];
-        short *bh=(short *)&blitbuffptr[bnbr][2];
-        *bw=xlen;
-        *bh=ylen;
+        BMP_bDecode_memory(xOrigin, yOrigin, xlen, ylen, fnbr, blitbuff[bnbr].blitbuffptr);
+        blitbuff[bnbr].w=xlen;
+        blitbuff[bnbr].h=ylen;
         FileClose(fnbr);
         return;
     }
@@ -2368,13 +3702,11 @@ void cmd_blit(void) {
         if(x1 + w > HRes) w = HRes - x1;
         if(y1 + h > VRes) h = VRes - y1;
         if(w < 1 || h < 1 || x1 < 0 || x1 + w > HRes || y1 < 0 || y1 + h > VRes ) return;
-        if(blitbuffptr[bnbr] == NULL){
-            blitbuffptr[bnbr] = GetMemory(w * h * 3 + 4);
-            ReadBuffer(x1, y1, x1 + w - 1, y1 + h - 1, &blitbuffptr[bnbr][4]);
-            short *bw=(short *)&blitbuffptr[bnbr][0];
-            short *bh=(short *)&blitbuffptr[bnbr][2];
-            *bw=w;
-            *bh=h;
+        if(blitbuff[bnbr].blitbuffptr == NULL){
+            blitbuff[bnbr].blitbuffptr = GetMemory(w * h * 3);
+            ReadBuffer(x1, y1, x1 + w - 1, y1 + h - 1, blitbuff[bnbr].blitbuffptr);
+            blitbuff[bnbr].w=w;
+            blitbuff[bnbr].h=h;
         } else error("Buffer in use");
     } else if((p = checkstring(cmdline, "WRITE"))) {
         getargs(&p, 9, ",");
@@ -2383,10 +3715,8 @@ void cmd_blit(void) {
         bnbr = getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
         x1 = getinteger(argv[2]);
         y1 = getinteger(argv[4]);
-        short *bw=(short *)&blitbuffptr[bnbr][0];
-        short *bh=(short *)&blitbuffptr[bnbr][2];
-        w=*bw;
-        h=*bh;
+        w=blitbuff[bnbr].w;
+        h=blitbuff[bnbr].h;
         if(argc >= 7 && *argv[6])w = getinteger(argv[6]);
         if(argc >= 9 && *argv[8])h = getinteger(argv[8]);
         if(w < 1 || h < 1) return;
@@ -2395,16 +3725,16 @@ void cmd_blit(void) {
         if(x1 + w > HRes) w = HRes - x1;
         if(y1 + h > VRes) h = VRes - y1;
         if(w < 1 || h < 1 || x1 < 0 || x1 + w > HRes || y1 < 0 || y1 + h > VRes ) return;
-        if(blitbuffptr[bnbr] != NULL){
-            DrawBuffer(x1, y1, x1 + w - 1, y1 + h - 1, &blitbuffptr[bnbr][4]);
+        if(blitbuff[bnbr].blitbuffptr != NULL){
+            DrawBuffer(x1, y1, x1 + w - 1, y1 + h - 1, blitbuff[bnbr].blitbuffptr);
         } else error("Buffer not in use");
     } else if((p = checkstring(cmdline, "CLOSE"))) {
         getargs(&p, 1, ",");
         if(*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
         bnbr = getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
-        if(blitbuffptr[bnbr] != NULL){
-            FreeMemory(blitbuffptr[bnbr]);
-            blitbuffptr[bnbr] = NULL;
+        if(blitbuff[bnbr].blitbuffptr != NULL){
+            FreeMemory(blitbuff[bnbr].blitbuffptr);
+            blitbuff[bnbr].blitbuffptr = NULL;
         } else error("Buffer not in use");
         // get the number
      } else {
@@ -2537,7 +3867,7 @@ void cmd_mode(void){
     } else {
         DISPLAY_TYPE=MONOVGA;
     }
-    memset(FrameBuf, 0, 38400);
+    memset(WriteBuf, 0, 38400);
 //    uSec(10000);
     ResetDisplay();
     CurrentX = CurrentY =0;
@@ -2591,7 +3921,7 @@ void Display_Refresh(void){
 
 void DrawPixelMono(int x, int y, int c){
     if(x<0 || y<0 || x>=HRes || y>=VRes)return;
-	uint8_t *p=(uint8_t *)(((uint32_t) FrameBuf)+(y*(HRes>>3))+(x>>3));
+	uint8_t *p=(uint8_t *)(((uint32_t) WriteBuf)+(y*(HRes>>3))+(x>>3));
 	uint8_t bit = 1<<(x % 8);
 	if(c)*p |=bit;
 	else *p &= ~bit;
@@ -2614,7 +3944,7 @@ void DrawRectangleMono(int x1, int y1, int x2, int y2, int c){
     if(y2 <= y1) { t = y1; y1 = y2; y2 = t; }
     if(x1==x2){
         for(y=y1;y<=y2;y++){
-            p=&FrameBuf[(y*(HRes>>3))+(x1>>3)];
+            p=&WriteBuf[(y*(HRes>>3))+(x1>>3)];
             mask=1<<(x1 % 8); //get the bit position for this bit
             if(c){
                 *p|=mask;
@@ -2627,7 +3957,7 @@ void DrawRectangleMono(int x1, int y1, int x2, int y2, int c){
             x1p=x1;
             x2p=x2;
             if((x1 % 8) !=0){
-                p=&FrameBuf[(y*(HRes>>3))+(x1>>3)];
+                p=&WriteBuf[(y*(HRes>>3))+(x1>>3)];
                 for(x=x1;x<=x2 && (x % 8)!=0;x++){
                     mask=1<<(x % 8); //get the bit position for this bit
                     if(c){
@@ -2639,7 +3969,7 @@ void DrawRectangleMono(int x1, int y1, int x2, int y2, int c){
                 }
             }
             if(x1p-1!=x2 && (x2 % 8)!=7){
-                p=&FrameBuf[(y*(HRes>>3))+(x2p>>3)];
+                p=&WriteBuf[(y*(HRes>>3))+(x2p>>3)];
                 for(x=(x2 & 0xFFF8);x<=x2 ;x++){
                     mask=1<<(x % 8); //get the bit position for this bit
                     if(c){
@@ -2650,7 +3980,7 @@ void DrawRectangleMono(int x1, int y1, int x2, int y2, int c){
                     x2p--;
                 }
             }
-            p=&FrameBuf[(y*(HRes>>3))+(x1p>>3)];
+            p=&WriteBuf[(y*(HRes>>3))+(x1p>>3)];
             for(x=x1p;x<x2p;x+=8){
                 if(c){
                     *p++=0xFF;
@@ -2677,15 +4007,15 @@ void DrawBitmapMono(int x1, int y1, int width, int height, int scale, int fc, in
                         loc=(y*(HRes>>3))+(x>>3);
                         if((bitmap[((i * width) + k)/8] >> (((height * width) - ((i * width) + k) - 1) %8)) & 1) {
                             if(fc){
-                            	FrameBuf[loc]|=mask;
+                            	WriteBuf[loc]|=mask;
                              } else {
-                            	 FrameBuf[loc]&= ~mask;
+                            	 WriteBuf[loc]&= ~mask;
                              }
                        } else {
                             if(bc>0){
-                            	FrameBuf[loc]|=mask;
+                            	WriteBuf[loc]|=mask;
                             } else if(bc==0) {
-                            	FrameBuf[loc]&= ~mask;
+                            	WriteBuf[loc]&= ~mask;
                             }
                         }
                    }
@@ -2701,14 +4031,14 @@ void ScrollLCDMono(int lines){
      if(lines >= 0) {
         for(int i=0;i<VRes-lines;i++) {
             int d=i*(HRes>>3),s=(i+lines)*(HRes>>3); 
-            for(int c=0;c<(HRes>>3);c++)FrameBuf[d+c]=FrameBuf[s+c];
+            for(int c=0;c<(HRes>>3);c++)WriteBuf[d+c]=WriteBuf[s+c];
         }
         DrawRectangle(0, VRes-lines, HRes - 1, VRes - 1, 0); // erase the lines to be scrolled off
     } else {
     	lines=-lines;
         for(int i=VRes-1;i>=lines;i--) {
             int d=i*(HRes>>3),s=(i-lines)*(HRes>>3); 
-            for(int c=0;c<(HRes>>3);c++)FrameBuf[d+c]=FrameBuf[s+c];
+            for(int c=0;c<(HRes>>3);c++)WriteBuf[d+c]=WriteBuf[s+c];
         }
         DrawRectangle(0, 0, HRes - 1, lines - 1, 0); // erase the lines introduced at the top
     }
@@ -2741,35 +4071,41 @@ void DrawBufferMono(int x1, int y1, int x2, int y2, unsigned char *p){
             loc=(y*(HRes>>3))+(x>>3);
             mask=1<<(x % 8); //get the bit position for this bit
             if(c.rgb){
-            	FrameBuf[loc]|=mask;
+            	WriteBuf[loc]|=mask;
             } else {
-            	FrameBuf[loc]&=(~mask);
+            	WriteBuf[loc]&=(~mask);
             }
         }
     }
 }
-void DrawBufferMonoFast(int x1, int y1, int x2, int y2, unsigned char *p){
-	int x,y, t, loc;
+void DrawBufferMonoFast(int x1, int y1, int x2, int y2, int blank, unsigned char *p){
+	int x,y, t, loc, toggle=0;
     unsigned char mask;
     // make sure the coordinates are kept within the display area
     if(x2 <= x1) { t = x1; x1 = x2; x2 = t; }
     if(y2 <= y1) { t = y1; y1 = y2; y2 = t; }
-    if(x1 < 0) x1 = 0;
-    if(x1 >= HRes) x1 = HRes - 1;
-    if(x2 < 0) x2 = 0;
-    if(x2 >= HRes) x2 = HRes - 1;
-    if(y1 < 0) y1 = 0;
-    if(y1 >= VRes) y1 = VRes - 1;
-    if(y2 < 0) y2 = 0;
-    if(y2 >= VRes) y2 = VRes - 1;
 	for(y=y1;y<=y2;y++){
     	for(x=x1;x<=x2;x++){
-            loc=(y*(HRes>>3))+(x>>3);
-            mask=1<<(x % 8); //get the bit position for this bit
-            if(*p++){
-            	FrameBuf[loc]|=mask;
+            if(x>=0 && x<HRes && y>=0 && y<VRes){
+                loc=(y*(HRes>>3))+(x>>3);
+                mask=1<<(x % 8); //get the bit position for this bit
+                if(toggle){
+                    if(*p++ & 0xF0){
+                        WriteBuf[loc]|=mask;
+                    } else {
+                        WriteBuf[loc]&=(~mask);
+                    }
+                } else {
+                    if(*p & 0xF){
+                        WriteBuf[loc]|=mask;
+                    } else {
+                        WriteBuf[loc]&=(~mask);
+                    }
+                }
+                toggle=!toggle;
             } else {
-            	FrameBuf[loc]&=(~mask);
+                if(toggle)p++;
+                toggle=!toggle;
             }
         }
     }
@@ -2794,7 +4130,7 @@ void ReadBufferMono(int x1, int y1, int x2, int y2, unsigned char *c){
     	for(x=x1;x<=x2;x++){
             loc=(y*(HRes>>3))+(x>>3);
             mask=1<<(x % 8); //get the bit position for this bit
-            if(FrameBuf[loc]&mask){
+            if(WriteBuf[loc]&mask){
                 *c++=0xFF;
                 *c++=0xFF;
                 *c++=0xFF;
@@ -2807,28 +4143,35 @@ void ReadBufferMono(int x1, int y1, int x2, int y2, unsigned char *c){
     }
 }
 void ReadBufferMonoFast(int x1, int y1, int x2, int y2, unsigned char *c){
-    int x,y,t,loc;
+    int x,y,t,loc,toggle=0;;
     uint8_t *pp;
     unsigned char mask;
     if(x2 <= x1) { t = x1; x1 = x2; x2 = t; }
     if(y2 <= y1) { t = y1; y1 = y2; y2 = t; }
-    int xx1=x1, yy1=y1, xx2=x2, yy2=y2;
-    if(x1 < 0) xx1 = 0;
-    if(x1 >= HRes) xx1 = HRes - 1;
-    if(x2 < 0) xx2 = 0;
-    if(x2 >= HRes) xx2 = HRes - 1;
-    if(y1 < 0) yy1 = 0;
-    if(y1 >= VRes) yy1 = VRes - 1;
-    if(y2 < 0) yy2 = 0;
-    if(y2 >= VRes) yy2 = VRes - 1;
 	for(y=y1;y<=y2;y++){
     	for(x=x1;x<=x2;x++){
-            loc=(y*(HRes>>3))+(x>>3);
-            mask=1<<(x % 8); //get the bit position for this bit
-            if(FrameBuf[loc]&mask){
-                *c++=0xFF;
+			if(x>=0 && x<HRes && y>=0 && y<VRes){
+                loc=(y*(HRes>>3))+(x>>3);
+                mask=1<<(x % 8); //get the bit position for this bit
+                if(toggle){
+                    if(WriteBuf[loc]&mask){
+                        *c++|=0xF0;
+                    } else {
+                        *c++&=0x0F;
+                    }
+                } else {
+                    if(WriteBuf[loc]&mask){
+                        *c=0xF;
+                    } else {
+                        *c=0x0;
+                    }
+
+                }
+                toggle=!toggle;
             } else {
-                *c++=0x00;
+                if(toggle) *c++ &= 0xF;
+                else *c = 0 ;
+                toggle=!toggle;
             }
         }
     }
@@ -2836,7 +4179,7 @@ void ReadBufferMonoFast(int x1, int y1, int x2, int y2, unsigned char *c){
 void DrawPixelColour(int x, int y, int c){
     if(x<0 || y<0 || x>=HRes || y>=VRes)return;
     unsigned char colour = ((c & 0x800000)>> 20) | ((c & 0xC000)>>13) | ((c & 0x80)>>7);
-	uint8_t *p=(uint8_t *)(((uint32_t) FrameBuf)+(y*(HRes>>1))+(x>>1));
+	uint8_t *p=(uint8_t *)(((uint32_t) WriteBuf)+(y*(HRes>>1))+(x>>1));
     if(x & 1){
         *p &=0x0F;
         *p |=(colour<<4);
@@ -2865,7 +4208,7 @@ void DrawRectangleColour(int x1, int y1, int x2, int y2, int c){
     for(y=y1;y<=y2;y++){
         x1p=x1;
         x2p=x2;
-        uint8_t *p=(uint8_t *)(((uint32_t) FrameBuf)+(y*(HRes>>1))+(x1>>1));
+        uint8_t *p=(uint8_t *)(((uint32_t) WriteBuf)+(y*(HRes>>1))+(x1>>1));
         if((x1 % 2) == 1){
             *p &=0x0F;
             *p |=(colour<<4);
@@ -2873,7 +4216,7 @@ void DrawRectangleColour(int x1, int y1, int x2, int y2, int c){
             x1p++;
         }
         if((x2 % 2) == 0){
-            uint8_t *q=(uint8_t *)(((uint32_t) FrameBuf)+(y*(HRes>>1))+(x2>>1));
+            uint8_t *q=(uint8_t *)(((uint32_t) WriteBuf)+(y*(HRes>>1))+(x2>>1));
             *q &=0xF0;
             *q |= colour;
             x2p--;
@@ -2897,7 +4240,7 @@ void DrawBitmapColour(int x1, int y1, int width, int height, int scale, int fc, 
                     x=x1 + k * scale + m ;
                     y=y1 + i * scale + j ;
                     if(x >= 0 && x < HRes && y >= 0 && y < VRes) {  // if the coordinates are valid
-	                    uint8_t *p=(uint8_t *)(((uint32_t) FrameBuf)+(y*(HRes>>1))+(x>>1));
+	                    uint8_t *p=(uint8_t *)(((uint32_t) WriteBuf)+(y*(HRes>>1))+(x>>1));
                         if((bitmap[((i * width) + k)/8] >> (((height * width) - ((i * width) + k) - 1) %8)) & 1) {
                             if(x & 1){
                                 *p &=0x0F;
@@ -2930,14 +4273,14 @@ void ScrollLCDColour(int lines){
      if(lines >= 0) {
         for(int i=0;i<VRes-lines;i++) {
             int d=i*(HRes>>1),s=(i+lines)*(HRes>>1); 
-            for(int c=0;c<(HRes>>1);c++)FrameBuf[d+c]=FrameBuf[s+c];
+            for(int c=0;c<(HRes>>1);c++)WriteBuf[d+c]=WriteBuf[s+c];
         }
         DrawRectangle(0, VRes-lines, HRes - 1, VRes - 1, PromptBC); // erase the lines to be scrolled off
     } else {
     	lines=-lines;
         for(int i=VRes-1;i>=lines;i--) {
             int d=i*(HRes>>1),s=(i-lines)*(HRes>>1); 
-            for(int c=0;c<(HRes>>1);c++)FrameBuf[d+c]=FrameBuf[s+c];
+            for(int c=0;c<(HRes>>1);c++)WriteBuf[d+c]=WriteBuf[s+c];
         }
         DrawRectangle(0, 0, HRes - 1, lines - 1, PromptBC); // erase the lines introduced at the top
     }
@@ -2968,7 +4311,7 @@ void DrawBufferColour(int x1, int y1, int x2, int y2, unsigned char *p){
 	        c.rgbbytes[1]=*p++;
 	        c.rgbbytes[2]=*p++;
             fcolour = ((c.rgb & 0x800000)>> 20) | ((c.rgb & 0xC000)>>13) | ((c.rgb & 0x80)>>7);
-            pp=(uint8_t *)(((uint32_t) FrameBuf)+(y*(HRes>>1))+(x>>1));
+            pp=(uint8_t *)(((uint32_t) WriteBuf)+(y*(HRes>>1))+(x>>1));
             if(x & 1){
                 *pp &=0x0F;
                 *pp |=(fcolour<<4);
@@ -2979,35 +4322,40 @@ void DrawBufferColour(int x1, int y1, int x2, int y2, unsigned char *p){
         }
     }
 }
-void DrawBufferColourFast(int x1, int y1, int x2, int y2, unsigned char *p){
-	int x,y, t;
-    union colourmap
-    {
-    char rgbbytes[4];
-    unsigned int rgb;
-    } c;
-    unsigned char fcolour;
+void DrawBufferColourFast(int x1, int y1, int x2, int y2, int blank, unsigned char *p){
+	int x,y, t,toggle=0;
+    unsigned char c,w;
     uint8_t *pp;
     // make sure the coordinates are kept within the display area
     if(x2 <= x1) { t = x1; x1 = x2; x2 = t; }
     if(y2 <= y1) { t = y1; y1 = y2; y2 = t; }
-    if(x1 < 0) x1 = 0;
-    if(x1 >= HRes) x1 = HRes - 1;
-    if(x2 < 0) x2 = 0;
-    if(x2 >= HRes) x2 = HRes - 1;
-    if(y1 < 0) y1 = 0;
-    if(y1 >= VRes) y1 = VRes - 1;
-    if(y2 < 0) y2 = 0;
-    if(y2 >= VRes) y2 = VRes - 1;
 	for(y=y1;y<=y2;y++){
     	for(x=x1;x<=x2;x++){
-            pp=(uint8_t *)(((uint32_t) FrameBuf)+(y*(HRes>>1))+(x>>1));
-            if(x & 1){
-                *pp &=0x0F;
-                *pp |=((*p++)<<4);
+            if(x>=0 && x<HRes && y>=0 && y<VRes){
+                pp=(uint8_t *)(WriteBuf+(y*(HRes>>1))+(x>>1));
+                if(x & 1){
+                    w=*pp & 0xF0;
+                    *pp &=0x0F;
+                    if(toggle){
+                        c=((*p++)&0xF0);
+                    } else {
+                        c=(*p<<4);
+                    }
+                } else {
+                    w=*pp & 0xF;
+                    *pp &=0xF0;
+                    if(toggle){
+                        c = ((*p++)>>4);
+                    } else {
+                        c = (*p & 0xF);
+                    }
+                }
+                if(c!=0 || blank==-1)*pp |=c;
+                else *pp |=w;
+                toggle=!toggle;
             } else {
-                *pp &=0xF0;
-                *pp |= *p++;
+                if(toggle)p++;
+                toggle=!toggle;
             }
         }
     }
@@ -3028,7 +4376,7 @@ void ReadBufferColour(int x1, int y1, int x2, int y2, unsigned char *c){
     if(y2 >= VRes) yy2 = VRes - 1;
 	for(y=y1;y<=y2;y++){
     	for(x=x1;x<=x2;x++){
-	        pp=(uint8_t *)(((uint32_t) FrameBuf)+(y*(HRes>>1))+(x>>1));
+	        pp=(uint8_t *)(((uint32_t) WriteBuf)+(y*(HRes>>1))+(x>>1));
             if(x & 1){
                 t=colours[(*pp)>>4];
             } else {
@@ -3041,30 +4389,29 @@ void ReadBufferColour(int x1, int y1, int x2, int y2, unsigned char *c){
     }
 }
 void ReadBufferColourFast(int x1, int y1, int x2, int y2, unsigned char *c){
-    int x,y,t,last=0;
+    int x,y,t,toggle=0;
     uint8_t *pp;
     if(x2 <= x1) { t = x1; x1 = x2; x2 = t; }
     if(y2 <= y1) { t = y1; y1 = y2; y2 = t; }
-    int xx1=x1, yy1=y1, xx2=x2, yy2=y2;
-    if(x1 < 0) xx1 = 0;
-    if(x1 >= HRes) xx1 = HRes - 1;
-    if(x2 < 0) xx2 = 0;
-    if(x2 >= HRes) xx2 = HRes - 1;
-    if(y1 < 0) yy1 = 0;
-    if(y1 >= VRes) yy1 = VRes - 1;
-    if(y2 < 0) yy2 = 0;
-    if(y2 >= VRes) yy2 = VRes - 1;
 	for(y=y1;y<=y2;y++){
     	for(x=x1;x<=x2;x++){
-	        pp=(uint8_t *)(((uint32_t) FrameBuf)+(y*(HRes>>1))+(x>>1));
-            if(!(x & 1)){
-                *c++=((*pp)&0x0F);
+			if(x>=0 && x<HRes && y>=0 && y<VRes){
+                pp=(uint8_t *)(((uint32_t) WriteBuf)+(y*(HRes>>1))+(x>>1));
+                if(!(x & 1)){
+                    if(toggle)*c++ |= (((*pp)&0x0F))<<4;
+                    else *c=((*pp)&0x0F);
+                } else {
+                    if(toggle)*c++ |=((*pp)&0xF0);
+                    else *c=((*pp)>>4);
+                }
+                toggle=!toggle;
             } else {
-                *c++=((*pp)>>4);
+                if(toggle) *c++ &= 0xF;
+                else *c = 0 ;
+                toggle=!toggle;
             }
         }
     }
-    if(last)*c++=t;
 }
 void fun_getscanline(void){
     iret=QVgaScanLine;
@@ -3332,3 +4679,831 @@ void ShowCursor(int show) {
   visible = newstate;                                               // draw the cursor BELOW the font
     DrawLine(CurrentX, CurrentY + gui_font_height-1, CurrentX + gui_font_width, CurrentY + gui_font_height-1, (gui_font_height<=8 ? 1 : 2), visible ? gui_fcolour : gui_bcolour);
 }
+#ifdef PICOMITEVGA
+#define ABS(X) ((X)>0 ? (X) : (-(X)))
+
+void DrawPolygon(int n, short *xcoord, short *ycoord, int face){
+	int i, facecount=struct3d[n]->facecount[face];
+    int c=struct3d[n]->line[face];
+    int f=struct3d[n]->fill[face];
+	// first deal with outline only
+	if(struct3d[n]->fill[face]==0xFFFFFFFF){
+	    for(i=0;i<facecount;i++){
+       		if(i<facecount-1){
+       			DrawLine(xcoord[i],ycoord[i],xcoord[i+1],ycoord[i+1],1,c);
+       		} else {
+       			DrawLine(xcoord[i],ycoord[i],xcoord[0],ycoord[0],1,c);
+       		}
+	    }
+	} else {
+		if(facecount==3){
+			DrawTriangle(xcoord[0],ycoord[0],xcoord[1],ycoord[1],xcoord[2],ycoord[2],c,f);
+		} else if(facecount==4){
+			DrawTriangle(xcoord[0],ycoord[0],xcoord[1],ycoord[1],xcoord[2],ycoord[2],f,f);
+			DrawTriangle(xcoord[0],ycoord[0],xcoord[2],ycoord[2],xcoord[3],ycoord[3],f,f);
+			if(f!=c){
+				DrawLine(xcoord[0],ycoord[0],xcoord[1],ycoord[1],1,c);
+				DrawLine(xcoord[1],ycoord[1],xcoord[2],ycoord[2],1,c);
+				DrawLine(xcoord[2],ycoord[2],xcoord[3],ycoord[3],1,c);
+				DrawLine(xcoord[0],ycoord[0],xcoord[3],ycoord[3],1,c);
+			}
+		} else {
+			int  ymax=-1000000, ymin=1000000;
+        	fill_set_pen_color((c>>16) & 0xFF, (c>>8) & 0xFF , c & 0xFF);
+    		fill_set_fill_color((f>>16) & 0xFF, (f>>8) & 0xFF , f & 0xFF);
+            fill_begin_fill();
+			main_fill_poly_vertex_count=0;
+			for(i=0;i<facecount;i++){
+				main_fill_polyX[main_fill_poly_vertex_count] = (TFLOAT)xcoord[i];
+				main_fill_polyY[main_fill_poly_vertex_count] = (TFLOAT)ycoord[i];
+				if(main_fill_polyY[main_fill_poly_vertex_count]>ymax)ymax=main_fill_polyY[main_fill_poly_vertex_count];
+				if(main_fill_polyY[main_fill_poly_vertex_count]<ymin)ymin=main_fill_polyY[main_fill_poly_vertex_count];
+				main_fill_polyX[main_fill_poly_vertex_count] = (TFLOAT)xcoord[i];
+				main_fill_poly_vertex_count++;
+			 }
+			 if(main_fill_polyY[main_fill_poly_vertex_count]!=main_fill_polyY[0] || main_fill_polyX[main_fill_poly_vertex_count] != main_fill_polyX[0]){
+					main_fill_polyX[main_fill_poly_vertex_count]=main_fill_polyX[0];
+					main_fill_polyY[main_fill_poly_vertex_count]=main_fill_polyY[0];
+					main_fill_poly_vertex_count++;
+			 }
+			 fill_end_fill(main_fill_poly_vertex_count-1,ymin,ymax);
+		}
+	}
+
+}
+
+
+void Free3DMemory(int i){
+	FreeMemorySafe((void *)&struct3d[i]->q_vertices);//array of original vertices
+	FreeMemorySafe((void *)&struct3d[i]->r_vertices); //array of rotated vertices
+	FreeMemorySafe((void *)&struct3d[i]->q_centroids);//array of original vertices
+	FreeMemorySafe((void *)&struct3d[i]->r_centroids); //array of rotated vertices
+	FreeMemorySafe((void *)&struct3d[i]->facecount); //number of vertices for each face
+	FreeMemorySafe((void *)&struct3d[i]->facestart); //index into the face_x_vert table of the start of a given face
+	FreeMemorySafe((void *)&struct3d[i]->fill); //fill colours
+	FreeMemorySafe((void *)&struct3d[i]->line); //line colours
+	FreeMemorySafe((void *)&struct3d[i]->colours);
+	FreeMemorySafe((void *)&struct3d[i]->face_x_vert); //list of vertices for each face
+	FreeMemorySafe((void *)&struct3d[i]->dots);
+	FreeMemorySafe((void *)&struct3d[i]->depth);
+	FreeMemorySafe((void *)&struct3d[i]->depthindex);
+	FreeMemorySafe((void *)&struct3d[i]->normals);
+	FreeMemorySafe((void *)&struct3d[i]->flags);
+	FreeMemorySafe((void *)&struct3d[i]);
+}
+void closeall3d(void){
+    int i;
+    for(i = 0; i < MAX3D; i++) {
+    	if(struct3d[i]!=NULL){
+    		Free3DMemory(i);
+    	}
+    }
+    for(i=1; i<4;i++){
+    	camera[i].viewplane=-32767;
+    }
+}
+void T_Mult(FLOAT3D *q1, FLOAT3D *q2, FLOAT3D *n){
+    FLOAT3D a1=q1[0],a2=q2[0],b1=q1[1],b2=q2[1],c1=q1[2],c2=q2[2],d1=q1[3],d2=q2[3];
+    n[0]=a1*a2-b1*b2-c1*c2-d1*d2;
+    n[1]=a1*b2+b1*a2+c1*d2-d1*c2;
+    n[2]=a1*c2-b1*d2+c1*a2+d1*b2;
+    n[3]=a1*d2+b1*c2-c1*b2+d1*a2;
+    n[4]=q1[4]*q2[4];
+}
+
+void T_Invert(FLOAT3D *q, FLOAT3D *n){
+    n[0]=q[0];
+    n[1]=-q[1];
+    n[2]=-q[2];
+    n[3]=-q[3];
+    n[4]=q[4];
+}
+
+void depthsort(FLOAT3D *farray, int n, int *index){
+    int i, j = n, s = 1;
+    int t;
+    FLOAT3D f;
+	while (s) {
+		s = 0;
+		for (i = 1; i < j; i++) {
+			if (farray[i] > farray[i - 1]) {
+				f = farray[i];
+				farray[i] = farray[i - 1];
+				farray[i - 1] = f;
+				s = 1;
+				if(index!=NULL){
+					t=index[i-1];
+					index[i-1]=index[i];
+					index[i]=t;
+				}
+			}
+		}
+		j--;
+	}
+}
+void q_rotate(s_quaternion *in, s_quaternion rotate, s_quaternion *out){
+//	PFlt(in->x);PFltComma(in->y);PFltComma(in->z);PFltComma(in->m);PRet();
+	s_quaternion temp, qtemp;
+	T_Mult((FLOAT3D *)&rotate, (FLOAT3D *)in, (FLOAT3D *)&temp);
+	T_Invert((FLOAT3D *)&rotate, (FLOAT3D *)&qtemp);
+	T_Mult((FLOAT3D *)&temp, (FLOAT3D *)&qtemp, (FLOAT3D *)out);
+//	PFlt(out->x);PFltComma(out->y);PFltComma(out->z);PFltComma(out->m);PRet();
+}
+void normalise(s_vector *v){
+	FLOAT3D n = sqrt3d((v->x) * (v->x) + (v->y) * (v->y) + (v->z) * (v->z) );
+	v->x /= n;
+	v->y /= n;
+	v->z /= n;
+}
+void display3d(int n, FLOAT3D x, FLOAT3D y, FLOAT3D z, int clear, int nonormals){
+	s_vector ray, lighting={0};
+	s_vector p1, p2, p3, U, V;
+	FLOAT3D x1, y1, z1, tmp;
+	FLOAT3D at, bt, ct, t, /*A=0, B=0, */C=1, D=-camera[struct3d[n]->camera].viewplane;
+	int maxH=VRes;
+	int maxW=HRes;
+	int vp, v, f, sortindex, csave=0, fsave=0;
+	if(struct3d[n]->vmax>4){ //needed for polygon fill
+		main_fill_polyX=(TFLOAT  *)GetMemory(struct3d[n]->tot_face_x_vert * sizeof(TFLOAT));
+		main_fill_polyY=(TFLOAT  *)GetMemory(struct3d[n]->tot_face_x_vert * sizeof(TFLOAT));
+	}
+	if(struct3d[n]->xmin!=32767 && clear)DrawRectangle(struct3d[n]->xmin,struct3d[n]->ymin,struct3d[n]->xmax,struct3d[n]->ymax,0);
+	struct3d[n]->xmin=32767;
+	struct3d[n]->ymin=32767;
+	struct3d[n]->xmax=-32767;
+	struct3d[n]->ymax=-32767;
+	short xcoord[MAX_POLYGON_VERTICES],ycoord[MAX_POLYGON_VERTICES];
+	struct3d[n]->distance=0.0;
+	for(f=0;f<struct3d[n]->nf;f++){
+// calculate the surface normals for each face
+		vp=struct3d[n]->facestart[f];
+		p1.x=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].x * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].m + x;
+		p1.y=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].y  *struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].m + y;
+		p1.z=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].z * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].m + z;
+		p2.x=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].x * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].m + x;
+		p2.y=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].y * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].m + y;
+		p2.z=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].z * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].m + z;
+		p3.x=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].x * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].m + x;
+		p3.y=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].y * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].m + y;
+		p3.z=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].z * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].m + z;
+		U.x=p2.x-p1.x;  U.y=p2.y-p1.y;  U.z=p2.z-p1.z;
+		V.x=p3.x-p1.x;  V.y=p3.y-p1.y;  V.z=p3.z-p1.z;
+		struct3d[n]->normals[f].x=U.y * V.z - U.z * V.y;
+		struct3d[n]->normals[f].y=U.z * V.x - U.x * V.z;
+		struct3d[n]->normals[f].z=U.x * V.y - U.y * V.x;
+		normalise(&struct3d[n]->normals[f]);
+		ray.x=p1.x - camera[struct3d[n]->camera].x;
+		ray.y=p1.y - camera[struct3d[n]->camera].y;
+		ray.z=p1.z - camera[struct3d[n]->camera].z;
+		normalise(&ray);
+		lighting.x=p1.x - struct3d[n]->light.x;
+		lighting.y=p1.y - struct3d[n]->light.y;
+		lighting.z=p1.z - struct3d[n]->light.z;
+		normalise(&lighting);
+		struct3d[n]->dots[f] = ray.x * struct3d[n]->normals[f].x + ray.y * struct3d[n]->normals[f].y + ray.z * struct3d[n]->normals[f].z;
+		tmp=struct3d[n]->r_centroids[f].m;
+		struct3d[n]->depth[f]=sqrt3d(
+				(struct3d[n]->r_centroids[f].z * tmp + z - camera[struct3d[n]->camera].z) *
+				(struct3d[n]->r_centroids[f].z * tmp + z - camera[struct3d[n]->camera].z) +
+				(struct3d[n]->r_centroids[f].y * tmp + y - camera[struct3d[n]->camera].y) *
+				(struct3d[n]->r_centroids[f].y * tmp + y - camera[struct3d[n]->camera].y) +
+				(struct3d[n]->r_centroids[f].x * tmp + x - camera[struct3d[n]->camera].x) *
+				(struct3d[n]->r_centroids[f].x * tmp + x - camera[struct3d[n]->camera].x)
+				);
+		struct3d[n]->depthindex[f]=f;
+		struct3d[n]->distance+=struct3d[n]->depth[f];
+	}
+	struct3d[n]->distance/=f;
+	// sort the distances from the faces to the camera
+	depthsort(struct3d[n]->depth, struct3d[n]->nf, struct3d[n]->depthindex);
+	// display the forward facing faces in the order of the furthest away first
+	for(f=0;f<struct3d[n]->nf;f++){
+		sortindex=struct3d[n]->depthindex[f];
+		vp=struct3d[n]->facestart[sortindex];
+		if(struct3d[n]->flags[sortindex] & 4)struct3d[n]->dots[sortindex]=-struct3d[n]->dots[sortindex];
+		if(nonormals || struct3d[n]->dots[sortindex]<0){
+			for(v=0;v<struct3d[n]->facecount[sortindex];v++){
+				x1=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+v]].x * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+v]].m + x;
+				y1=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+v]].y * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+v]].m + y;
+				z1=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+v]].z * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+v]].m + z;
+// We now have the coordinates in real space so project them
+				at=x1-camera[struct3d[n]->camera].x;
+				bt=y1-camera[struct3d[n]->camera].y;
+				ct=z1-camera[struct3d[n]->camera].z;
+				t=-(/*A * x1 + B * y1*/ + C * z1 + D)/(/*A * at + B * bt + */C *ct);
+				xcoord[v]=x1+round3d(at*t)+(maxW>>1)-camera[struct3d[n]->camera].x-camera[struct3d[n]->camera].panx;
+				ycoord[v]=maxH-round3d(y1+bt*t)-1;
+				ycoord[v]-=(maxH>>1)-camera[struct3d[n]->camera].y-camera[struct3d[n]->camera].pany;
+				if(clear){
+					if(xcoord[v]>struct3d[n]->xmax)struct3d[n]->xmax=xcoord[v];
+					if(xcoord[v]<struct3d[n]->xmin)struct3d[n]->xmin=xcoord[v];
+					if(ycoord[v]>struct3d[n]->ymax)struct3d[n]->ymax=ycoord[v];
+					if(ycoord[v]<struct3d[n]->ymin)struct3d[n]->ymin=ycoord[v];
+				}
+			}
+			if((struct3d[n]->flags[sortindex] & 1) == 0) {
+				if(struct3d[n]->flags[sortindex] & 10) {
+					fsave=struct3d[n]->fill[sortindex];
+					csave=struct3d[n]->line[sortindex];
+					if(struct3d[n]->flags[sortindex] & 2)struct3d[n]->fill[sortindex]=0xFF0000;
+					if(struct3d[n]->flags[sortindex] & 8){
+						FLOAT3D lightratio=fabs3d(lighting.x * struct3d[n]->normals[sortindex].x + lighting.y * struct3d[n]->normals[sortindex].y + lighting.z * struct3d[n]->normals[sortindex].z);
+						lightratio=(lightratio*struct3d[n]->ambient)+struct3d[n]->ambient;
+						int red=(struct3d[n]->fill[sortindex] & 0xFF0000)>>16;
+						int green=(struct3d[n]->fill[sortindex] & 0xFF00)>>8;
+						int blue=(struct3d[n]->fill[sortindex] & 0xFF);
+						red=(round3d)((FLOAT3D)red*lightratio);
+						green=(round3d)((FLOAT3D)green*lightratio);
+						blue=(round3d)((FLOAT3D)blue*lightratio);
+						struct3d[n]->fill[sortindex]=(red<<16) | (green<<8) | blue;
+						red=(struct3d[n]->line[sortindex] & 0xFF0000)>>16;
+						green=(struct3d[n]->line[sortindex] & 0xFF00)>>8;
+						blue=(struct3d[n]->line[sortindex] & 0xFF);
+						red=(round3d)((FLOAT3D)red*lightratio);
+						green=(round3d)((FLOAT3D)green*lightratio);
+						blue=(round3d)((FLOAT3D)blue*lightratio);
+						struct3d[n]->line[sortindex]=(red<<16) | (green<<8) | blue;
+					}
+				}
+				DrawPolygon(n, xcoord, ycoord, sortindex);
+				if(struct3d[n]->flags[sortindex] & 10){
+					struct3d[n]->fill[sortindex]=fsave;
+					struct3d[n]->line[sortindex]=csave;
+				}
+			}
+		}
+	}
+	// Save information about how it was displayed for DRAW3D function and RESTORE command
+	struct3d[n]->current.x=x;
+	struct3d[n]->current.y=y;
+	struct3d[n]->current.z=z;
+	struct3d[n]->nonormals=nonormals;
+	if(struct3d[n]->vmax>4){ //needed for polygon fill
+		FreeMemory((unsigned char *)main_fill_polyX);
+		FreeMemory((unsigned char *)main_fill_polyY);
+	}
+
+}
+
+void diagnose3d(int n, FLOAT3D x, FLOAT3D y, FLOAT3D z, int sort){
+	s_vector ray, normals;
+	s_vector p1, p2, p3, U, V;
+	FLOAT3D tmp;
+	int vp, f, sortindex;
+	for(f=0;f<struct3d[n]->nf;f++){
+// calculate the surface normals for each face
+		vp=struct3d[n]->facestart[f];
+		p1.x=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].x * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].m + x;
+		p1.y=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].y  *struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].m + y;
+		p1.z=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].z * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+1]].m + z;
+		p2.x=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].x * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].m + x;
+		p2.y=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].y * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].m + y;
+		p2.z=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].z * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp+2]].m + z;
+		p3.x=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].x * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].m + x;
+		p3.y=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].y * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].m + y;
+		p3.z=struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].z * struct3d[n]->r_vertices[struct3d[n]->face_x_vert[vp]].m + z;
+		U.x=p2.x-p1.x;  U.y=p2.y-p1.y;  U.z=p2.z-p1.z;
+		V.x=p3.x-p1.x;  V.y=p3.y-p1.y;  V.z=p3.z-p1.z;
+		normals.x=U.y * V.z - U.z * V.y;
+		normals.y=U.z * V.x - U.x * V.z;
+		normals.z=U.x * V.y - U.y * V.x;
+		normalise(&normals);
+		ray.x=p1.x - camera[struct3d[n]->camera].x;
+		ray.y=p1.y - camera[struct3d[n]->camera].y;
+		ray.z=p1.z/*  -camera[struct3d[n]->camera].z*/;
+		normalise(&ray);
+		struct3d[n]->dots[f] = ray.x * normals.x + ray.y * normals.y + ray.z * normals.z;
+		tmp=struct3d[n]->r_centroids[f].m;
+		struct3d[n]->depth[f]=sqrt3d(
+				(struct3d[n]->r_centroids[f].z * tmp + z - camera[struct3d[n]->camera].z) *
+				(struct3d[n]->r_centroids[f].z * tmp + z - camera[struct3d[n]->camera].z) +
+				(struct3d[n]->r_centroids[f].y * tmp + y - camera[struct3d[n]->camera].y) *
+				(struct3d[n]->r_centroids[f].y * tmp + y - camera[struct3d[n]->camera].y) +
+				(struct3d[n]->r_centroids[f].x * tmp + x - camera[struct3d[n]->camera].x) *
+				(struct3d[n]->r_centroids[f].x * tmp + x - camera[struct3d[n]->camera].x)
+				);
+		struct3d[n]->depthindex[f]=f;
+	}
+	// sort the dot products
+	depthsort(struct3d[n]->depth, struct3d[n]->nf, struct3d[n]->depthindex);
+	// display the forward facing faces in the order of the furthest away first
+	for(f=0;f<struct3d[n]->nf;f++){
+		if(sort)sortindex=struct3d[n]->depthindex[f];
+		else sortindex=f;
+		vp=struct3d[n]->facestart[sortindex];
+		MMPrintString("Face ");PInt(sortindex);
+		MMPrintString(" at distance ");PFlt(struct3d[n]->depth[f]);
+		MMPrintString(" dot product is ");PFlt(struct3d[n]->dots[sortindex]);
+		MMPrintString(" so the face is ");MMPrintString(struct3d[n]->dots[sortindex]>0 ? "Hidden" : "Showing");PRet();
+	}
+}
+void cmd_3D(void){
+	unsigned char *p;
+	if((p=checkstring(cmdline, "CREATE"))) {
+	   // parameters are
+		// 3D object number (1 to MAX3D
+		// # of vertices = nv
+		// # of faces = nf
+		// vertex structure (nv)
+		// face array (face number, vertex number)
+		// colours array
+		// edge colour index array [nf]
+		// fill colour index array [nf]
+		// centroid structure [nf]
+		// normals structure [nf]
+		MMFLOAT *vertex;
+		TFLOAT tmp;
+		long long int *faces, *facecount, *facecountindex, *colours, *linecolour=NULL, *fillcolour=NULL;
+		getargs(&p,19,",");
+		if(argc<17)error("Argument count");
+		int c, colourcount=0, vp, v, f, fc=0, n=getint(argv[0],1,MAX3D);
+		if(struct3d[n]!=NULL)error("Object already exists");
+		int nv=getinteger(argv[2]);
+		if(nv<3)error("3D object must have a minimum of 3 vertices");
+		int nf=getinteger(argv[4]);
+		if(nf<1)error("3D object must have a minimum of 1 face");
+		int cam=getint(argv[6],1,MAXCAM);
+		vertex = (MMFLOAT *)findvar(argv[8], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+		if((uint32_t)vertex!=(uint32_t)vartbl[VarIndex].val.s)error("Vertex array must be a 2D floating point array");
+		if(vartbl[VarIndex].type & T_NBR) {
+			if(vartbl[VarIndex].dims[2] != 0) error("Vertex array must be a 2D floating point array");
+			if(vartbl[VarIndex].dims[0] - OptionBase!= 2) {		// Not an array
+				error("Vertex array must have 3 elements in first dimension");
+			}
+			if(vartbl[VarIndex].dims[1] - OptionBase < nv-1) {		// Not an array
+				error("Vertex array too small");
+			}
+		} else error("Vertex array must be a 2D floating point array");
+
+		facecount = (long long int *)findvar(argv[10], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+		if((uint32_t)facecount!=(uint32_t)vartbl[VarIndex].val.s)error("Vertex count array must be a 1D integer array");
+		if(vartbl[VarIndex].type & T_INT) {
+			if(vartbl[VarIndex].dims[1] != 0) error("Vertex count array must be a 1D integer array");
+			if(vartbl[VarIndex].dims[0] - OptionBase< nf-1) {		// Not an array
+				error("Vertex count array too small");
+			}
+		} else error("Vertex count array must be a 1D integer array");
+		facecountindex=facecount;
+		for(f=0;f<nf;f++)fc += (*facecountindex++);
+
+		faces = (long long int *)findvar(argv[12], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+		if((uint32_t)faces!=(uint32_t)vartbl[VarIndex].val.s)error("Face/vertex array must be a 1D integer array");
+		if(vartbl[VarIndex].type & T_INT) {
+			if(vartbl[VarIndex].dims[1] != 0) error("Face/vertex array must be a 1D integer array");
+			if(vartbl[VarIndex].dims[0] - OptionBase< fc-1) {		// Not an array
+				error("Face/vertex array too small");
+			}
+		} else error("Face/vertex array must be a 1D integer array");
+
+		colours = (long long int *)findvar(argv[14], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+		if((uint32_t)colours!=(uint32_t)vartbl[VarIndex].val.s)error("Colour array must be a 1D integer array");
+		if(vartbl[VarIndex].type & T_INT) {
+			if(vartbl[VarIndex].dims[1] != 0) error("Colour array must be a 1D integer array");
+			colourcount=vartbl[VarIndex].dims[0] - OptionBase + 1;
+		} else error("Colour array must be a 1D integer array");
+
+
+		if(argc>=17 && *argv[16]){
+			linecolour = (long long int *)findvar(argv[16], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+			if((uint32_t)linecolour!=(uint32_t)vartbl[VarIndex].val.s)error("Line colour array must be a 1D integer array");
+			if(vartbl[VarIndex].type & T_INT) {
+				if(vartbl[VarIndex].dims[1] != 0) error("Line colour  array must be a 1D integer array");
+				if(vartbl[VarIndex].dims[0] - OptionBase< nf-1) {		// Not an array
+					error("Line colour  array too small");
+				}
+			} else error("Line colour must be a 1D integer array");
+		}
+
+		if(argc==19){
+			fillcolour = (long long int *)findvar(argv[18], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+			if((uint32_t)fillcolour!=(uint32_t)vartbl[VarIndex].val.s)error("Fill colour array must be a 1D integer array");
+			if(vartbl[VarIndex].type & T_INT) {
+				if(vartbl[VarIndex].dims[1] != 0) error("Fill colour array must be a 1D integer array");
+				if(vartbl[VarIndex].dims[0] - OptionBase< nf-1) {		// Not an array
+					error("Fill colour array too small");
+				}
+			} else error("Fill colour must be a 1D integer array");
+		}
+		// The data look valid so now create the object in memory
+		struct3d[n]=GetMemory(sizeof(struct D3D));
+		struct3d[n]->nf=nf;
+		struct3d[n]->nv=nv;
+		struct3d[n]->current.x=-32767;
+		struct3d[n]->current.y=-32767;
+		struct3d[n]->current.z=-32767;
+		struct3d[n]->xmin=32767;
+		struct3d[n]->ymin=32767;
+		struct3d[n]->xmax=-32767;
+		struct3d[n]->ymax=-32767;
+		struct3d[n]->camera=cam;
+		struct3d[n]->q_vertices=NULL;//array of original vertices
+		struct3d[n]->r_vertices=NULL; //array of rotated vertices
+		struct3d[n]->q_centroids=NULL;//array of original vertices
+		struct3d[n]->r_centroids=NULL; //array of rotated vertices
+		struct3d[n]->facecount=NULL; //number of vertices for each face
+		struct3d[n]->facestart=NULL; //index into the face_x_vert table of the start of a given face
+		struct3d[n]->fill=NULL; //fill colours
+		struct3d[n]->line=NULL; //line colours
+		struct3d[n]->colours=NULL;
+		struct3d[n]->face_x_vert=NULL; //list of vertices for each face
+		struct3d[n]->light.x=0;
+		struct3d[n]->light.y=0;
+		struct3d[n]->light.z=0;
+		struct3d[n]->ambient=0;
+		// load up things that have one entry per vertex
+		struct3d[n]->q_vertices=GetMemory(struct3d[n]->nv * sizeof(struct t_quaternion));
+		struct3d[n]->r_vertices=GetMemory(struct3d[n]->nv * sizeof(struct t_quaternion));
+		for(v=0;v<struct3d[n]->nv;v++){
+			FLOAT3D m=0.0;
+			struct3d[n]->q_vertices[v].x=(FLOAT3D)(*vertex++);
+			m+=struct3d[n]->q_vertices[v].x*struct3d[n]->q_vertices[v].x;
+			struct3d[n]->q_vertices[v].y=*vertex++;
+			m+=struct3d[n]->q_vertices[v].y*struct3d[n]->q_vertices[v].y;
+			struct3d[n]->q_vertices[v].z=*vertex++;
+			m+=struct3d[n]->q_vertices[v].z*struct3d[n]->q_vertices[v].z;
+			if(m){
+				m=sqrt(m);
+				struct3d[n]->q_vertices[v].x=struct3d[n]->q_vertices[v].x/m;
+				struct3d[n]->q_vertices[v].y=struct3d[n]->q_vertices[v].y/m;
+				struct3d[n]->q_vertices[v].z=struct3d[n]->q_vertices[v].z/m;
+				struct3d[n]->q_vertices[v].w=0.0;
+				struct3d[n]->q_vertices[v].m=m;
+			} else {
+				struct3d[n]->q_vertices[v].x=0;
+				struct3d[n]->q_vertices[v].y=0;
+				struct3d[n]->q_vertices[v].z=0;
+				struct3d[n]->q_vertices[v].w=0.0;
+				struct3d[n]->q_vertices[v].m=1.0;
+			}
+			memcpy(&struct3d[n]->r_vertices[v],&struct3d[n]->q_vertices[v], sizeof(s_quaternion));
+		}
+		struct3d[n]->tot_face_x_vert=0;
+		//load up things that have one entry per face
+		struct3d[n]->vmax=0;
+		struct3d[n]->facecount=GetMemory(struct3d[n]->nf * sizeof(uint16_t));
+		struct3d[n]->facestart=GetMemory(struct3d[n]->nf * sizeof(uint16_t));
+		struct3d[n]->fill=GetMemory(struct3d[n]->nf * sizeof(uint32_t));
+		struct3d[n]->line=GetMemory(struct3d[n]->nf * sizeof(uint32_t));
+		struct3d[n]->r_centroids=GetMemory(struct3d[n]->nf * sizeof(struct t_quaternion));
+		struct3d[n]->q_centroids=GetMemory(struct3d[n]->nf * sizeof(struct t_quaternion));
+		struct3d[n]->dots=GetMemory(struct3d[n]->nf * sizeof(MMFLOAT));
+		struct3d[n]->depth=GetMemory(struct3d[n]->nf * sizeof(MMFLOAT));
+		struct3d[n]->flags=GetMemory(struct3d[n]->nf * sizeof(uint8_t));
+		struct3d[n]->depthindex=GetMemory(struct3d[n]->nf * sizeof(int));
+		struct3d[n]->normals=GetMemory(struct3d[n]->nf * sizeof(struct SVD));
+		for(f=0;f<struct3d[n]->nf;f++){
+			struct3d[n]->facecount[f]=*facecount++;
+			if(struct3d[n]->facecount[f]<3){
+				Free3DMemory(n);
+				error("Vertex count less than 3 for face %",f+OptionBase);
+			}
+			if(struct3d[n]->facecount[f]>struct3d[n]->vmax)struct3d[n]->vmax=struct3d[n]->facecount[f];
+			struct3d[n]->facestart[f]=struct3d[n]->tot_face_x_vert;
+			struct3d[n]->tot_face_x_vert+=struct3d[n]->facecount[f];
+		}
+		// load up the array that holds all the face vertex information
+		struct3d[n]->face_x_vert=GetMemory(struct3d[n]->tot_face_x_vert * sizeof(uint16_t)); // allocate memory for the list of vertices per face
+		struct3d[n]->colours=GetMemory(colourcount * sizeof(uint32_t));
+		for(c=0; c<colourcount;c++){
+			struct3d[n]->colours[c]=(uint32_t)*colours++;
+		}
+		for(f=0;f<struct3d[n]->tot_face_x_vert;f++){
+			struct3d[n]->face_x_vert[f]=*faces++;
+		}
+		for(f=0;f<struct3d[n]->nf;f++){
+			if(linecolour!=NULL){
+				int index=(*linecolour++) - OptionBase;
+				if(index>=colourcount || index<0){
+					Free3DMemory(n);
+					error("Edge colour Index %",index);
+				}
+				struct3d[n]->line[f]=struct3d[n]->colours[index];
+			} else struct3d[n]->line[f]=gui_fcolour;
+			if(fillcolour!=NULL){
+				int index=(*fillcolour++) - OptionBase;
+				if(index>=colourcount || index<0){
+					Free3DMemory(n);
+					error("Fill colour Index %",index);
+				}
+				struct3d[n]->fill[f]=struct3d[n]->colours[index];
+			} else struct3d[n]->fill[f]=0xFFFFFFFF;
+			FLOAT3D x=0, y=0, z=0, scale;
+			vp=struct3d[n]->facestart[f];
+// calculate the centroids of each face
+
+			for(v=0;v<struct3d[n]->facecount[f];v++){
+				tmp=struct3d[n]->q_vertices[struct3d[n]->face_x_vert[vp+v]].m;
+				x+=struct3d[n]->q_vertices[struct3d[n]->face_x_vert[vp+v]].x*tmp;
+				y+=struct3d[n]->q_vertices[struct3d[n]->face_x_vert[vp+v]].y*tmp;
+				z+=struct3d[n]->q_vertices[struct3d[n]->face_x_vert[vp+v]].z*tmp;
+			}
+			x/=(FLOAT3D)struct3d[n]->facecount[f];
+			y/=(FLOAT3D)struct3d[n]->facecount[f];
+			z/=(FLOAT3D)struct3d[n]->facecount[f];
+			struct3d[n]->q_centroids[f].x=x;
+			struct3d[n]->q_centroids[f].y=y;
+			struct3d[n]->q_centroids[f].z=z;
+			scale=sqrt(struct3d[n]->q_centroids[f].x*struct3d[n]->q_centroids[f].x +
+					struct3d[n]->q_centroids[f].y*struct3d[n]->q_centroids[f].y +
+					struct3d[n]->q_centroids[f].z*struct3d[n]->q_centroids[f].z);
+			struct3d[n]->q_centroids[f].x/=scale;
+			struct3d[n]->q_centroids[f].y/=scale;
+			struct3d[n]->q_centroids[f].z/=scale;
+			struct3d[n]->q_centroids[f].m=scale;
+			struct3d[n]->q_centroids[f].w=0;
+			memcpy(&struct3d[n]->r_centroids[f],&struct3d[n]->q_centroids[f], sizeof(s_quaternion));
+			}
+		return;
+	} else if((p=checkstring(cmdline, "DIAGNOSE"))) {
+		getargs(&p,9,",");
+		if(argc<7)error("Argument count");
+		int n=getint(argv[0],1,MAX3D);
+		int x=getint(argv[2],-32766,32766);
+		int y=getint(argv[4],-32766,32766);
+		int z=getinteger(argv[6]);
+		int sort=1;
+		if(argc==9)sort=getint(argv[8],0,1);
+		if(struct3d[n]==NULL)error("Object % does not exist",n);
+		if(camera[struct3d[n]->camera].viewplane==-32767)error("Camera position not defined");
+		diagnose3d(n, x, y, z, sort);
+		return;
+	} else if((p=checkstring(cmdline, "LIGHT"))) {
+		getargs(&p,9,",");
+		if(argc!=9)error("Argument count");
+		int n=getint(argv[0],1,MAX3D);
+		struct3d[n]->light.x=getint(argv[2],-32766,32766);
+		struct3d[n]->light.y=getint(argv[4],-32766,32766);
+		struct3d[n]->light.z=getint(argv[6],-32766,32766);
+		struct3d[n]->ambient=(FLOAT3D)(getint(argv[8],0,100))/100.0;
+		return;
+	} else if((p=checkstring(cmdline, "SHOW"))) {
+		getargs(&p,9,",");
+		if(argc<7)error("Argument count");
+		int n=getint(argv[0],1,MAX3D);
+		int x=getint(argv[2],-32766,32766);
+		int y=getint(argv[4],-32766,32766);
+		int z=getinteger(argv[6]);
+		int nonormals=0;
+		if(argc==9)nonormals=getint(argv[8],0,1);
+		if(struct3d[n]==NULL)error("Object % does not exist",n);
+		if(camera[struct3d[n]->camera].viewplane==-32767)error("Camera position not defined");
+		display3d(n, x, y, z, 1, nonormals);
+		return;
+	} else if((p=checkstring(cmdline, "SET FLAGS"))) {
+		int i, face, nbr;
+		getargs(&p, ((MAX_ARG_COUNT-1) * 2) - 1, ",");
+		if((argc & 0b11) != 0b11) error("Invalid syntax");
+		int n=getint(argv[0],1,MAX3D);
+		int flag=getint(argv[2],0,255);
+	    // step over the equals sign and get the value for the assignment
+	    for(i = 4; i < argc; i += 4) {
+	        face = getinteger(argv[i]);
+	        nbr = getinteger(argv[i + 2]);
+
+	        if(nbr <= 0 || nbr>struct3d[n]->nf-face) error("Invalid argument");
+
+	        while(--nbr>=0) {
+	        	struct3d[n]->flags[face+nbr]=flag;
+	        }
+	    }
+	} else if((p=checkstring(cmdline, "ROTATE"))) {
+		void *ptr1 = NULL;
+		int i, n, v, f;
+		s_quaternion q1;
+		MMFLOAT *q=NULL;
+		getargs(&p, (MAX_ARG_COUNT * 2) - 1, ",");				// getargs macro must be the first executable stmt in a block
+		if((argc & 0x01 || argc<3) == 0) error("Argument count");
+		ptr1 = findvar(argv[0], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+		if(vartbl[VarIndex].type & T_NBR) {
+			if(vartbl[VarIndex].dims[1] != 0) error("Invalid variable");
+			if(vartbl[VarIndex].dims[0] <= 0) {		// Not an array
+				error("Argument 1 must be a 5 element floating point array");
+			}
+			if(vartbl[VarIndex].dims[0] - OptionBase!=4)error("Argument 1 must be a 5 element floating point array");
+			q = (MMFLOAT *)ptr1;
+			if((uint32_t)ptr1!=(uint32_t)vartbl[VarIndex].val.s)error("Syntax");
+		} else error("Argument 1 must be a 5 element floating point array");
+		q1.w=(FLOAT3D)(*q++);
+		q1.x=(FLOAT3D)(*q++);
+		q1.y=(FLOAT3D)(*q++);
+		q1.z=(FLOAT3D)(*q++);
+		q1.m=(FLOAT3D)(*q);
+		for(i = 2; i < argc; i += 2) {
+			n=getint(argv[i],1,MAX3D);
+			if(struct3d[n]==NULL)error("Object % does not exist",n);
+			for(v=0;v<struct3d[n]->nv;v++){
+				q_rotate(&struct3d[n]->q_vertices[v],q1,&struct3d[n]->r_vertices[v]);
+			}
+			for(f=0;f<struct3d[n]->nf;f++){
+				q_rotate(&struct3d[n]->q_centroids[f],q1,&struct3d[n]->r_centroids[f]);
+			}
+		}
+		return;
+	} else if((p=checkstring(cmdline, "HIDE ALL"))) {
+		for(int i=1;i<=MAX3D;i++){
+			if(struct3d[i]!=NULL && struct3d[i]->xmin!=32767){
+				DrawRectangle(struct3d[i]->xmin,struct3d[i]->ymin,struct3d[i]->xmax,struct3d[i]->ymax,0);
+				struct3d[i]->xmin=32767;
+				struct3d[i]->ymin=32767;
+				struct3d[i]->xmax=-32767;
+				struct3d[i]->ymax=-32767;
+			}
+		}
+		return;
+	} else if((p=checkstring(cmdline, "RESET"))) {
+		int i, n;
+		int v, f;
+		getargs(&p, (MAX_ARG_COUNT * 2) - 1, ",");				// getargs macro must be the first executable stmt in a block
+		if((argc & 0x01 || argc<3) == 0) error("Argument count");
+		for(i = 0; i < argc; i += 2) {
+			n=getint(argv[i],1,MAX3D);
+			for(v=0;v<struct3d[n]->nv;v++){
+				memcpy(&struct3d[n]->q_vertices[v],&struct3d[n]->r_vertices[v], sizeof(s_quaternion));
+			}
+			for(f=0;f<struct3d[n]->nf;f++){
+				memcpy(&struct3d[n]->q_centroids[f],&struct3d[n]->r_centroids[f], sizeof(s_quaternion));
+			}
+		}
+		return;
+	} else if((p=checkstring(cmdline, "HIDE"))) {
+		int i, n;
+		getargs(&p, (MAX_ARG_COUNT * 2) - 1, ",");				// getargs macro must be the first executable stmt in a block
+		if((argc & 0x01 || argc<3) == 0) error("Argument count");
+		for(i = 0; i < argc; i += 2) {
+			n=getint(argv[i],1,MAX3D);
+			if(struct3d[n]==NULL)error("Object % does not exist",n);
+			if(struct3d[n]->xmin==32767)return;
+			DrawRectangle(struct3d[n]->xmin,struct3d[n]->ymin,struct3d[n]->xmax,struct3d[n]->ymax,0);
+			struct3d[n]->xmin=32767;
+			struct3d[n]->ymin=32767;
+			struct3d[n]->xmax=-32767;
+			struct3d[n]->ymax=-32767;
+		}
+		return;
+	} else if((p=checkstring(cmdline, "RESTORE"))) {
+		int i, n;
+		getargs(&p, (MAX_ARG_COUNT * 2) - 1, ",");				// getargs macro must be the first executable stmt in a block
+		if((argc & 0x01 || argc<3) == 0) error("Argument count");
+		for(i = 0; i < argc; i += 2) {
+			n=getint(argv[i],1,MAX3D);
+			if(struct3d[n]==NULL)error("Object % does not exist",n);
+			if(struct3d[n]->xmin!=32767)error("Object % is not hidden",n);
+			display3d(n, struct3d[n]->current.x, struct3d[n]->current.y, struct3d[n]->current.z, 1, struct3d[n]->nonormals);
+		}
+		return;
+	} else if((p=checkstring(cmdline, "WRITE"))) {
+		getargs(&p,9,",");
+		if(argc<7)error("Argument count");
+		int n=getint(argv[0],1,MAX3D);
+		int x=getint(argv[2],-32766,32766);
+		int y=getint(argv[4],-32766,32766);
+		int z=getinteger(argv[6]);
+		int nonormals=0;
+		if(argc==9)nonormals=getint(argv[8],0,1);
+		if(struct3d[n]==NULL)error("Object % does not exist",n);
+		if(camera[struct3d[n]->camera].viewplane==-32767)error("Camera position not defined");
+		display3d(n, x, y, z, 0, nonormals);
+		return;
+	} else if((p=checkstring(cmdline, "CLOSE ALL"))) {
+		closeall3d();
+		return;
+	} else if((p=checkstring(cmdline, "CLOSE"))) {
+		int i, n;
+		getargs(&p, (MAX_ARG_COUNT * 2) - 1, ",");				// getargs macro must be the first executable stmt in a block
+		if((argc & 0x01 || argc<3) == 0) error("Argument count");
+		for(i = 0; i < argc; i += 2) {
+			n=getint(argv[i],1,MAX3D);
+			if(struct3d[n]==NULL)error("Object % does not exist",n);
+			if(struct3d[n]->xmin!=32767)DrawRectangle(struct3d[n]->xmin,struct3d[n]->ymin,struct3d[n]->xmax,struct3d[n]->ymax,0);
+			Free3DMemory(n);
+		}
+		return;
+	} else if((p=checkstring(cmdline, "CAMERA"))) {
+		getargs(&p,11,",");
+		if(argc<3)error("Argument count");
+		int n=getint(argv[0],1,MAXCAM);
+		camera[n].viewplane=getnumber(argv[2]);
+		camera[n].x=(FLOAT3D)0;
+		camera[n].y=(FLOAT3D)0;
+		camera[n].panx=(FLOAT3D)0;
+		camera[n].pany=(FLOAT3D)0;
+		camera[n].z=0.0;
+		if(argc>=5 && *argv[4])	camera[n].x=getnumber(argv[4]);
+		if(camera[n].x > 32766 || camera[n].x < -32766 )error("Valid is -32766 to 32766");
+		if(argc>=7 && *argv[6])	camera[n].y=getnumber(argv[6]);
+		if(camera[n].y > 32766 || camera[n].x < -32766 )error("Valid is -32766 to 32766");
+		if(argc>=9 && *argv[8])	camera[n].panx=getint(argv[8],-32766-camera[n].x,32766-camera[n].x);
+		if(argc==11 )camera[n].pany=getint(argv[10],-32766-camera[n].y,32766-camera[n].y);
+		return;
+	} else {
+		error("Syntax");
+	}
+}
+void fun_3D(void){
+	unsigned char *p;
+	if((p=checkstring(ep, "XMIN"))) {
+    	getargs(&p,1,",");
+    	int n=getint(argv[0],1,MAX3D);
+		if(struct3d[n]==NULL)error("Object does not exist");
+    	fret=struct3d[n]->xmin;
+	} else if((p=checkstring(ep, "XMAX"))) {
+    	getargs(&p,1,",");
+    	int n=getint(argv[0],1,MAX3D);
+		if(struct3d[n]==NULL)error("Object does not exist");
+    	fret=struct3d[n]->xmax;
+	} else if((p=checkstring(ep, "YMIN"))) {
+    	getargs(&p,1,",");
+    	int n=getint(argv[0],1,MAX3D);
+		if(struct3d[n]==NULL)error("Object does not exist");
+    	fret=struct3d[n]->ymin;
+	} else if((p=checkstring(ep, "YMAX"))) {
+    	getargs(&p,1,",");
+    	int n=getint(argv[0],1,MAX3D);
+		if(struct3d[n]==NULL)error("Object does not exist");
+    	fret=struct3d[n]->ymax;
+	} else if((p=checkstring(ep, "X"))) {
+    	getargs(&p,1,",");
+    	int n=getint(argv[0],1,MAX3D);
+		if(struct3d[n]==NULL)error("Object does not exist");
+    	fret=struct3d[n]->current.x;
+	} else if((p=checkstring(ep, "Y"))) {
+    	getargs(&p,1,",");
+    	int n=getint(argv[0],1,MAX3D);
+		if(struct3d[n]==NULL)error("Object does not exist");
+		fret=struct3d[n]->current.y;
+	} else if((p=checkstring(ep, "DISTANCE"))) {
+    	getargs(&p,1,",");
+    	int n=getint(argv[0],1,MAX3D);
+		if(struct3d[n]==NULL)error("Object does not exist");
+    	fret=struct3d[n]->distance;
+	} else if((p=checkstring(ep, "Z"))) {
+    	getargs(&p,1,",");
+    	int n=getint(argv[0],1,MAX3D);
+		if(struct3d[n]==NULL)error("Object does not exist");
+    	fret=struct3d[n]->current.z;
+	} else error("Syntax");
+	targ=T_NBR;
+}
+void closeframebuffer(void){
+    if(FrameBuf!=DisplayBuf)FreeMemory(FrameBuf);
+    if(DisplayBuf!=LayerBuf){
+        unsigned char *temp= LayerBuf;
+        LayerBuf=DisplayBuf;
+        FreeMemory(temp);
+    }
+    FrameBuf=DisplayBuf;
+    WriteBuf=DisplayBuf;
+}
+void cmd_framebuffer(void){
+    unsigned char *p;
+    if((p=checkstring(cmdline, "CREATE"))) {
+        if(FrameBuf==DisplayBuf){
+            FrameBuf=GetMemory(38400);
+            if(checkstring(p, "R"))memcpy(FrameBuf,DisplayBuf,38400);
+        }
+        else error("Framebuffer already exists");
+    } else if((p=checkstring(cmdline, "WRITE"))) {
+        if(checkstring(p, "N"))WriteBuf=DisplayBuf;
+        else if(checkstring(p, "L"))WriteBuf=LayerBuf;
+        else if(checkstring(p, "F"))WriteBuf=FrameBuf;
+        else error("Syntax");
+    } else if((p=checkstring(cmdline, "WAIT"))) {
+            while(QVgaScanLine!=480){}
+    } else if((p=checkstring(cmdline, "LAYER"))) {
+        if(Option.CPU_Speed==126000)error("CPUSPEED >=252000 for layers");
+        if(LayerBuf==DisplayBuf){
+            LayerBuf=GetMemory(38400);
+        } else error("Layer already exists");
+    } else if((p=checkstring(cmdline, "CLOSE"))) {
+        if(checkstring(p, "F")){
+            if(WriteBuf==FrameBuf)WriteBuf=DisplayBuf;
+            if(FrameBuf!=DisplayBuf)FreeMemory(FrameBuf);
+            FrameBuf=DisplayBuf;
+        } else if(checkstring(p, "L")){
+            if(WriteBuf==LayerBuf)WriteBuf=DisplayBuf;
+            if(DisplayBuf!=LayerBuf){
+                unsigned char *temp= LayerBuf;
+                LayerBuf=DisplayBuf;
+                FreeMemory(temp);
+            }
+        } else  closeframebuffer();
+    } else if((p=checkstring(cmdline, "COPY"))) {
+        getargs(&p,5,",");
+        if(!(argc==3 || argc==5))error("Syntax");
+        uint8_t *s,*d;
+        if(checkstring(argv[0],"N"))s=DisplayBuf;
+        else if(checkstring(argv[0],"L"))s=LayerBuf;
+        else if(checkstring(argv[0],"F"))s=FrameBuf;
+        else error("Syntax");
+        if(checkstring(argv[2],"N"))d=DisplayBuf;
+        else if(checkstring(argv[2],"L"))d=LayerBuf;
+        else if(checkstring(argv[2],"F"))d=FrameBuf;
+        else error("Syntax");
+        if(argc==5){
+            if(checkstring(argv[4],"B"))while(QVgaScanLine!=524){}
+            else error("Syntax");
+        }
+        if(d!=s)memcpy(d,s,38400);
+    } else error("Syntax");
+}
+#endif

@@ -29,17 +29,22 @@ extern "C" {
 #endif
 #define FLASH_TARGET_OFFSET (1024 * 1024) 
 #ifdef PICOMITEVGA
-#define MagicKey 0x672622F4
+#define MagicKey 0x67DD22F4
 #else
-#define MagicKey 0x867833E7
+#define MagicKey 0x86FF33E7
 #endif
 
 #define MMFLOAT double
-#define ALL_MEMORY_SIZE (180*1024) 
+#define FLOAT3D float
+#define sqrt3d sqrtf
+#define round3d roundf
+#define fabs3d fabsf
 #ifdef PICOMITEVGA
-#define HEAP_MEMORY_SIZE (108*1024) 
+#define ALL_MEMORY_SIZE (172*1024) 
+#define HEAP_MEMORY_SIZE (100*1024) 
 #else
-#define HEAP_MEMORY_SIZE (124*1024) 
+#define ALL_MEMORY_SIZE (176*1024) 
+#define HEAP_MEMORY_SIZE (120*1024) 
 #endif
 #define MAX_PROG_SIZE HEAP_MEMORY_SIZE
 #define SAVEDVARS_FLASH_SIZE 16384
@@ -89,7 +94,10 @@ extern "C" {
 #define MAXCFUNCTION	20
 #define SAVEDVARS_FLASH_SIZE 16384
 #define FLASH_ERASE_SIZE 4096
-#define MAX_CPU     252000
+#define MAX_CPU     378000
+#define MAX3D   8
+#define MAXCAM  3
+#define MAX_POLYGON_VERTICES 10
 #define MAXBLITBUF 32
 #define MAXRESTORE          16
 #define CONFIG_TITLE		0
@@ -129,10 +137,13 @@ extern "C" {
 #define PWM6B     (1 << 31)
 #define PWM7A     4294967296
 #define PWM7B     8589934592
+#define MAXCOLLISIONS 4
+#define MAXLAYER   4
 //#define DO_NOT_RESET (1 << 5)
 //#define HEARTBEAT    (1 << 6)
 #define HEARTBEATpin  43
 #define PROGSTART (FLASH_TARGET_OFFSET + FLASH_ERASE_SIZE + SAVEDVARS_FLASH_SIZE + ((MAXFLASHSLOTS) * MAX_PROG_SIZE))
+#define PATH_MAX 256
 #ifdef __cplusplus
 }
 #endif

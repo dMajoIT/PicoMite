@@ -105,6 +105,7 @@ volatile int INT2Count, INT2Value, INT2InitTimer, INT2Timer;
 volatile int INT3Count, INT3Value, INT3InitTimer, INT3Timer;
 volatile int INT4Count, INT4Value, INT4InitTimer, INT4Timer;
 uint64_t uSecoffset=0;
+uint32_t pinmask=0;
 volatile uint64_t IRoffset=0;
 void *IrDev, *IrCmd;
 volatile char IrVarType;
@@ -267,6 +268,11 @@ void __not_in_flash_func(ExtSet)(int pin, int val){
 
     if(ExtCurrentConfig[pin] == EXT_NOT_CONFIG || ExtCurrentConfig[pin] == EXT_DIG_OUT/* || ExtCurrentConfig[pin] == EXT_OC_OUT*/) {
         PinSetBit(pin, val ? LATSET : LATCLR);
+        if(ExtCurrentConfig[pin] == EXT_NOT_CONFIG){
+            pinmask|=(1<<PinDef[pin].GPno);
+            if(val)pinmask|=(1<<PinDef[pin].GPno);
+            else pinmask &= (~(1<<PinDef[pin].GPno));
+        }
 //        INTEnableInterrupts();
     }
     else if(ExtCurrentConfig[pin] == EXT_CNT_IN){ //allow the user to zero the count
@@ -706,6 +712,10 @@ void ExtCfg(int pin, int cfg, int option) {
     if(cfg<=EXT_INT_BOTH){
         //    *GetPortAddr(pin, ana ? ANSELCLR : ANSELSET) = (1 << GetPinBit(pin));// if ana = 1 then it is a digital I/O
         PinSetBit(pin, tris ? TRISSET : TRISCLR);                         // if tris = 1 then it is an input
+        if(!tris && (pinmask & (1<<PinDef[pin].GPno))){
+            gpio_put(PinDef[pin].GPno,GPIO_PIN_SET);
+        }
+        pinmask &= (~(1<<PinDef[pin].GPno));
         if(cfg == EXT_NOT_CONFIG) ExtSet(pin, 0);                         // set the default output to low
         if(ana==0)PinSetBit(pin, ANSELSET);
     }
@@ -742,7 +752,7 @@ int64_t __not_in_flash_func(ExtInp)(int pin){
     } else return  gpio_get(PinDef[pin].GPno);
 }
 void cmd_setpin(void) {
-	int i, pin, pin2=0, pin3=0, value, value2=0, value3=0, option = 0;
+	int i, pin, pin2=0, pin3=0, value=-1, value2=0, value3=0, option = 0;
 	getargs(&cmdline, 7, ",");
 	if(argc%2 == 0 || argc < 3) error("Argument count");
 	char code;
@@ -772,42 +782,6 @@ void cmd_setpin(void) {
         value = EXT_HEARTBEAT;
     else if(checkstring(argv[2], "INTB"))
         value = EXT_INT_BOTH;
-/*    else if(checkstring(argv[2], "UART0TX"))
-        value = EXT_UART0TX;
-    else if(checkstring(argv[2], "UART0RX"))
-        value = EXT_UART0RX;
-    else if(checkstring(argv[2], "UART1TX"))
-        value = EXT_UART1TX;
-    else if(checkstring(argv[2], "UART1RX"))
-        value = EXT_UART1RX;
-    else if(checkstring(argv[2], "I2C0SDA"))
-        value = EXT_I2C0SDA;
-    else if(checkstring(argv[2], "I2C0SCL"))
-        value = EXT_I2C0SCL;
-    else if(checkstring(argv[2], "I2C1SDA"))
-        value = EXT_I2C1SDA;
-    else if(checkstring(argv[2], "I2C1SCL"))
-        value = EXT_I2C1SCL;
-    else if(checkstring(argv[2], "SPI0TX"))
-        value = EXT_SPI0TX;
-    else if(checkstring(argv[2], "SPI0RX"))
-        value = EXT_SPI0RX;
-    else if(checkstring(argv[2], "SPI0SCK"))
-        value = EXT_SPI0SCK;
-    else if(checkstring(argv[2], "SPI1TX"))
-        value = EXT_SPI1TX;
-    else if(checkstring(argv[2], "SPI1RX"))
-        value = EXT_SPI1RX;
-    else if(checkstring(argv[2], "SPI1SCK"))
-        value = EXT_SPI1SCK;
-    else if(checkstring(argv[2], "INT1"))
-        value = EXT_INT1;
-    else if(checkstring(argv[2], "INT2"))
-        value = EXT_INT2;
-    else if(checkstring(argv[2], "INT3"))
-        value = EXT_INT3;
-    else if(checkstring(argv[2], "INT4"))
-        value = EXT_INT4;*/
     else if(checkstring(argv[2], "IR"))
         value = EXT_IR;
     else if(checkstring(argv[2], "PWM0A"))
@@ -846,7 +820,34 @@ void cmd_setpin(void) {
         value = EXT_PIO0_OUT;
     else if(checkstring(argv[2], "PIO1"))
         value = EXT_PIO1_OUT;
-    else if(checkstring(argv[4],"COM1")){
+    else if(checkstring(argv[2],"PWM")){
+        if(PinDef[pin].mode & PWM0A)value = EXT_PWM0A;
+        else if(PinDef[pin].mode & PWM0B)value = EXT_PWM0B;
+        else if(PinDef[pin].mode & PWM1A)value = EXT_PWM1A;
+        else if(PinDef[pin].mode & PWM1B)value = EXT_PWM1B;
+        else if(PinDef[pin].mode & PWM2A)value = EXT_PWM2A;
+        else if(PinDef[pin].mode & PWM2B)value = EXT_PWM2B;
+        else if(PinDef[pin].mode & PWM3A)value = EXT_PWM3A;
+        else if(PinDef[pin].mode & PWM3B)value = EXT_PWM3B;
+        else if(PinDef[pin].mode & PWM4A)value = EXT_PWM4A;
+        else if(PinDef[pin].mode & PWM4B)value = EXT_PWM4B;
+        else if(PinDef[pin].mode & PWM5A)value = EXT_PWM5A;
+        else if(PinDef[pin].mode & PWM5B)value = EXT_PWM5B;
+        else if(PinDef[pin].mode & PWM6A)value = EXT_PWM6A;
+        else if(PinDef[pin].mode & PWM6B)value = EXT_PWM6B;
+        else if(PinDef[pin].mode & PWM7A)value = EXT_PWM7A;
+        else if(PinDef[pin].mode & PWM7B)value = EXT_PWM7B;
+        else error("Invalid configuration");
+    }  else if(checkstring(argv[2],"INT")){
+        if(pin==Option.INT1pin)value = EXT_INT1;
+        else if(pin==Option.INT2pin)value = EXT_INT2;
+        else if(pin==Option.INT3pin)value = EXT_INT3;
+        else if(pin==Option.INT4pin)value = EXT_INT4;
+        else error("Invalid configuration");
+    }
+    if(value!=-1)goto process;
+    if(argc<5)error("Syntax"); 
+    if(checkstring(argv[4],"COM1")){
         if(!(code=codecheck(argv[2])))argv[2]+=2;
         pin2 = getinteger(argv[2]);
         if(!code)pin2=codemap(pin2);
@@ -890,7 +891,10 @@ void cmd_setpin(void) {
         else if(PinDef[pin2].mode & I2C1SDA)value2 = EXT_I2C1SDA;
         else error("Invalid configuration");
         if(value==value2)error("Invalid configuration");
-    }  else if(checkstring(argv[6],"SPI")){
+    }  
+    if(value!=-1)goto process;
+    if(argc<7)error("Syntax"); 
+    if(checkstring(argv[6],"SPI")){
         if(!(code=codecheck(argv[2])))argv[2]+=2;
         pin2 = getinteger(argv[2]);
         if(!code)pin2=codemap(pin2);
@@ -930,33 +934,9 @@ void cmd_setpin(void) {
         else if(PinDef[pin3].mode & SPI1SCK)value3 = EXT_SPI1SCK;
         else error("Invalid configuration");
         if(value==value2 || value==value3 || value2==value3)error("Invalid configuration");
-    }  else if(checkstring(argv[2],"PWM")){
-        if(PinDef[pin].mode & PWM0A)value = EXT_PWM0A;
-        else if(PinDef[pin].mode & PWM0B)value = EXT_PWM0B;
-        else if(PinDef[pin].mode & PWM1A)value = EXT_PWM1A;
-        else if(PinDef[pin].mode & PWM1B)value = EXT_PWM1B;
-        else if(PinDef[pin].mode & PWM2A)value = EXT_PWM2A;
-        else if(PinDef[pin].mode & PWM2B)value = EXT_PWM2B;
-        else if(PinDef[pin].mode & PWM3A)value = EXT_PWM3A;
-        else if(PinDef[pin].mode & PWM3B)value = EXT_PWM3B;
-        else if(PinDef[pin].mode & PWM4A)value = EXT_PWM4A;
-        else if(PinDef[pin].mode & PWM4B)value = EXT_PWM4B;
-        else if(PinDef[pin].mode & PWM5A)value = EXT_PWM5A;
-        else if(PinDef[pin].mode & PWM5B)value = EXT_PWM5B;
-        else if(PinDef[pin].mode & PWM6A)value = EXT_PWM6A;
-        else if(PinDef[pin].mode & PWM6B)value = EXT_PWM6B;
-        else if(PinDef[pin].mode & PWM7A)value = EXT_PWM7A;
-        else if(PinDef[pin].mode & PWM7B)value = EXT_PWM7B;
-        else error("Invalid configuration");
-    }  else if(checkstring(argv[2],"INT")){
-        if(pin==Option.INT1pin)value = EXT_INT1;
-        else if(pin==Option.INT2pin)value = EXT_INT2;
-        else if(pin==Option.INT3pin)value = EXT_INT3;
-        else if(pin==Option.INT4pin)value = EXT_INT4;
-        else error("Invalid configuration");
     } else error("Syntax");
 //        value = getint(argv[2], 1, 9);
-
+process:
     // check for any options
     switch(value) {
     	case EXT_ANA_IN:if(argc == 5) {
@@ -1073,6 +1053,8 @@ void fun_pin(void) {
         case EXT_INT_LO:
         case EXT_INT_BOTH:
         case EXT_DIG_OUT:
+        case EXT_PIO0_OUT:
+        case EXT_PIO1_OUT:
                             iret = ExtInp(pin);
                             targ = T_INT;
                             return;
@@ -1159,6 +1141,7 @@ void cmd_port(void) {
 	++cmdline;
 	if(!*cmdline) error("Invalid syntax");
 	value = getinteger(cmdline);
+    uint32_t mask=0,setmask=0, readmask=gpio_get_all();
 
     for(i = 0; i < argc; i += 4) {
     	code=0;
@@ -1170,14 +1153,16 @@ void cmd_port(void) {
         while(nbr) {
         	if(!code)pin=codemap(pincode);
         	else pin=pincode;
-//        	PIntComma(pin);
             if(IsInvalidPin(pin) || !(ExtCurrentConfig[pin] == EXT_DIG_OUT )) error("Invalid output pin");
-            ExtSet(pin, value & 1);
+            mask |=(1<<PinDef[pin].GPno);
+            if(value & 1)setmask |= (1<<PinDef[pin].GPno);
             value >>= 1;
             nbr--;
             pincode++;
         }
-    } //MMPrintString("\r\n");
+    } 
+    readmask &=mask;
+    gpio_xor_mask(setmask ^ readmask);
 }
 
 
@@ -1231,7 +1216,7 @@ void fun_port(void) {
 
 	getargs(&ep, NBRPINS * 4, ",");
 	if((argc & 0b11) != 0b11) error("Invalid syntax");
-
+    uint32_t pinstate=gpio_get_all();
     for(i = argc - 3; i >= 0; i -= 4) {
     	code=0;
     	if(!(code=codecheck(argv[i])))argv[i]+=2;
@@ -1245,7 +1230,7 @@ void fun_port(void) {
         	else pin=pincode;
             if(IsInvalidPin(pin) || !(ExtCurrentConfig[pin] == EXT_DIG_IN || ExtCurrentConfig[pin] == EXT_INT_HI || ExtCurrentConfig[pin] == EXT_INT_LO || ExtCurrentConfig[pin] == EXT_INT_BOTH)) error("Invalid input pin");
             value <<= 1;
-            value |= PinRead(pin);
+            value |= (pinstate & (1<<PinDef[pin].GPno)? 1:0);
             nbr--;
             pincode--;
         }
@@ -1520,6 +1505,7 @@ void cmd_pwm(void){
     int div=1, high1, high2;
     MMFLOAT duty1=-1.0, duty2=-1.0;
     getargs(&cmdline,7,",");
+    if(!(argc>=3))error("Syntax");
     int CPU_Speed=frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_PERI);
     int slice=getint(argv[0],0,7);
     if(slice==BacklightSlice)error("Channel in use for backlight");
@@ -1535,6 +1521,7 @@ void cmd_pwm(void){
         if(slice==7)slice7=0;
         return;
     }
+    if(!(argc==5 || argc==7))error("Syntax");
     MMFLOAT frequency=getnumber(argv[2]);
     if(frequency>(MMFLOAT)(CPU_Speed>>2)*1000.0)error("Invalid frequency");
     if(*argv[4]){
@@ -1811,7 +1798,7 @@ void cmd_lcd(unsigned char *lcd)
         }
     } else if((p = checkstring(lcd, "CLEAR"))) {                // clear the display
         LCD_Byte(0b00000001, 0, 3000);
-    } else if((p = checkstring(cmdline, "CMD")) || (p = checkstring(cmdline, "DATA"))) { // send a command or data
+    } else if((p = checkstring(lcd, "CMD")) || (p = checkstring(lcd, "DATA"))) { // send a command or data
         getargs(&p, MAX_ARG_COUNT * 2, ",");
         for(i = 0; i < argc; i += 2) {
             j = getint(argv[i], 0, 255);
@@ -2124,7 +2111,7 @@ void cmd_adc(void){
         getargs(&tp,5,",");
         if(ADCopen)error("Already open");
         if(!(argc==3 || argc==5))error("Syntax");
-        int nbr=getint(argv[2],1,43); //number of ADC channels
+        int nbr=getint(argv[2],1,4); //number of ADC channels
         frequency=(float)getnumber(argv[0])*nbr;
         if(frequency<48000000.0/65536.0 || frequency> 48000000.0/96.0)error("Invalid frequency");
         if(!(ExtCurrentConfig[31] == EXT_ANA_IN || ExtCurrentConfig[31] == EXT_NOT_CONFIG)) error("Pin GP26 is not off or an ADC input");
@@ -2267,7 +2254,7 @@ void cmd_adc(void){
                     if(j==0)*a1float++ = (MMFLOAT)ADCbuffer[k++]/4095.0*VCC;
                     if(j==1)*a2float++ = (MMFLOAT)ADCbuffer[k++]/4095.0*VCC;
                     if(j==2)*a3float++ = (MMFLOAT)ADCbuffer[k++]/4095.0*VCC;
-                    if(j==2)*a4float++ = (MMFLOAT)ADCbuffer[k++]/4095.0*VCC;
+                    if(j==3)*a4float++ = (MMFLOAT)ADCbuffer[k++]/4095.0*VCC;
                 }
             }
             FreeMemory((void *)ADCbuffer);
@@ -2320,8 +2307,9 @@ void ClearExternalIO(void) {
     }
     CallBackEnabled &= (~32);
     for(i=0;i<MAXBLITBUF;i++){
-    	blitbuffptr[i] = NULL;
+    	blitbuff[i].blitbuffptr = NULL;
     }
+    CallBackEnabled=0;
     KeypadClose();
     if(*lcd_pins){
         for(i = 0; i < 6; i++) {
@@ -2365,7 +2353,6 @@ void ClearExternalIO(void) {
     if(CheckPin(44, CP_NOABORT | CP_IGNORE_INUSE | CP_IGNORE_RESERVED))ExtCfg(44,EXT_ANA_IN,0);
 	InterruptReturn = NULL;
 	InterruptUsed = false;
-//  OnKeyGOSUB = NULL;
     KeypadInterrupt = NULL;
 
     for(i = 0; i < NBRSETTICKS; i++) TickInt[i] = NULL;
@@ -2421,6 +2408,20 @@ void ClearExternalIO(void) {
     dmarunning=0;
     ADCInterrupt=NULL;
     KeyInterrupt=NULL;
+    OnKeyGOSUB=NULL;
+#ifdef PICOMITEVGA
+    CollisionFound = false;
+    COLLISIONInterrupt=NULL;
+#else
+    gui_int_down = false;
+    gui_int_up = false;
+    GuiIntDownVector=NULL;
+    GuiIntUpVector=NULL;
+#endif
+    dmarunning=0;
+    ADCInterrupt=NULL;
+    CSubInterrupt=NULL;
+    CSubComplete=0;
     keyselect=0;
     CMM1=0;
 }
