@@ -1220,8 +1220,8 @@ void cmd_time(void) {
 	if(!*cmdline) error("Syntax");
 	++cmdline;
     evaluate(cmdline, &f, &i64, &ss, &t, false);
-	if(t==T_STR){
-	arg = getCstring(cmdline);
+	if(t & T_STR ){
+	arg = getCstring(cmdline); 
 	{
 		getargs(&arg, 5, ":");								// this is a macro and must be the first executable stmt in a block
 		if(argc%2 == 0) error("Syntax");
@@ -1389,6 +1389,7 @@ void printoptions(void){
         }
         PRet();
     } 
+    if(Option.NoHeartbeat)PO2Str("HEARTBEAT", "OFF");
 #ifdef PICOMITEVGA
     if(Option.CPU_Speed!=126000)PO2Int("CPUSPEED (KHz)", Option.CPU_Speed);
     if(Option.DISPLAY_TYPE==COLOURVGA)PO2Str("DEFAULT MODE", "2");
@@ -1442,9 +1443,6 @@ void printoptions(void){
         MMputchar(',',1);;MMPrintString((char *)PinDef[Option.LCD_Reset].pinname);
         if(Option.DISPLAY_TYPE!=ST7920){
             MMputchar(',',1);;MMPrintString((char *)PinDef[Option.LCD_CS].pinname);
-        }
-        if(Option.DISPLAY_TYPE==GDEH029A1){
-            MMputchar(',',1);;MMPrintString((char *)PinDef[Option.E_INKbusy].pinname);
         }
         if(!(Option.DISPLAY_TYPE<=I2C_PANEL || Option.DISPLAY_TYPE>=BufferedPanel ) && Option.DISPLAY_BL){
             MMputchar(',',1);;MMPrintString((char *)PinDef[Option.DISPLAY_BL].pinname);
@@ -1761,6 +1759,20 @@ void cmd_option(void) {
         Option.Autorun=getint(tp,0,MAXFLASHSLOTS);
         SaveOptions(); return; 
     }
+    tp = checkstring(cmdline, "HEARTBEAT");
+    if(tp) {
+        if(checkstring(tp, "OFF"))      Option.NoHeartbeat = 1; 
+        if(checkstring(tp, "ON"))      Option.NoHeartbeat = 0; 
+        SaveOptions();
+        if(CheckPin(43, CP_NOABORT | CP_IGNORE_INUSE | CP_IGNORE_RESERVED)){
+            if(Option.NoHeartbeat==0){
+                (PinDef[HEARTBEATpin].GPno);
+                gpio_set_dir(PinDef[HEARTBEATpin].GPno, GPIO_OUT);
+                ExtCurrentConfig[PinDef[HEARTBEATpin].pin]=EXT_HEARTBEAT;
+            } else ExtCfg(HEARTBEATpin, EXT_NOT_CONFIG, 0); 
+        } else error("Pin % is reserved", HEARTBEATpin);
+        return;
+    }
     tp = checkstring(cmdline, "LCDPANEL NOCONSOLE");
     if(tp){
         Option.Height = SCREENHEIGHT; Option.Width = SCREENWIDTH;
@@ -1778,7 +1790,7 @@ void cmd_option(void) {
     }
     tp = checkstring(cmdline, "LCDPANEL CONSOLE");
     if(tp) {
-        if(!(Option.DISPLAY_TYPE==ST7789B || Option.DISPLAY_TYPE==ILI9488 || Option.DISPLAY_TYPE==ILI9341 || Option.DISPLAY_TYPE==ILI9481N || Option.DISPLAY_TYPE>=VGADISPLAY))error("Display does not support console");
+        if(!(Option.DISPLAY_TYPE==ST7789B || Option.DISPLAY_TYPE==ILI9488 || Option.DISPLAY_TYPE==ILI9341 || Option.DISPLAY_TYPE==ILI9481IPS || Option.DISPLAY_TYPE>=VGADISPLAY))error("Display does not support console");
         if(!Option.DISPLAY_ORIENTATION== DISPLAY_LANDSCAPE) error("Landscape only");
         skipspace(tp);
         Option.DefaultFC = WHITE;
@@ -1828,12 +1840,11 @@ void cmd_option(void) {
         Option.VGABC=bcolour;
 #endif
         Option.DISPLAY_CONSOLE = true; 
-        ResetDisplay();
-        if(Option.DISPLAY_TYPE!=MONOVGA)ClearScreen(Option.DefaultBC);
         if(!CurrentLinePtr) {
+            ResetDisplay();
             setterminal();
             SaveOptions();
-            if(Option.DISPLAY_TYPE!=MONOVGA)ClearScreen(Option.DefaultBC);
+            if(!(Option.DISPLAY_TYPE==MONOVGA || Option.DISPLAY_TYPE==COLOURVGA))ClearScreen(Option.DefaultBC);
         }
         return;
     }
@@ -2394,14 +2405,16 @@ void fun_info(void){
 		int i,j;
 		DIR djd;
 		FILINFO fnod;
+		targ=T_INT;
+        if(!InitSDCard()) {iret= -1; return;}
 		memset(&djd,0,sizeof(DIR));
 		memset(&fnod,0,sizeof(FILINFO));
 		char *p = getCstring(tp);
+        if(p[1] == ':') *p = toupper(*p) - 'A' + '0';                   // convert a DOS style disk name to FatFs device number
 		FSerror = f_stat(p, &fnod);
 		if(FSerror != FR_OK){ iret=-1; targ=T_INT; strcpy(MMErrMsg,FErrorMsg[4]); return;}
 		if((fnod.fattrib & AM_DIR)){ iret=-2; targ=T_INT; strcpy(MMErrMsg,FErrorMsg[4]); return;}
 		iret=fnod.fsize;
-		targ=T_INT;
 		return;
 	}
 	tp=checkstring(ep, "MODIFIED");
@@ -2409,9 +2422,12 @@ void fun_info(void){
 		int i,j;
 	    DIR djd;
 	    FILINFO fnod;
+		targ=T_INT;
+        if(!InitSDCard()) {iret= -1; return;}
 		memset(&djd,0,sizeof(DIR));
 		memset(&fnod,0,sizeof(FILINFO));
 		char *p = getCstring(tp);
+        if(p[1] == ':') *p = toupper(*p) - 'A' + '0';                   // convert a DOS style disk name to FatFs device number
 		FSerror = f_stat(p, &fnod);
 		if(FSerror != FR_OK){ iret=-1; targ=T_STR; strcpy(MMErrMsg,FErrorMsg[4]); return;}
 //		if((fnod.fattrib & AM_DIR)){ iret=-2; targ=T_INT; strcpy(MMErrMsg,FErrorMsg[4]); return;}

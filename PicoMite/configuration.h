@@ -29,9 +29,9 @@ extern "C" {
 #endif
 #define FLASH_TARGET_OFFSET (1024 * 1024) 
 #ifdef PICOMITEVGA
-#define MagicKey 0x67DD22F4
+#define MagicKey 0x67DD33F4
 #else
-#define MagicKey 0x86FF33E7
+#define MagicKey 0x86FF44E7
 #endif
 
 #define MMFLOAT double
@@ -142,8 +142,8 @@ extern "C" {
 //#define DO_NOT_RESET (1 << 5)
 //#define HEARTBEAT    (1 << 6)
 #define HEARTBEATpin  43
+#define PATH_MAX 1024
 #define PROGSTART (FLASH_TARGET_OFFSET + FLASH_ERASE_SIZE + SAVEDVARS_FLASH_SIZE + ((MAXFLASHSLOTS) * MAX_PROG_SIZE))
-#define PATH_MAX 256
 #ifdef __cplusplus
 }
 #endif

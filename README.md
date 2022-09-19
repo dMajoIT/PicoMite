@@ -14,9 +14,38 @@ Compiled version and documentation is available on https://geoffg.net/picomite.h
 
 Change list from V5.07.00
 ***********************************************************************************************************************
+PicoMite V5.07.05b18
+
+Change to better support modules with >2Mb Flash chips. 
+SPI for touch reduced in speed to 1MHz. 
+GUI TEXTBOX ACTIVATE removed. 
+Bug fix to GUI spinbox to erase triangle bounding line properly. 
+Fix to BITBANG WS2812 timings. 
+
+PicoMite V5.07.05b17
+
+Max editor clipboard size now 16384 characters. 
+Fixes bug in MM.INFO(filesize ... and MM.INFO(Modified ... 
+Max number of BLIT buffers now 32 (memory dependent). 
+
+PicoMite V5.07.05b16
+
+Fixes bug in GUI DELETE. 
+Fixes bug in passing string function to time$. 
+Fixes bug in OPTION LIST for some displays. 
+New command: OPTION HEARTBEAT ON/OFF. 
+Fixes bug in GUI TEXTBOX ACTIVATE not accepting # in the control number.
+
+
+PicoMite V5.07.05b14
+
+New commands: 
+BITBANG SERIALTX pinno, baudrate, ostring$. 
+BITBANG SERIALRX pinno, baudrate, instring , timeoutinms, status [,nbr] [,terminators$]
+
 PicoMite V5.07.05b13
 
-Adds support for the 480x320 IPS ILI9341 display (use code ILI9341N). 
+Adds support for the 480x320 IPS ILI9341 display (use code ILI9341IPS). 
 Modifies the port function to read all pins simultaneously. 
 Updates SDK to V1.4. 
 Updates Compiler to version 11.2.1. 
