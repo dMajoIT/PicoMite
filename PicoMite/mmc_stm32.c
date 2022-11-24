@@ -134,7 +134,7 @@ void __not_in_flash_func(on_pwm_wrap)(void) {
     pwm_clear_irq(AUDIO_SLICE);
     if(CurrentlyPlaying == P_TONE){
         if(!SoundPlay){
-        	CloseAudio(1);
+    		StopAudio();
             WAVcomplete = true;
         } else {
         	SoundPlay--;
@@ -1255,7 +1255,7 @@ void InitReservedIO(void) {
 		gpio_init(PinDef[KEYBOARD_DATA].GPno);
 		gpio_set_pulls(PinDef[KEYBOARD_DATA].GPno,true,false);
 		gpio_set_dir(PinDef[KEYBOARD_DATA].GPno, GPIO_IN);
-		gpio_set_input_hysteresis_enabled(PinDef[KEYBOARD_DATA].GPno,true);
+//		gpio_set_input_hysteresis_enabled(PinDef[KEYBOARD_DATA].GPno,true);
 	}
 }
 

@@ -86,21 +86,7 @@ const char *PinFunction[] = {
         "PIO1"
 };
 ;
-extern struct s_vartbl {                               // structure of the variable table
-	unsigned char name[MAXVARLEN];                       // variable's name
-	unsigned char type;                                  // its type (T_NUM, T_INT or T_STR)
-	unsigned char level;                                 // its subroutine or function level (used to track local variables)
-    unsigned char size;                         // the number of chars to allocate for each element in a string array
-    unsigned char dummy;
-    int __attribute__ ((aligned (4))) dims[MAXDIM];                     // the dimensions. it is an array if the first dimension is NOT zero
-    union u_val{
-        MMFLOAT f;                              // the value if it is a float
-        long long int i;                        // the value if it is an integer
-        MMFLOAT *fa;                            // pointer to the allocated memory if it is an array of floats
-        long long int *ia;                      // pointer to the allocated memory if it is an array of integers
-        unsigned char *s;                                // pointer to the allocated memory if it is a string
-    }  __attribute__ ((aligned (8))) val;
-} __attribute__ ((aligned (8))) s_vartbl_val;
+
 volatile int ExtCurrentConfig[NBRPINS + 1];
 volatile int INT1Count, INT1Value, INT1InitTimer, INT1Timer;
 volatile int INT2Count, INT2Value, INT2InitTimer, INT2Timer;
@@ -179,12 +165,12 @@ void writeIRclock(uint64_t timeset){
 }
 
 const uint8_t PINMAP[30]={1,2,4,5,6,7,9,10,11,12,14,15,16,17,19,20,21,22,24,25,26,27,29,41,42,43,31,32,34,44};
-int codemap(int pin){
+int __not_in_flash_func(codemap)(int pin){
 			if(pin>29 || pin<0) error("Invalid GPIO");
 			return (int)PINMAP[pin];
 	return 0;
 }
-int codecheck(unsigned char *line){
+int __not_in_flash_func(codecheck)(unsigned char *line){
 	if((line[0]=='G' || line[0]=='g') && (line[1]=='P' || line[1]=='p')){
 		line+=2;
 		if(isnamestart(*line) || *line=='.') return 1;
@@ -285,7 +271,7 @@ void __not_in_flash_func(ExtSet)(int pin, int val){
 
     }
     else
-        error("Pin % is not an output",pin);
+        error("Pin %/| is not an output",pin,pin);
 }
 
 
@@ -965,7 +951,7 @@ process:
                                 option = 0;
                             break;
         case EXT_FREQ_IN:   if(argc == 5)
-                                option = getint((argv[4]), 10, 100000);
+                                option = getint((argv[4]), 1, 100000);
                             else
                                 option = 1000;
                             break;
@@ -982,7 +968,6 @@ process:
         case EXT_DIG_OUT:
         case EXT_HEARTBEAT:   
                             option=0;
-                            break;
         default:            if(argc > 3 && !value2) error("Unexpected text");
     }
     // this allows the user to set a software interrupt on the touch IRQ pin if the GUI environment is not enabled
@@ -996,7 +981,7 @@ process:
                     inttbl[i].pin = 0;                              // disable the software interrupt on this pin
         }
         else
-            error("Pin % is reserved on startup", pin);
+            error("Pin %/| is reserved on startup", pin,pin);
     } else
 
     {
@@ -1095,7 +1080,7 @@ void fun_pin(void) {
                             targ = T_NBR;
                             return;
 
-        default:            error("Pin % is not an input",pin);
+        default:            error("Pin %/| is not an input",pin,pin);
     }
 }
 
@@ -1103,25 +1088,25 @@ int CheckPin(int pin, int action) {
 
 
     if(pin < 1 || pin > NBRPINS || (PinDef[pin].mode & UNUSED)) {
-        if(!(action & CP_NOABORT)) error("Pin % is invalid", pin);
+        if(!(action & CP_NOABORT)) error("Pin %/| is invalid", pin,pin);
         return false;
     }
 
     if(!(action & CP_IGNORE_INUSE) && ExtCurrentConfig[pin] >= EXT_DS18B20_RESERVED && ExtCurrentConfig[pin] < EXT_COM_RESERVED) {
-        if(!(action & CP_NOABORT)) error("Pin % is in use", pin);
+        if(!(action & CP_NOABORT)) error("Pin %/| is in use", pin,pin);
         return false;
     }
 
     if(!(action & CP_IGNORE_BOOTRES) && ExtCurrentConfig[pin] >= EXT_BOOT_RESERVED) {
         if(!(action & CP_NOABORT)) {
-            error("Pin % is reserved on startup", pin);
+            error("Pin %/| is reserved on startup", pin,pin);
             uSec(1000000);
         }
         return false;
     }
 
     if(!(action & CP_IGNORE_RESERVED) && ExtCurrentConfig[pin] >= EXT_DS18B20_RESERVED) {
-        if(!(action & CP_NOABORT)) error("Pin % is in use", pin);
+        if(!(action & CP_NOABORT)) error("Pin %/| is in use", pin,pin);
         return false;
     }
 
@@ -1185,7 +1170,7 @@ void fun_distance(void) {
     else
         echo = trig;                                                // they are the same if it is a 3-pin device
     if(IsInvalidPin(trig) || IsInvalidPin(echo)) error("Invalid pin |",echo);
-    if(ExtCurrentConfig[trig] >= EXT_COM_RESERVED || ExtCurrentConfig[echo] >= EXT_COM_RESERVED)  error("Pin | is in use",trig);
+    if(ExtCurrentConfig[trig] >= EXT_COM_RESERVED || ExtCurrentConfig[echo] >= EXT_COM_RESERVED)  error("Pin %/| is in use",trig,trig);
     ExtCfg(echo, EXT_DIG_IN, CNPUSET);                              // setup the echo input
     PinSetBit(trig, LATCLR);                                        // trigger output must start low
     ExtCfg(trig, EXT_DIG_OUT, 0);                                   // setup the trigger output
@@ -1253,7 +1238,7 @@ void cmd_pulse(void) {
 	if(!(code=codecheck(argv[0])))argv[0]+=2;
 	pin = getinteger(argv[0]);
 	if(!code)pin=codemap(pin);
-	if(!(ExtCurrentConfig[pin] == EXT_DIG_OUT)) error("Pin | is not an output", pin);
+	if(!(ExtCurrentConfig[pin] == EXT_DIG_OUT)) error("Pin %/| is not an output", pin,pin);
 
     f = getnumber(argv[2]);                                         // get the pulse width
     if(f < 0) error("Number out of bounds");
@@ -1302,7 +1287,7 @@ void fun_pulsin(void) { //allowas timeouts up to 10 seconds
 	pin = getinteger(argv[0]);
 	if(!code)pin=codemap(pin);
     if(IsInvalidPin(pin)) error("Invalid pin");
-	if(ExtCurrentConfig[pin] != EXT_DIG_IN) error("Pin | is not an input",pin);
+	if(ExtCurrentConfig[pin] != EXT_DIG_IN) error("Pin %/| is not an input",pin,pin);
     polarity = getinteger(argv[2]);
 
     t1 = t2 = 100000;                                               // default timeout is 100mS
@@ -1348,7 +1333,7 @@ void cmd_ir(void) {
         if(IsInvalidPin(pin)) error("Invalid pin");
         dev = getint(argv[2], 0, 0b11111);
         cmd = getint(argv[4], 0, 0b1111111);
-        if(ExtCurrentConfig[pin] >= EXT_COM_RESERVED)  error("Pin % is in use",pin);
+        if(ExtCurrentConfig[pin] >= EXT_COM_RESERVED)  error("Pin %/| is in use",pin,pin);
         ExtCfg(pin, EXT_DIG_OUT, 0);
         cmd = (dev << 7) | cmd;
         IRSendSignal(pin, 186);
@@ -1383,7 +1368,7 @@ void cmd_ir(void) {
 
 void IrInit(void) {
     writeusclock(0);
-    if(ExtCurrentConfig[IRpin] >= EXT_COM_RESERVED)  error("Pin % is in use",IRpin);
+    if(ExtCurrentConfig[IRpin] >= EXT_COM_RESERVED)  error("Pin %/% is in use",IRpin,IRpin);
     ExtCfg(IRpin, EXT_IR, 0);
     ExtCfg(IRpin, EXT_COM_RESERVED, 0);
     if(!CallBackEnabled){
@@ -1696,7 +1681,7 @@ void cmd_keypad(void) {
         	if(!(code=codecheck(argv[(i + 2) * 2])))argv[(i + 2) * 2]+=2;
         	j = getinteger(argv[(i + 2) * 2]);
         	if(!code)j=codemap(j);
-            if(ExtCurrentConfig[j] >= EXT_COM_RESERVED)  error("Pin | is in use",j);
+            if(ExtCurrentConfig[j] >= EXT_COM_RESERVED)  error("Pin %/| is in use",j,j);
 //            if(i < 4) {
             ExtCfg(j, EXT_DIG_IN, ODCSET);
             ExtCfg(j, EXT_COM_RESERVED, 0);
@@ -1776,7 +1761,7 @@ void cmd_lcd(unsigned char *lcd)
         	if(!(code=codecheck(argv[i * 2])))argv[i * 2]+=2;
             lcd_pins[i] = getinteger(argv[i * 2]);
         	if(!code)lcd_pins[i]=codemap(lcd_pins[i]);
-            if(ExtCurrentConfig[(int)lcd_pins[i]] >= EXT_COM_RESERVED)  error("Pin | is in use",lcd_pins[i]);
+            if(ExtCurrentConfig[(int)lcd_pins[i]] >= EXT_COM_RESERVED)  error("Pin %/| is in use",lcd_pins[i],lcd_pins[i]);
             ExtCfg(lcd_pins[i], EXT_DIG_OUT, 0);
             ExtCfg(lcd_pins[i], EXT_COM_RESERVED, 0);
         }
@@ -1887,7 +1872,7 @@ void DHT22(unsigned char *p) {
 	pin = getinteger(argv[0]);
 	if(!code)pin=codemap(pin);
     if(IsInvalidPin(pin)) error("Invalid pin");
-    if(ExtCurrentConfig[pin] != EXT_NOT_CONFIG)  error("Pin % is in use");
+    if(ExtCurrentConfig[pin] != EXT_NOT_CONFIG)  error("Pin %/| is in use",pin,pin);
     ExtCfg(pin, EXT_DIG_OUT, 0);
     
     if(argc==7){
@@ -2005,7 +1990,7 @@ void WS2812(unsigned char *q){
         if(!code)pin=codemap(pin);
         if(IsInvalidPin(pin)) error("Invalid pin");
         int gppin=PinDef[pin].GPno;
-        if(!(ExtCurrentConfig[pin] == EXT_DIG_OUT || ExtCurrentConfig[pin] == EXT_NOT_CONFIG)) error("Pin is not off or an output");
+        if(!(ExtCurrentConfig[pin] == EXT_DIG_OUT || ExtCurrentConfig[pin] == EXT_NOT_CONFIG)) error("Pin %/| is not off or an output",pin,pin);
         if(ExtCurrentConfig[pin] == EXT_NOT_CONFIG)ExtCfg(pin, EXT_DIG_OUT, 0);
 		p=GetTempMemory((nbr+1)*3);
 		uSec(60);
@@ -2117,7 +2102,7 @@ void cmd_bitbang(void){
         int pin = getinteger(argv[0]);
         if(!code)pin=codemap(pin);
         if(IsInvalidPin(pin)) error("Invalid pin");
-        if(!(ExtCurrentConfig[pin] == EXT_DIG_IN || ExtCurrentConfig[pin] == EXT_NOT_CONFIG)) error("Pin is not off or an input");
+        if(!(ExtCurrentConfig[pin] == EXT_DIG_IN || ExtCurrentConfig[pin] == EXT_NOT_CONFIG)) error("Pin %/| is not off or an input",pin,pin);
         if(ExtCurrentConfig[pin] == EXT_NOT_CONFIG)ExtCfg(pin, EXT_DIG_IN, CNPUSET);
         int gppin=(1<<PinDef[pin].GPno);
         int baudrate=getint(argv[2],110,230400);
@@ -2154,7 +2139,7 @@ void cmd_bitbang(void){
         int gppin=(1<<PinDef[pin].GPno);
         int baudrate=getint(argv[2],110,230400);
         char *string=getstring(argv[4]);
-        if(!(ExtCurrentConfig[pin] == EXT_DIG_OUT || ExtCurrentConfig[pin] == EXT_NOT_CONFIG)) error("Pin is not off or an output");
+        if(!(ExtCurrentConfig[pin] == EXT_DIG_OUT || ExtCurrentConfig[pin] == EXT_NOT_CONFIG)) error("Pin %/| is not off or an output",pin,pin);
         if(ExtCurrentConfig[pin] == EXT_NOT_CONFIG)ExtCfg(pin, EXT_DIG_OUT, 0);
         gpio_set_mask(gppin);                                    // send the start bit
         int bittime=16777215 + 12  - (ticks_per_second/baudrate) ;
@@ -2181,7 +2166,7 @@ void cmd_bitbang(void){
         if(!code)pin=codemap(pin);
         if(IsInvalidPin(pin)) error("Invalid pin");
         int gppin=(1<<PinDef[pin].GPno);
-        if(!(ExtCurrentConfig[pin] == EXT_DIG_OUT || ExtCurrentConfig[pin] == EXT_NOT_CONFIG)) error("Pin is not off or an output");
+        if(!(ExtCurrentConfig[pin] == EXT_DIG_OUT || ExtCurrentConfig[pin] == EXT_NOT_CONFIG)) error("Pin %/| is not off or an output",pin,pin);
         if(ExtCurrentConfig[pin] == EXT_NOT_CONFIG)ExtCfg(pin, EXT_DIG_OUT, 0);
         ptr1 = findvar(argv[4], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
         if(vartbl[VarIndex].type & T_NBR) {
@@ -2394,6 +2379,8 @@ void cmd_adc(void){
 void ClearExternalIO(void) {
     int i;
   	CloseAudio(1);
+    InterruptUsed = false;
+	InterruptReturn = NULL;
 
     if(CallBackEnabled==1) gpio_set_irq_enabled_with_callback(PinDef[IRpin].GPno, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false, &gpio_callback);
     else if(CallBackEnabled & 1){
@@ -2466,12 +2453,10 @@ void ClearExternalIO(void) {
     }
     FreeMemorySafe((void **)&ds18b20Timers);
     if(CheckPin(44, CP_NOABORT | CP_IGNORE_INUSE | CP_IGNORE_RESERVED))ExtCfg(44,EXT_ANA_IN,0);
-	InterruptReturn = NULL;
-	InterruptUsed = false;
     KeypadInterrupt = NULL;
 
     for(i = 0; i < NBRSETTICKS; i++) TickInt[i] = NULL;
-    for(i = 0; i < NBRSETTICKS; i++) TickActive[i] = 1;
+    for(i = 0; i < NBRSETTICKS; i++) TickActive[i] = 0;
 
 	for(i = 0; i < NBR_PULSE_SLOTS; i++) PulseCnt[i] = 0;             // disable any pending pulse commands
     PulseActive = false;
@@ -2524,6 +2509,9 @@ void ClearExternalIO(void) {
     ADCInterrupt=NULL;
     KeyInterrupt=NULL;
     OnKeyGOSUB=NULL;
+    OnPS2GOSUB=NULL;
+    PS2code=0;
+    PS2int=0;
 #ifdef PICOMITEVGA
     CollisionFound = false;
     COLLISIONInterrupt=NULL;
@@ -2677,11 +2665,12 @@ void __not_in_flash_func(IRHandler)(void) {
         }
     }
 void __not_in_flash_func(gpio_callback)(uint gpio, uint32_t events) {
-    if(gpio==PinDef[IRpin].GPno && (CallBackEnabled & 1))IRHandler();
+    int dd=gpio_get_all();
+    if(Option.KeyboardConfig |= NO_KEYBOARD && gpio==PinDef[KEYBOARD_CLOCK].GPno && (CallBackEnabled & 32)) CNInterrupt(dd);
+    else if(gpio==PinDef[IRpin].GPno && (CallBackEnabled & 1))IRHandler();
     else if(gpio==PinDef[Option.INT1pin].GPno && (CallBackEnabled & 2))TM_EXTI_Handler_1();
     else if(gpio==PinDef[Option.INT2pin].GPno && (CallBackEnabled & 4))TM_EXTI_Handler_2();
     else if(gpio==PinDef[Option.INT3pin].GPno && (CallBackEnabled & 8))TM_EXTI_Handler_3();
     else if(gpio==PinDef[Option.INT4pin].GPno && (CallBackEnabled & 16))TM_EXTI_Handler_4();
-    else if(Option.KeyboardConfig |= NO_KEYBOARD && gpio==PinDef[KEYBOARD_CLOCK].GPno && (CallBackEnabled & 32)) CNInterrupt();
     else error("Internal error");
 }

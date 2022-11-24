@@ -263,11 +263,7 @@ const char DaysInMonth[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
 void __not_in_flash_func(routinechecks)(void){
     static int c,when=0;
     if(++when & 7 && CurrentLinePtr) return;
-#ifdef PICOMITEVGA
-    if(Option.SerialConsole==0){
-#else
     if(tud_cdc_connected() && Option.SerialConsole==0){
-#endif
         while(( c=tud_cdc_read_char())!=-1){
             ConsoleRxBuf[ConsoleRxBufHead] = c;
             if(BreakKey && ConsoleRxBuf[ConsoleRxBufHead] == BreakKey) {// if the user wants to stop the progran
@@ -366,6 +362,7 @@ int __not_in_flash_func(MMInkey)(void) {
     }
 
     c = getConsole();                                               // do discarded chars so get the char
+    if(c==-1)CheckKeyboard();
     if(!(c==0x1b))return c;
     InkeyTimer = 0;                                             // start the timer
     while((c = getConsole()) == -1 && InkeyTimer < 30);         // get the second char with a delay of 30mS to allow the next char to arrive
@@ -749,7 +746,6 @@ int MMgetchar(void) {
 	int c;
 	do {
 		ShowCursor(1);
-        CheckKeyboard();
 		c=MMInkey();
 	} while(c == -1);
 	ShowCursor(0);
@@ -807,6 +803,7 @@ bool __not_in_flash_func(timer_callback)(repeating_timer_t *rt)
 		GPSTimer++;
         I2CTimer++;
         if(clocktimer)clocktimer--;
+        if(Timer3)Timer3--;
         if(Timer2)Timer2--;
         if(Timer1)Timer1--;
         if(USBKeepalive)USBKeepalive--;
@@ -949,9 +946,8 @@ void __not_in_flash_func(CheckAbort)(void) {
     if(MMAbort) {
         WDTimer = 0;                                                // turn off the watchdog timer
         calibrate=0;
-        memset(inpbuf,0,STRINGSIZE);
         ShowCursor(false);
-        longjmp(mark, 1);                                           // jump back to the input prompt
+        cmd_end();
     }
 }
 void PRet(void){
@@ -1700,9 +1696,10 @@ int main(){
         MMPrintString("RTC not found, OPTION RTC AUTO disabled\r\n");
     }
  	*tknbuf = 0;
-     ContinuePoint = nextstmt;                               // in case the user wants to use the continue command
+    ContinuePoint = nextstmt;                               // in case the user wants to use the continue command
 	if(setjmp(mark) != 0) {
      // we got here via a long jump which means an error or CTRL-C or the program wants to exit to the command prompt
+        LoadOptions();
         ScrewUpTimer = 0;
         ProgMemory=(uint8_t *)flash_progmemory;
         ContinuePoint = nextstmt;                               // in case the user wants to use the continue command
@@ -1781,15 +1778,20 @@ int main(){
 			  q[0]=34;
 		  } else strcat(p,"\"");
 		  p[3]=' ';
-//		  PRet();MMPrintString(inpbuf);PRet();
 	  }
         tokenise(true);                                             // turn into executable code
+        i=0;
+        if(*tknbuf==GetCommandValue((char *)"RUN"))i=1;
         if (setjmp(jmprun) != 0) {
             PrepareProgram(false);
             CurrentLinePtr = 0;
         }
         ExecuteProgram(tknbuf);                                     // execute the line straight away
-        memset(inpbuf,0,STRINGSIZE);
+        if(i)cmd_end();
+        else {
+            memset(inpbuf,0,STRINGSIZE);
+	        longjmp(mark, 1);												// jump back to the input prompt
+        }
 	}
 }
 
@@ -1798,6 +1800,7 @@ void SaveProgramToFlash(unsigned char *pm, int msg) {
     unsigned char *p, endtoken, fontnbr, prevchar = 0, buf[STRINGSIZE];
     int nbr, i, j, n, SaveSizeAddr;
     uint32_t storedupdates[MAXCFUNCTION], updatecount=0, realflashsave, retvalue;
+    initFonts();
     memcpy(buf, tknbuf, STRINGSIZE);                                // save the token buffer because we are going to use it
     FlashWriteInit(PROGRAM_FLASH);
     flash_range_erase(realflashpointer, MAX_PROG_SIZE);

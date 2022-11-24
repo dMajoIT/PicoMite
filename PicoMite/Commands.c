@@ -29,21 +29,6 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "Hardware_Includes.h"
 #include "hardware/flash.h"
 #include <math.h>
-extern struct s_vartbl {                               // structure of the variable table
-	unsigned char name[MAXVARLEN];                       // variable's name
-	unsigned char type;                                  // its type (T_NUM, T_INT or T_STR)
-	unsigned char level;                                 // its subroutine or function level (used to track local variables)
-    unsigned char size;                         // the number of chars to allocate for each element in a string array
-    unsigned char dummy;
-    int __attribute__ ((aligned (4))) dims[MAXDIM];                     // the dimensions. it is an array if the first dimension is NOT zero
-    union u_val{
-        MMFLOAT f;                              // the value if it is a float
-        long long int i;                        // the value if it is an integer
-        MMFLOAT *fa;                            // pointer to the allocated memory if it is an array of floats
-        long long int *ia;                      // pointer to the allocated memory if it is an array of integers
-        unsigned char *s;                                // pointer to the allocated memory if it is a string
-    }  __attribute__ ((aligned (8))) val;
-} __attribute__ ((aligned (8))) s_vartbl_val;
 void flist(int, int, int);
 //void clearprog(void);
 void execute_one_command(unsigned char *p);
@@ -58,6 +43,7 @@ unsigned char* SaveNextDataLine = NULL;
 int SaveNextData = 0;
 struct sa_data datastore[MAXRESTORE];
 int restorepointer = 0;
+
 
 // stack to keep track of nested FOR/NEXT loops
 struct s_forstack forstack[MAXFORLOOPS + 1];
@@ -504,13 +490,12 @@ void cmd_erase(void) {
                 len--; s++; x++;
             }
             if(!(len == 0 && (*x == 0 || strlen(p) == MAXVARLEN))) continue;
-
     		// found the variable
-			if(((vartbl[i].type & T_STR) || vartbl[i].dims[0] != 0) && !(vartbl[i].type & T_PTR)) {
-				FreeMemory(vartbl[i].val.s);                        // free any memory (if allocated)
-				vartbl[i].val.s=NULL;
+			if(((vartbl[j].type & T_STR) || vartbl[j].dims[0] != 0) && !(vartbl[j].type & T_PTR)) {
+				FreeMemory(vartbl[j].val.s);                        // free any memory (if allocated)
+				vartbl[j].val.s=NULL;
 			}
-			k=i+1;
+			k=j+1;
 			if(k==MAXVARS)k=MAXVARS/2;
 			if(vartbl[k].type){
 				vartbl[j].name[0]='~';
@@ -519,8 +504,8 @@ void cmd_erase(void) {
 				vartbl[j].name[0]=0;
 				vartbl[j].type=T_NOTYPE;
 			}
-			vartbl[i].dims[0] = 0;                                    // and again
-			vartbl[i].level = 0;
+			vartbl[j].dims[0] = 0;                                    // and again
+			vartbl[j].level = 0;
 			Globalvarcnt--;
 			break;
 		}
@@ -720,8 +705,22 @@ void __not_in_flash_func(cmd_else)(void) {
 
 
 void cmd_end(void) {
-	checkend(cmdline);
+	for(int i=0; i< NBRSETTICKS;i++){
+		TickPeriod[i]=0;
+		TickTimer[i]=0;
+		TickInt[i]=NULL;
+		TickActive[i]=0;
+	}
+	InterruptUsed=0;    
+	InterruptReturn = NULL ;
     memset(inpbuf,0,STRINGSIZE);
+	CloseAudio(1);
+#ifdef PICOMITEVGA
+	WriteBuf=&AllMemory[HEAP_MEMORY_SIZE + MAXVARS * sizeof(struct s_vartbl) + 2048];
+	DisplayBuf=&AllMemory[HEAP_MEMORY_SIZE + MAXVARS * sizeof(struct s_vartbl) + 2048];
+	LayerBuf=&AllMemory[HEAP_MEMORY_SIZE + MAXVARS * sizeof(struct s_vartbl) + 2048];
+	FrameBuf=&AllMemory[HEAP_MEMORY_SIZE + MAXVARS * sizeof(struct s_vartbl) + 2048];
+#endif
 	longjmp(mark, 1);												// jump back to the input prompt
 }
 
@@ -1646,6 +1645,17 @@ void cmd_on(void) {
 	unsigned char ss[4];													    // this will be used to split up the argument line
     unsigned char *p;
 	// first check if this is:   ON KEY location
+	p = checkstring(cmdline, "PS2");
+	if(p){
+		getargs(&p,1,",");
+		if(*argv[0] == '0' && !isdigit(*(argv[0]+1))){
+			OnPS2GOSUB = NULL;                                      // the program wants to turn the interrupt off
+		} else {
+			OnPS2GOSUB = GetIntAddress(argv[0]);						    // get a pointer to the interrupt routine
+			InterruptUsed = true;
+		}
+		return;
+	}
 	p = checkstring(cmdline, "KEY");
 	if(p) {
 		getargs(&p,3,",");

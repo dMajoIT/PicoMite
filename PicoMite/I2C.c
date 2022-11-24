@@ -30,7 +30,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "hardware/irq.h"
 
 #define PinRead(a)  gpio_get(PinDef[a].GPno)
-
+extern void DrawBufferMEM(int x1, int y1, int x2, int y2, unsigned char* p) ;
+extern void ReadBufferMEM(int x1, int y1, int x2, int y2, unsigned char* buff);
 // Declare functions
 void i2cEnable(unsigned char *p);
 void i2cDisable(unsigned char *p);
@@ -82,21 +83,7 @@ static unsigned int I2C2_Slave_Addr;                                 // slave ad
 int noRTC=0;
 extern void SaveToBuffer(void);
 extern void CompareToBuffer(void);
-extern struct s_vartbl {                               // structure of the variable table
-	unsigned char name[MAXVARLEN];                       // variable's name
-	unsigned char type;                                  // its type (T_NUM, T_INT or T_STR)
-	unsigned char level;                                 // its subroutine or function level (used to track local variables)
-    unsigned char size;                         // the number of chars to allocate for each element in a string array
-    unsigned char dummy;
-    int __attribute__ ((aligned (4))) dims[MAXDIM];                     // the dimensions. it is an array if the first dimension is NOT zero
-    union u_val{
-        MMFLOAT f;                              // the value if it is a float
-        long long int i;                        // the value if it is an integer
-        MMFLOAT *fa;                            // pointer to the allocated memory if it is an array of floats
-        long long int *ia;                      // pointer to the allocated memory if it is an array of integers
-        unsigned char *s;                                // pointer to the allocated memory if it is a string
-    }  __attribute__ ((aligned (8))) val;
-} __attribute__ ((aligned (8))) s_vartbl_val;
+
 extern void DrawRectangleMEM(int x1, int y1, int x2, int y2, int c);
 extern void DrawBitmapMEM(int x1, int y1, int width, int height, int scale, int fc, int bc, unsigned char *bitmap);
 void i2cSlave(unsigned char *p);
@@ -172,6 +159,8 @@ void InitDisplayI2C(int InitOnly){
 //	i2c_enable(display_details[Option.DISPLAY_TYPE].speed);
     DrawRectangle = DrawRectangleMEM;
     DrawBitmap = DrawBitmapMEM;
+    DrawBuffer = DrawBufferMEM;
+	ReadBuffer = ReadBufferMEM;
     DisplayHRes = display_details[Option.DISPLAY_TYPE].horizontal;
     DisplayVRes = display_details[Option.DISPLAY_TYPE].vertical;
     I2C_Send_Command(0xAE);//DISPLAYOFF

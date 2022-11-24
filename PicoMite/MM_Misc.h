@@ -162,6 +162,7 @@ void fun_format(void);
 	extern unsigned int CurrentCpuSpeed;
 	extern unsigned int PeripheralBusSpeed;
 	extern unsigned char *OnKeyGOSUB;
+	extern unsigned char *OnPS2GOSUB;
 	extern unsigned char EchoOption;
 	extern unsigned int GetPeekAddr(unsigned char *p);
 	extern unsigned int GetPokeAddr(unsigned char *p);
@@ -171,6 +172,7 @@ void fun_format(void);
 	extern void disable_audio(void);
 	extern char *CSubInterrupt;
 	extern volatile int CSubComplete;
+	extern uint32_t __get_MSP(void);
 
 #endif
 #endif

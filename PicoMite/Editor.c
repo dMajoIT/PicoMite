@@ -107,9 +107,9 @@ void DisplayPutS(char *s) {
                                     gui_fcolour = gui_bcolour;
                                     gui_bcolour = t;
                                     break;
-            case CLEAR_TO_EOL:      DrawBox(CurrentX, CurrentY, HRes, CurrentY + gui_font_height, 0, 0, gui_bcolour);
+            case CLEAR_TO_EOL:      DrawBox(CurrentX, CurrentY, HRes-1, CurrentY + gui_font_height-1, 0, 0, gui_bcolour);
                                     break;
-            case CLEAR_TO_EOS:      DrawBox(CurrentX, CurrentY, HRes, CurrentY + gui_font_height, 0, 0, gui_bcolour);
+            case CLEAR_TO_EOS:      DrawBox(CurrentX, CurrentY, HRes-1, CurrentY + gui_font_height-1, 0, 0, gui_bcolour);
                                     DrawRectangle(0, CurrentY + gui_font_height, HRes-1, VRes-1, gui_bcolour);
                                     break;
             case SCROLL_DOWN:
@@ -561,6 +561,7 @@ void FullScreenEditor(void) {
               case F1:             // Save and exit
               case CTRLKEY('W'):   // Save, exit and run
               case F2:             // Save, exit and run
+                            c=buf[0];
                             MMPrintString("\033[?1000l");                         // Tera Term turn off mouse click report in vt200 mode
                             MMPrintString("\0338\033[2J\033[H");                  // vt100 clear screen and home cursor
                                 gui_fcolour = PromptFC;
@@ -568,8 +569,8 @@ void FullScreenEditor(void) {
                                 MX470Display(DISPLAY_CLS);                        // clear screen on the MX470 display only
                                 MX470Cursor(0, 0);                                // home the cursor
                             BreakKey = BreakKeySave;
-                            if(buf[0] != ESC && TextChanged) SaveToProgMemory();
-                            if(buf[0] == ESC || buf[0] == CTRLKEY('Q') || buf[0] == F1) return;
+                            if(c != ESC && TextChanged) SaveToProgMemory();
+                            if(c == ESC || c == CTRLKEY('Q') || c == F1) return;
                             // this must be save, exit and run.  We have done the first two, now do the run part.
                             ClearRuntime();
 //                            WatchdogSet = false;

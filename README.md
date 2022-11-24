@@ -1,6 +1,6 @@
 Files to build the PicoMite. MMBasic running on the Raspberry Pi Pico
 
-NB: This should be built against pico-sdk version 1.3. with spi.h replaced with the attached.
+NB: This should be built against pico-sdk version 1.4. with spi.h and gpio.c replaced with the attached.
 
 The file layout should be:
 
@@ -8,12 +8,53 @@ anything/pico-sdk
 
 anything/PicoMite/all source and header files
 
-The code is developed under VSCODE on W11
+The code is developed under VSCODE on W11 using GCC 11.2.1 arm-none-eabi
 
 Compiled version and documentation is available on https://geoffg.net/picomite.html
 
 Change list from V5.07.00
 ***********************************************************************************************************************
+PicoMite V5.07.05RC8
+
+Corrects reporting of MM.HRES and MM.VRES by OPTION LIST when a user driver is loaded. 
+Fixes bug in PLAY TONE n. m. d, interrupt which caused the interrupt not to fire. 
+Fixes bug in ERASE command when erasing arrays. 
+Fixes bug in audio commands executed at the command line - introduced in previous RC. 
+Implements mm.info$(sound) to report status of the audio channel. 
+Implements ON PS2 interrupt. This triggers an interrupt whenever the PicoMite sees a message from the PS2 interface. 
+Use MM.info(PS2) to report the raw message received. This allows the programmer to trap both keypress and release. 
+See https://wiki.osdev.org/PS/2_Keyboard for the scan codes (Set 2). 
+Resets default fonts when a new program is loaded or the NEW command is executed. 
+
+PicoMite V5.07.05RC7
+
+Changes to PS2 handler. Other changes in preparation for future release.
+
+PicoMite V5.07.05RC6
+
+Fixed bug in LOAD IMAGE for mono displays (e.g. SSD1306I2C32). 
+Enabled BLIT and LOAD JPG for mono displays. 
+Improved LOAD JPG for MODE 1 (mono VGA). 
+
+PicoMite V5.07.05RC5
+
+MM.INFO(HEAP). 
+MM.INFO(STACK). 
+various tuning. 
+
+PicoMite V5.07.05RC4
+
+Various tidying. Improved error messaging for incorrect pin usage. Fixed MM.INFO(pinno when OPTION EXPLICIT specified.
+
+PicoMite V5.07.05RC2
+
+MM.INFO(PINNO n) now accepts a literal, a string variable or an unquoted GPn designation
+
+PicoMite V5.07.05RC1
+
+OPTION LIST now shows version number and which firmware. 
+Fixes issue where connecting a USB CDC cable would cause the VGA version to Hardfault
+
 PicoMite V5.07.05b18
 
 Change to better support modules with >2Mb Flash chips. 
