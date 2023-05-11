@@ -9,7 +9,7 @@
 //Vector to CFunction static RAM
 
 //Vector to CFunction routine called every mSec
-unsigned int CFuncmSec = (unsigned int)NULL;
+unsigned int CFuncmSec = (unsigned int)NULL; 
 extern volatile uint64_t uSecTimer;
 extern volatile uint64_t FastTimer;
 //extern TIM_HandleTypeDef htim2;
@@ -22,14 +22,18 @@ extern void routinechecksExternal(void);
 unsigned int CFuncInt1 = (unsigned int)NULL;
 //Vector to CFunction routine called by the interrupt 2 handler
 unsigned int CFuncInt2 = (unsigned int)NULL;
+unsigned int CFuncInt3 = (unsigned int)NULL;
+unsigned int CFuncInt4 = (unsigned int)NULL;
+unsigned int CFuncAudio = (unsigned int)NULL;
 static uint64_t timer(void){ return time_us_64();}
 static int64_t PinReadFunc(int a){return gpio_get(PinDef[a].GPno);}
 
 
 // used by CallCFunction() below to find a CFunction or CSub in program flash or the library
-unsigned int *FindCFunction(unsigned int *p, unsigned char *CmdPtr) {
+unsigned int *FindCFunction(unsigned int *p, unsigned char *CmdPtr, unsigned char *offset) {
     while(*p != 0xffffffff) {
-        if(*p++ == (unsigned int)(CmdPtr-ProgMemory)) return p;
+        //if(*p++ == (unsigned int)(CmdPtr-ProgMemory)) return p;
+        if(*p++ == (unsigned int)(CmdPtr-offset)) return p;
         p += (*p + 4) / sizeof(unsigned int);
     }
     return p;
@@ -48,7 +52,9 @@ long long int CallCFunction(unsigned char *CmdPtr, unsigned char *ArgList, unsig
 //    if((uint32_t)p > 0x10000000)error("Internal error");
     // find the C code in flash
     if(*ArgList == '(') ArgList++;                                  // and step over it
-    p = FindCFunction((unsigned int *)CFunctionFlash, CmdPtr);      // search through the program flash looking for a match to the function being called
+    p = FindCFunction((unsigned int *)CFunctionFlash, CmdPtr,ProgMemory);      // search through the program flash looking for a match to the function being called
+    if(*p == 0xffffffff && CFunctionLibrary != NULL)
+         p = FindCFunction((unsigned int *)CFunctionLibrary, CmdPtr,LibMemory);// if unsuccessful search the library area
     if(*p == 0xffffffff) error("Internal fault 5(sorry)");
 
     // next, get the argument types (if specified)
@@ -148,6 +154,16 @@ void CallCFuncInt1(void){
 void CallCFuncInt2(void){
     typedef void func(void);
     func* f=(func*)(void *)CFuncInt2;
+    f();
+}
+void CallCFuncInt3(void){
+    typedef void func(void);
+    func* f=(func*)(void *)CFuncInt3;
+    f();
+}
+void CallCFuncInt4(void){
+    typedef void func(void);
+    func* f=(func*)(void *)CFuncInt4;
     f();
 }
 

@@ -91,15 +91,19 @@ void fun_sprite(void);
   	{ (unsigned char *)"Triangle",       T_CMD,                      0, cmd_triangle   },
 	{ (unsigned char *)"Arc",            T_CMD,                      0, cmd_arc	},
 	{ (unsigned char *)"Polygon",        T_CMD,                  	0, cmd_polygon	},
+  	{ (unsigned char *)"FRAMEBUFFER",     T_CMD,                     0, cmd_framebuffer   },
 #ifdef PICOMITEVGA
   	{ (unsigned char *)"GUI",            T_CMD,                      0, cmd_guiMX170   },
   	{ (unsigned char *)"TILE",            T_CMD,                     0, cmd_tile   },
   	{ (unsigned char *)"MODE",            T_CMD,                     0, cmd_mode   },
-  	{ (unsigned char *)"FRAMEBUFFER",     T_CMD,                     0, cmd_framebuffer   },
     { (unsigned char *)"Draw3D",         T_CMD,                      0, cmd_3D },
 	{ (unsigned char *)"Sprite",           T_CMD,                      0, cmd_blit	},
 #else
+#ifndef PICOMITEWEB
   	{ (unsigned char *)"GUI",            T_CMD,                      0, cmd_gui   },
+#else
+  	{ (unsigned char *)"GUI",            T_CMD,                      0, cmd_guiMX170   },
+#endif
 	{ (unsigned char *)"Refresh",        T_CMD,                      0, cmd_refresh	},
 	{ (unsigned char *)"Blit",           T_CMD,                      0, cmd_blit	},
 #endif
@@ -214,12 +218,23 @@ extern void (*DrawBitmap)(int x1, int y1, int width, int height, int scale, int 
 extern void (*ScrollLCD) (int lines);
 extern void (*DrawBuffer)(int x1, int y1, int x2, int y2, unsigned char *c);
 extern void (*ReadBuffer)(int x1, int y1, int x2, int y2, unsigned char *c);
+void DrawPixelColour(int x, int y, int c);
+void DrawRectangleColour(int x1, int y1, int x2, int y2, int c);
+void DrawBitmapColour(int x1, int y1, int width, int height, int scale, int fc, int bc, unsigned char *bitmap);
+void ScrollLCDColour(int lines);
+void DrawBufferColour(int x1, int y1, int x2, int y2, unsigned char *p);
+void DrawBufferColourFast(int x1, int y1, int x2, int y2, int blank, unsigned char *p);
+void ReadBufferColour(int x1, int y1, int x2, int y2, unsigned char *c);
+void ReadBufferColourFast(int x1, int y1, int x2, int y2, unsigned char *c);
+void DrawPixelNormal(int x, int y, int c) ;
+void ReadBufferMono(int x1, int y1, int x2, int y2, unsigned char *c);
+void restoreSPIpanel(void);
 #define FONT_BUILTIN_NBR     8
 #define FONT_TABLE_SIZE      16
-#ifdef PICOMITEVGA
-    extern void (*DrawPixel)(int x1, int y1, int c);
-#else
-    extern void DrawPixel(int x, int y, int c);
+extern void (*DrawPixel)(int x1, int y1, int c);
+extern void (*ReadBufferFast)(int x1, int y1, int x2, int y2, unsigned char *c);
+
+#ifndef PICOMITEVGA
     extern void DrawRectangleUser(int x1, int y1, int x2, int y2, int c);
     extern void DrawBitmapUser(int x1, int y1, int width, int height, int scale, int fc, int bc, unsigned char *bitmap);
 #endif
@@ -312,6 +327,7 @@ extern void closeframebuffer(void);
 extern void closeallsprites(void);
 extern char* COLLISIONInterrupt;
 extern int CollisionFound;
-
+extern void InitDisplayVirtual(void);
+extern void ConfigDisplayVirtual(unsigned char *p);
 #endif
 #endif

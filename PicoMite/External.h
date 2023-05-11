@@ -52,6 +52,7 @@ void fun_distance(void);
 void fun_pulsin(void);
 void cmd_backlight(void);
 void cmd_bitbang(void);
+void cmd_sync(void);
 #endif
 
 
@@ -74,6 +75,7 @@ void cmd_bitbang(void);
 	{ (unsigned char *)"KeyPad",             T_CMD,			0, cmd_keypad       },
 	{ (unsigned char *)"Bitbang",              T_CMD,			0, cmd_bitbang        },
 	{ (unsigned char *)"PWM",		T_CMD,		0, cmd_pwm		},
+	{ (unsigned char *)"SYNC",              T_CMD,			0, cmd_sync        },
 #ifndef PICOMITEVGA
 	{ (unsigned char *)"Backlight",		T_CMD,		0, cmd_backlight		},
 #endif
@@ -259,6 +261,14 @@ void gpio_callback(uint gpio, uint32_t events);
 #define setuptime (12-(Option.CPU_Speed-250000)/50000)
 #define shortpause(a){systick_hw->cvr=0;while(systick_hw->cvr>a){};}
 extern int CheckPin(int pin, int action);
+extern unsigned int CFuncInt1;
+extern unsigned int CFuncInt2;
+extern unsigned int CFuncInt3;
+extern unsigned int CFuncInt4;
+extern void CallCFuncInt1(void);
+extern void CallCFuncInt2(void);
+extern void CallCFuncInt3(void);
+extern void CallCFuncInt4(void);
 
 extern int InterruptUsed;
 typedef enum
@@ -321,7 +331,7 @@ extern int SPI0locked;
 extern int SPI1locked;
 extern int I2C0locked;
 extern int I2C1locked;
-extern int CallBackEnabled;
+extern volatile int CallBackEnabled;
 extern int ADCopen; 
 extern volatile MMFLOAT * volatile a1float, * volatile a2float, * volatile a3float, * volatile a4float;
 extern int ADCmax;

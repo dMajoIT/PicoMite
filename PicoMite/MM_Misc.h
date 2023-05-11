@@ -50,6 +50,7 @@ void cmd_cfunction(void);
 void cmd_longString(void);
 void cmd_sort(void);
 void cmd_csubinterrupt(void);
+void cmd_library(void);
 void fun_timer(void);
 void fun_date(void);
 void fun_time(void);
@@ -79,7 +80,7 @@ void fun_format(void);
 **********************************************************************************/
 #ifdef INCLUDE_COMMAND_TABLE
 
-	{ (unsigned char *)"AutoSave",		T_CMD,				0, cmd_autosave	},
+//	{ (unsigned char *)"AutoSave",		T_CMD,				0, cmd_autosave	},
 	{ (unsigned char *)"Option",			T_CMD,				0, cmd_option	},
 	{ (unsigned char *)"Pause",			T_CMD,				0, cmd_pause	},
 	{ (unsigned char *)"Timer",			T_CMD | T_FUN,      0, cmd_timer	},
@@ -97,7 +98,8 @@ void fun_format(void);
 	{ (unsigned char *)"Interrupt", 	T_CMD,              	0, cmd_csubinterrupt},
 	{ (unsigned char *)"CSub",           T_CMD,              0, cmd_cfunction},
 	{ (unsigned char *)"End CSub",       T_CMD,              0, cmd_null     },
-	{ (unsigned char *)"Update Firmware",       T_CMD,              0, cmd_update     },
+	{ (unsigned char *)"Library",       T_CMD,              0, cmd_library     },
+//	{ (unsigned char *)"Update Firmware",       T_CMD,              0, cmd_update     },
 
 #endif
 
@@ -141,7 +143,7 @@ void fun_format(void);
     extern int check_interrupt(void);
     extern unsigned char *GetIntAddress(unsigned char *p);
     extern void CrunchData(unsigned char **p, int c);
-
+	extern uint32_t getFreeHeap(void);
     // struct for the interrupt configuration
     #define T_LOHI   1
     #define T_HILO   2
@@ -170,9 +172,14 @@ void fun_format(void);
 	extern void disable_systemspi(void);
 	extern void disable_systemi2c(void);
 	extern void disable_audio(void);
+	extern char *MQTTInterrupt;
+	extern volatile int MQTTComplete;
 	extern char *CSubInterrupt;
 	extern volatile int CSubComplete;
 	extern uint32_t __get_MSP(void);
-
+	extern int ExistsFile(char *p);
+	extern int ExistsDir(char *p, char *q, int *filesystem);
+	extern MMFLOAT optionangle;
+	extern int optionfastaudio;
 #endif
 #endif

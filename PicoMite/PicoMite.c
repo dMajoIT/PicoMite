@@ -38,24 +38,46 @@ extern "C" {
 #include "MMBasic_Includes.h"
 #include "Hardware_Includes.h"
 #include "hardware/structs/systick.h"
-#include "hardware/structs/scb.h"
+#include "hardware/structs/timer.h"
 #include "hardware/vreg.h"
 #include "hardware/structs/ssi.h"
+#include "hardware/structs/bus_ctrl.h"
 #include "pico/unique_id.h"
 #include <pico/bootrom.h>
 #include "hardware/irq.h"
 #include "class/cdc/cdc_device.h" 
+#include "hardware/pio.h"
+#include "hardware/pio_instructions.h"
+#ifdef PICOMITEWEB
+#include "lwipopts.h"
+#include "pico/cyw43_arch.h"
+#include "lwip/pbuf.h"
+#include "lwip/tcp.h"
+#include "lwip/dns.h"
+#include "lwip/pbuf.h"
+#include "lwip/udp.h"
+#endif
 #ifdef PICOMITEVGA
 #include "Include.h"
 #define MES_SIGNON  "\rPicoMiteVGA MMBasic Version " VERSION "\r\n"\
 					"Copyright " YEAR " Geoff Graham\r\n"\
 					"Copyright " YEAR2 " Peter Mather\r\n\r\n"
-#else
+#endif
+#ifdef PICOMITEWEB
+#define MES_SIGNON  "\rWebMite MMBasic Version " VERSION "\r\n"\
+					"Copyright " YEAR " Geoff Graham\r\n"\
+					"Copyright " YEAR2 " Peter Mather\r\n\r\n"
+volatile int WIFIconnected=0;
+int startupcomplete=0;
+void ProcessWeb(void);
+#endif
+#ifdef PICOMITE
 #define MES_SIGNON  "\rPicoMite MMBasic Version " VERSION "\r\n"\
 					"Copyright " YEAR " Geoff Graham\r\n"\
 					"Copyright " YEAR2 " Peter Mather\r\n\r\n"
 #endif
-#define USBKEEPALIVE 30000
+
+#define KEYCHECKTIME 16
 int ListCnt;
 int MMCharPos;
 int busfault=0;
@@ -80,8 +102,8 @@ volatile unsigned int diskchecktimer = DISKCHECKRATE;
 volatile unsigned int clocktimer=60*60*1000;
 volatile unsigned int PauseTimer = 0;
 volatile unsigned int IntPauseTimer = 0;
-volatile unsigned int Timer1=0, Timer2=0;		                       //1000Hz decrement timer
-volatile unsigned int USBKeepalive=USBKEEPALIVE;
+volatile unsigned int Timer1=0, Timer2=0, Timer4=0;		                       //1000Hz decrement timer
+volatile unsigned int KeyCheck=2000;
 volatile int ds18b20Timer = -1;
 volatile unsigned int ScrewUpTimer = 0;
 volatile int second = 0;                                            // date/time counters
@@ -102,16 +124,7 @@ const uint8_t *flash_option_contents = (const uint8_t *) (XIP_BASE + FLASH_TARGE
 const uint8_t *SavedVarsFlash = (const uint8_t *) (XIP_BASE + FLASH_TARGET_OFFSET +  FLASH_ERASE_SIZE);
 const uint8_t *flash_target_contents = (const uint8_t *) (XIP_BASE + FLASH_TARGET_OFFSET + FLASH_ERASE_SIZE + SAVEDVARS_FLASH_SIZE);
 const uint8_t *flash_progmemory = (const uint8_t *) (XIP_BASE + PROGSTART);
-#ifdef PICOMITEVGA
-    uint16_t M_Foreground[16]={
-    0x0000,0x000F,0x00f0,0x00ff,0x0f00,0x0f0F,0x0ff0,0x0fff,0xf000,0xf00F,0xf0f0,0xf0ff,0xff00,0xff0F,0xfff0,0xffff
-    };
-    uint16_t M_Background[16]={
-    0xffff,0xfff0,0xff0f,0xff00,0xf0ff,0xf0f0,0xf00f,0xf000,0x0fff,0x0ff0,0x0f0f,0x0f00,0x00ff,0x00f0,0x000f,0x0000
-    };
-    uint16_t tilefcols[40*30];
-    uint16_t tilebcols[40*30];
-#endif
+const uint8_t *flash_libmemory = (const uint8_t *) (XIP_BASE + PROGSTART - MAX_PROG_SIZE);
 int ticks_per_second; 
 int InterruptUsed;
 int calibrate=0;
@@ -124,7 +137,7 @@ unsigned char WatchdogSet = false;
 unsigned char IgnorePIN = false;
 bool timer_callback(repeating_timer_t *rt);
 uint32_t __uninitialized_ram(_excep_code);
-unsigned char lastcmd[STRINGSIZE*4];                                           // used to store the last command in case it is needed by the EDIT command
+unsigned char lastcmd[STRINGSIZE*2];                                           // used to store the last command in case it is needed by the EDIT command
 int QVGA_CLKDIV;	// SM divide clock ticks
 FATFS fs;                 // Work area (file system object) for logical drive
 bool timer_callback(repeating_timer_t *rt);
@@ -133,11 +146,6 @@ static uint64_t __not_in_flash_func(uSecFunc)(uint64_t a){
     while(time_us_64()<b){}
     return b;
 }
-union uFileTable {
-    unsigned int com;
-    FIL *fptr;
-};
-extern union uFileTable FileTable[MAXOPENFILES + 1];
 //Vector to CFunction routine called every command (ie, from the BASIC interrupt checker)
 extern unsigned int CFuncInt1;
 //Vector to CFunction routine called by the interrupt 2 handler
@@ -146,10 +154,13 @@ extern unsigned int CFuncmSec;
 extern void CallCFuncInt1(void);
 extern void CallCFuncInt2(void);
 extern volatile int CSubComplete;
-static uint64_t __not_in_flash_func(timer)(void){ return time_us_64();}
+static uint64_t __not_in_flash_func(uSecTimer)(void){ return time_us_64();}
 static int64_t PinReadFunc(int a){return gpio_get(PinDef[a].GPno);}
 extern void CallExecuteProgram(char *p);
 extern void CallCFuncmSec(void);
+void executelocal(char *p);
+static uint64_t timer_target;
+unsigned int CFuncFastTimer = (unsigned int)NULL;
 #define CFUNCRAM_SIZE   256
 int CFuncRam[CFUNCRAM_SIZE/sizeof(int)];
 MMFLOAT IntToFloat(long long int a){ return a; }
@@ -157,6 +168,12 @@ MMFLOAT FMul(MMFLOAT a, MMFLOAT b){ return a * b; }
 MMFLOAT FAdd(MMFLOAT a, MMFLOAT b){ return a + b; }
 MMFLOAT FSub(MMFLOAT a, MMFLOAT b){ return a - b; }
 MMFLOAT FDiv(MMFLOAT a, MMFLOAT b){ return a / b; }
+uint32_t CFunc_delay_us;
+void PIOExecute(int pion, int sm, uint32_t ins){
+    PIO pio = (pion ? pio1: pio0);
+    pio_sm_exec(pio, sm, ins);
+}
+int IDiv(int a, int b){return a/b;}
 int   FCmp(MMFLOAT a,MMFLOAT b){if(a>b) return 1;else if(a<b)return -1; else return 0;}
 MMFLOAT LoadFloat(unsigned long long c){union ftype{ unsigned long long a; MMFLOAT b;}f;f.a=c;return f.b; }
 const void * const CallTable[] __attribute__((section(".text")))  = {	(void *)uSecFunc,	//0x00
@@ -198,7 +215,7 @@ const void * const CallTable[] __attribute__((section(".text")))  = {	(void *)uS
 																		(void *)sin,	//0x90
 																		(void *)DrawCircle,	//0x94
 																		(void *)DrawTriangle,	//0x98
-																		(void *)timer,	//0x9c
+																		(void *)uSecTimer,	//0x9c
                                                                         (void *)FMul,//0xa0
                                                                         (void *)FAdd,//0xa4
                                                                         (void *)FSub,//0xa8
@@ -208,10 +225,16 @@ const void * const CallTable[] __attribute__((section(".text")))  = {	(void *)uS
                                                                         (void *)&CFuncInt1,	//0xb8
                                                                         (void *)&CFuncInt2,	//0xbc
 																		(void *)&CSubComplete,	//0xc0
+																		(void *)&AudioOutput,	//0xc4
+                                                                        (void *)IDiv,//0x0xc8
+                                                                        (void *)&AUDIO_WRAP,//0x0xcc
+                                                                        (void *)&CFuncInt3,	//0xb8
+                                                                        (void *)&CFuncInt4,	//0xbc
+                                                                        (void *)PIOExecute,
 									   	   	   	   	   	   	   	   	   	   };
 
 const struct s_PinDef PinDef[NBRPINS + 1]={
-	    { 0, 99, "NULL",  UNUSED  ,99, 99},                                                         // pin 0
+	    { 0, 99, "NULL",  UNUSED  ,99, 99},
 	    { 1,  0, "GP0",  DIGITAL_IN | DIGITAL_OUT | SPI0RX | UART0TX  | I2C0SDA | PWM0A,99,0},  	// pin 1
 		{ 2,  1, "GP1",  DIGITAL_IN | DIGITAL_OUT | UART0RX | I2C0SCL | PWM0B ,99,128},    		    // pin 2
 		{ 3, 99, "GND",  UNUSED  ,99,99},                                                           // pin 3
@@ -241,7 +264,7 @@ const struct s_PinDef PinDef[NBRPINS + 1]={
 	    { 26, 20, "GP20",  DIGITAL_IN | DIGITAL_OUT | SPI0RX | UART1TX| I2C0SDA | PWM2A	,99, 2},    // pin 26
 	    { 27, 21, "GP21",  DIGITAL_IN | DIGITAL_OUT | UART1RX| I2C0SCL | PWM2B	,99, 130},    		// pin 27
 		{ 28, 99, "GND",  UNUSED  ,99, 99},                                                         // pin 28
-		{ 29, 22, "GP22",  DIGITAL_IN | DIGITAL_OUT | I2C1SDA| PWM3A	,99, 3},    				// pin 29
+		{ 29, 22, "GP22",  DIGITAL_IN | DIGITAL_OUT | SPI0SCK | I2C1SDA| PWM3A	,99, 3},    				// pin 29
 		{ 30, 99, "RUN",  UNUSED  ,99, 99},                                                         // pin 30
 	    { 31, 26, "GP26",  DIGITAL_IN | DIGITAL_OUT	| ANALOG_IN | SPI1SCK| I2C1SDA | PWM5A , 0 , 5},// pin 31
 	    { 32, 27, "GP27",  DIGITAL_IN | DIGITAL_OUT	| ANALOG_IN | SPI1TX| I2C1SCL | PWM5B , 1, 133},// pin 32
@@ -253,17 +276,19 @@ const struct s_PinDef PinDef[NBRPINS + 1]={
 		{ 38, 99, "GND", UNUSED  ,99, 99},                                                          // pin 38
 		{ 39, 99, "VSYS", UNUSED  ,99, 99},                                                         // pin 39
 		{ 40, 99, "VBUS", UNUSED  ,99, 99},                                                         // pin 40
+    #ifndef PICOMITEWEB
 		{ 41, 23, "GP23", DIGITAL_IN | DIGITAL_OUT | SPI0TX | I2C1SCL| PWM3B  ,99 , 131},           // pseudo pin 41
 		{ 42, 24, "GP24", DIGITAL_IN | DIGITAL_OUT | SPI1RX | UART1TX | I2C0SDA| PWM4A  ,99 , 4},   // pseudo pin 42
 		{ 43, 25, "GP25", DIGITAL_IN | DIGITAL_OUT | UART1RX | I2C0SCL| PWM4B  ,99 , 132},          // pseudo pin 43
 		{ 44, 29, "GP29", DIGITAL_IN | DIGITAL_OUT | ANALOG_IN | UART0RX | I2C0SCL | PWM6B, 3, 134},// pseudo pin 44
+    #endif
 };
 char alive[]="\033[?25h";
 const char DaysInMonth[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 void __not_in_flash_func(routinechecks)(void){
-    static int c,when=0;
+    static int c,when=0, read=0;
     if(++when & 7 && CurrentLinePtr) return;
-    if(tud_cdc_connected() && Option.SerialConsole==0){
+    if(tud_cdc_connected() && (Option.SerialConsole==0 || Option.SerialConsole>4) && Option.Telnet!=-1){
         while(( c=tud_cdc_read_char())!=-1){
             ConsoleRxBuf[ConsoleRxBufHead] = c;
             if(BreakKey && ConsoleRxBuf[ConsoleRxBufHead] == BreakKey) {// if the user wants to stop the progran
@@ -280,16 +305,26 @@ void __not_in_flash_func(routinechecks)(void){
         }
     }
 	if(GPSchannel)processgps();
-    if(diskchecktimer== 0 || CurrentlyPlaying == P_WAV)CheckSDCard();
-#ifndef PICOMITEVGA
+    if(diskchecktimer== 0 || CurrentlyPlaying == P_WAV || CurrentlyPlaying == P_FLAC)CheckSDCard();
+#ifdef PICOMITE
     if(Ctrl)ProcessTouch();
 #endif
-        if(tud_cdc_connected() && USBKeepalive==0){
-            SSPrintString(alive);
-        }
+//        if(tud_cdc_connected() && KeyCheck==0){
+//            SSPrintString(alive);
+//        }
     if(clocktimer==0 && Option.RTC){
         RtcGetTime(0);
         clocktimer=(1000*60*60);
+    }
+    if(Option.KeyboardConfig==CONFIG_I2C && KeyCheck==0){
+        if(read==0){
+            CheckI2CKeyboard(0,0);
+            read=1;
+        } else {
+            CheckI2CKeyboard(0,1);
+            read=0;
+        }
+        KeyCheck=KEYCHECKTIME;
     }
 }
 
@@ -301,6 +336,9 @@ int __not_in_flash_func(getConsole)(void) {
         ConsoleRxBufTail = (ConsoleRxBufTail + 1) % CONSOLE_RX_BUF_SIZE;   // advance the head of the queue
 	}
     return c;
+#ifdef PICOMITEWEB
+    ProcessWeb();
+#endif
 }
 
 void putConsole(int c, int flush) {
@@ -309,24 +347,32 @@ void putConsole(int c, int flush) {
 }
 // put a character out to the serial console
 char SerialConsolePutC(char c, int flush) {
-    if(Option.SerialConsole==0){
+#ifdef PICOMITEWEB
+    if(Option.Telnet!=-1){
+#endif
+    if(Option.SerialConsole==0 || Option.SerialConsole>4){
         if(tud_cdc_connected()){
             putc(c,stdout);
             if(flush){
-                USBKeepalive=USBKEEPALIVE;
                 fflush(stdout);
             }
         }
-    } else {
-        int empty=uart_is_writable(Option.SerialConsole==1 ? uart0 : uart1);
+    } 
+    if(Option.SerialConsole){
+        int empty=uart_is_writable((Option.SerialConsole & 3)==1 ? uart0 : uart1);
 		while(ConsoleTxBufTail == ((ConsoleTxBufHead + 1) % CONSOLE_TX_BUF_SIZE)); //wait if buffer full
 		ConsoleTxBuf[ConsoleTxBufHead] = c;							// add the char
 		ConsoleTxBufHead = (ConsoleTxBufHead + 1) % CONSOLE_TX_BUF_SIZE;		   // advance the head of the queue
 		if(empty){
-	        uart_set_irq_enables(Option.SerialConsole==1 ? uart0 : uart1, true, true);
-			irq_set_pending(Option.SerialConsole==1 ? UART0_IRQ : UART1_IRQ);
+	        uart_set_irq_enables((Option.SerialConsole & 3)==1 ? uart0 : uart1, true, true);
+			irq_set_pending((Option.SerialConsole & 3)==1 ? UART0_IRQ : UART1_IRQ);
 		}
     }
+#ifdef PICOMITEWEB
+    }
+    TelnetPutC(c,flush);
+    ProcessWeb();
+#endif
     return c;
 }
 char MMputchar(char c, int flush) {
@@ -355,6 +401,7 @@ int __not_in_flash_func(MMInkey)(void) {
     static unsigned int c2 = -1;
     static unsigned int c3 = -1;
     static unsigned int c4 = -1;
+	static int crseen = 0;
 
     if(c1 != -1) {                                                  // check if there are discarded chars from a previous sequence
         c = c1; c1 = c2; c2 = c3; c3 = c4; c4 = -1;                 // shuffle the queue down
@@ -372,6 +419,7 @@ int __not_in_flash_func(MMInkey)(void) {
         if(c == 'Q') return F2;
         if(c == 'R') return F3;
         if(c == 'S') return F4;
+        if(c == 'T') return F5;
         if(c == '2'){
             while((tc = getConsole()) == -1 && InkeyTimer < 70);        // delay some more to allow the final chars to arrive, even at 1200 baud
             if(tc == 'R') return F3 + 0x20;
@@ -417,8 +465,9 @@ int __not_in_flash_func(MMInkey)(void) {
 void MMgetline(int filenbr, char *p) {
 	int c, nbrchars = 0;
 	char *tp;
+
     while(1) {
-        CheckAbort();												// jump right out if CTRL-C
+        CheckAbort();	
         if(FileTable[filenbr].com > MAXCOMPORTS && FileEOF(filenbr)) break;
         c = MMfgetc(filenbr);
         if(c <= 0) continue;                                       // keep looping if there are no chars
@@ -490,12 +539,12 @@ void InsertLastcmd(unsigned char *s) {
 int i, slen;
     if(strcmp(lastcmd, s) == 0) return;                             // don't duplicate
     slen = strlen(s);
-    if(slen < 1 || slen > STRINGSIZE*4 - 1) return;
+    if(slen < 1 || slen > sizeof(lastcmd) - 1) return;
     slen++;
-    for(i = STRINGSIZE*4 - 1; i >=  slen ; i--)
+    for(i = sizeof(lastcmd) - 1; i >=  slen ; i--)
         lastcmd[i] = lastcmd[i - slen];                             // shift the contents of the buffer up
     strcpy(lastcmd, s);                                             // and insert the new string in the beginning
-    for(i = STRINGSIZE*4 - 1; lastcmd[i]; i--) lastcmd[i] = 0;             // zero the end of the buffer
+    for(i = sizeof(lastcmd) - 1; lastcmd[i]; i--) lastcmd[i] = 0;             // zero the end of the buffer
 }
 
 void EditInputLine(void) {
@@ -632,7 +681,16 @@ void EditInputLine(void) {
                     strcpy(&buf[1],"EDIT\r\n");
                     break;
                 case 0x95:
-                    if(*Option.F5key)strcpy(&buf[1],Option.F5key);
+                    if(*Option.F5key){
+                        strcpy(&buf[1],Option.F5key);
+                    }else{
+                         /*** F5 will clear the VT100  ***/
+            	         SSPrintString("\e[2J\e[H");
+            	         fflush(stdout);
+            	        // if(Option.DISPLAY_CONSOLE){MX470Display(DISPLAY_CLS);CurrentX=0;CurrentY=0;}
+            	         MMPrintString("> ");
+            	         fflush(stdout);
+                    }    
                     break;
                 case 0x96:
                     if(*Option.F6key)strcpy(&buf[1],Option.F6key);
@@ -661,7 +719,7 @@ void EditInputLine(void) {
                                 fflush(stdout);       // go to the beginning of line
                                 if(lastcmd_edit) {
                                     i = lastcmd_idx + strlen(&lastcmd[lastcmd_idx]) + 1;    // find the next command
-                                    if(lastcmd[i] != 0 && i < STRINGSIZE*4 - 1) lastcmd_idx = i;  // and point to it for the next time around
+                                    if(lastcmd[i] != 0 && i < sizeof(lastcmd) - 1) lastcmd_idx = i;  // and point to it for the next time around
                                 } else
                                     lastcmd_edit = true;
                                 strcpy(inpbuf, &lastcmd[lastcmd_idx]);                      // get the command into the buffer for editing
@@ -754,11 +812,11 @@ int MMgetchar(void) {
 // print a string to the console interfaces
 void MMPrintString(char* s) {
     while(*s) {
-        MMputchar(*s,0);
+        if(s[1])MMputchar(*s,0);
+        else MMputchar(*s,1);
         s++;
     }
     fflush(stdout);
-    USBKeepalive=USBKEEPALIVE;
 }
 void SSPrintString(char* s) {
     while(*s) {
@@ -766,7 +824,6 @@ void SSPrintString(char* s) {
         s++;
     }
     fflush(stdout);
-    USBKeepalive=USBKEEPALIVE;
 }
 
 /*void myprintf(char *s){
@@ -788,6 +845,7 @@ void mT4IntEnable(int status){
 	systick_hw->rvr = 249999; //Standard System clock (125Mhz)/ (rvr value + 1) = 1ms 
     systick_hw->csr = 0x7;      //Enable Systic, Enable Exceptions	
 }*/
+volatile int onoff=0;
 bool __not_in_flash_func(timer_callback)(repeating_timer_t *rt)
 {
     mSecTimer++;                                                      // used by the TIMER function
@@ -796,17 +854,17 @@ bool __not_in_flash_func(timer_callback)(repeating_timer_t *rt)
         int ElapsedMicroSec, IrDevTmp, IrCmdTmp;
         AHRSTimer++;
         InkeyTimer++;                                                     // used to delay on an escape character
-        mSecTimer++;                                                      // used by the TIMER function
         PauseTimer++;													// used by the PAUSE command
         IntPauseTimer++;												// used by the PAUSE command inside an interrupt
         ds18b20Timer++;
 		GPSTimer++;
         I2CTimer++;
         if(clocktimer)clocktimer--;
+        if(Timer4)Timer4--;
         if(Timer3)Timer3--;
         if(Timer2)Timer2--;
         if(Timer1)Timer1--;
-        if(USBKeepalive)USBKeepalive--;
+        if(KeyCheck)KeyCheck--;
         if(diskchecktimer && Option.SD_CS)diskchecktimer--;
 	    if(++CursorTimer > CURSOR_OFF + CURSOR_ON) CursorTimer = 0;		// used to control cursor blink rate
         if(CFuncmSec) CallCFuncmSec();                                  // the 1mS tick for CFunctions (see CFunction.c)
@@ -855,7 +913,7 @@ bool __not_in_flash_func(timer_callback)(repeating_timer_t *rt)
             IrDevTmp = ((IrBits >> 16) & 0xffff);
             IrCmdTmp = ((IrBits >> 8) & 0xff);
         }
-#ifndef PICOMITEVGA
+#ifdef PICOMITE
     // check on the touch panel, is the pen down?
 
     TouchTimer++;
@@ -919,7 +977,9 @@ bool __not_in_flash_func(timer_callback)(repeating_timer_t *rt)
     ////////////////////////////////// this code runs once a second /////////////////////////////////
     if(++SecondsTimer >= 1000) {
         SecondsTimer -= 1000; 
+    #ifndef PICOMITEWEB
         if(ExtCurrentConfig[PinDef[HEARTBEATpin].pin]==EXT_HEARTBEAT)gpio_xor_mask(1<<PinDef[HEARTBEATpin].GPno);
+    #endif
             // keep track of the time and date
         if(++second >= 60) {
             second = 0 ;
@@ -941,7 +1001,63 @@ bool __not_in_flash_func(timer_callback)(repeating_timer_t *rt)
     }
   return 1;
 }
+void __not_in_flash_func(uSec)(int us) {
+#ifdef PICOMITEWEB
+	if(us<500){
+		busy_wait_us(us);
+	} else {
+    	uint64_t end=time_us_64()+us;
+    	while(time_us_64()<end){
+        if(time_us_64() % 500 ==0)ProcessWeb();
+    }
+}
+#else
+	busy_wait_us(us);
+#endif
+}
+#ifdef PICOMITEWEB
+void __not_in_flash_func(ProcessWeb)(void){
+    TCP_SERVER_T *state = (TCP_SERVER_T*)TCPstate;
+    if(!(state && WIFIconnected))return;
+    static uint64_t flushtimer=0;
+    static long long int lastmsec=0;
+    static int testcount=0;     
+    if(testcount == 0 || lastmsec>=mSecTimer){
+        lastmsec=mSecTimer+2;
+        testcount = 0 ;
+        {if(startupcomplete)cyw43_arch_poll();}
+    }
+    testcount++;
+    if(testcount==500)testcount=0;
+    if(state->telnet_pcb_no==99)return;
+    if(time_us_64() > flushtimer){
+        TelnetPutC(0,-1);
+        flushtimer=time_us_64()+5000;
+    }
+}
+#endif
 void __not_in_flash_func(CheckAbort)(void) {
+#ifdef PICOMITEWEB
+    static int lastonoff=0;
+    static uint64_t lastmsec=0;
+    if(Option.NoHeartbeat){
+        if(lastonoff!=2){
+            if(startupcomplete){
+                if(cyw43_arch_gpio_get(CYW43_WL_GPIO_LED_PIN)) cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+                lastonoff=2;
+            }
+        }
+    } else {
+        if(lastonoff==2)lastonoff=0;
+        if(mSecTimer-lastmsec>(WIFIconnected ? 500:1000) && startupcomplete){
+            lastmsec=mSecTimer;
+            if(lastonoff)cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+            else cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+            lastonoff^=1;
+        }
+    }
+    ProcessWeb();
+#endif
     routinechecks();
     if(MMAbort) {
         WDTimer = 0;                                                // turn off the watchdog timer
@@ -1005,7 +1121,9 @@ void sigbus(void){
     MMPrintString("Error: Invalid address - resetting\r\n");
 	uSec(250000);
 	disable_interrupts();
-	flash_range_erase(PROGSTART, MAX_PROG_SIZE);
+//	flash_range_erase(PROGSTART, MAX_PROG_SIZE);
+    Option.Autorun=0;
+    SaveOptions();
 	enable_interrupts();
     memset(inpbuf,0,STRINGSIZE);
     SoftReset();
@@ -1103,13 +1221,13 @@ uint32_t* ScanLineCBNext;	// next control buffer
 volatile int QVgaScanLine; // current processed scan line 0... (next displayed scan line)
 volatile uint32_t QVgaFrame;	// frame counter
 uint16_t fbuff[2][160]={0};
-
+int X_TILE=80, Y_TILE=40;
 // saved integer divider state
 // VGA DMA handler - called on end of every scanline
 void __not_in_flash_func(QVgaLine0)()
 {
-    static int nextbuf=0,nowbuf=1;
-    int i,line,bufinx;
+    static int nextbuf=0,nowbuf=1, tile=0, tc=0;
+    int i,line;
 	// Clear the interrupt request for DMA control channel
 	dma_hw->ints0 = (1u << QVGA_DMA_PIO);
 
@@ -1118,12 +1236,10 @@ void __not_in_flash_func(QVgaLine0)()
 	// save integer divider state
 //	hw_divider_save_state(&SaveDividerState);
 
-	// switch current buffer index (bufinx = current preparing buffer, MiniVgaBufInx = current running buffer)
-	bufinx = QVgaBufInx;
-	QVgaBufInx = bufinx ^ 1;
-
 	// prepare control buffer to be processed
-	uint32_t* cb = &ScanLineCB[bufinx*CB_MAX];
+	uint32_t* cb = &ScanLineCB[QVgaBufInx*CB_MAX];
+	// switch current buffer index (bufinx = current preparing buffer, MiniVgaBufInx = current running buffer)
+    QVgaBufInx ^= 1;
 	ScanLineCBNext = cb;
 
 	// increment scanline (1..)
@@ -1133,6 +1249,8 @@ void __not_in_flash_func(QVgaLine0)()
 	{
 		QVgaFrame++;	// increment frame counter
 		line = 0; 	// restart scanline
+        tile=0;
+        tc=0;
 	}
 	QVgaScanLine = line;	// store new scanline
 
@@ -1160,86 +1278,26 @@ void __not_in_flash_func(QVgaLine0)()
 		{
         // prepare image line
             if(DISPLAY_TYPE==MONOVGA){
-                int ytile=(line>>4)*40;
                 uint16_t *q=&fbuff[nextbuf][0];
                 unsigned char *p=&DisplayBuf[line * 80];
-                for(i=0;i<40;i++){
-                    register int pos=ytile+i;
-                    register int low= *p & 0xF;
-                    register int high=*p++ >>4;
-                    *q++=(M_Foreground[low] & tilefcols[pos]) | (M_Background[low] & tilebcols[pos]) ;
-                    *q++=(M_Foreground[high]& tilefcols[pos]) | (M_Background[high] & tilebcols[pos]) ;
-                    low= *p & 0xF;
-                    high=*p++ >>4;
-                    *q++=(M_Foreground[low] & tilefcols[pos]) | (M_Background[low] & tilebcols[pos]) ;
-                    *q++=(M_Foreground[high]& tilefcols[pos]) | (M_Background[high] & tilebcols[pos]) ;
+                if(tc==ytilecount){
+                    tile++;
+                    tc=0;
                 }
-/*            } else {
-                gpio_set_mask(pin);
-                line>>=1;
-                register unsigned char *p=&DisplayBuf[line * 160];
-                register unsigned char *q=&LayerBuf[line * 160];
-                register uint16_t *r=fbuff[nextbuf];
-                for(int i=0;i<160;i++){
+                tc++;
+                register int pos=tile*X_TILE;
+                for(i=0;i<40;i++){
                     register int low= *p & 0xF;
                     register int high=*p++ >>4;
-                    register int low2= *q & 0xF;
-                    register int high2=*q++ >>4;
-                    if(low2)low=low2;
-                    if(high2)high=high2;
-                    *r++=(low | (low<<4) | (high<<8) | (high<<12));
-/*                    low= *p & 0xF;
-                    high=*p++ >>4;
-                    low2= *q & 0xF;
-                    high2=*q++ >>4;
-                    if(low2)low=low2;
-                    if(high2)high=high2;
-                    *r++=(low | (low<<4) | (high<<8) | (high<<12));
+                    *q++=(M_Foreground[low] & tilefcols[pos]) | (M_Background[low] & tilebcols[pos]) ;
+                    *q++=(M_Foreground[high]& tilefcols[pos]) | (M_Background[high] & tilebcols[pos]) ;
+                    pos++;
                     low= *p & 0xF;
                     high=*p++ >>4;
-                    low2= *q & 0xF;
-                    high2=*q++ >>4;
-                    if(low2)low=low2;
-                    if(high2)high=high2;
-                    *r++=(low | (low<<4) | (high<<8) | (high<<12));
-                    low= *p & 0xF;
-                    high=*p++ >>4;
-                    low2= *q & 0xF;
-                    high2=*q++ >>4;
-                    if(low2)low=low2;
-                    if(high2)high=high2;
-                    *r++=(low | (low<<4) | (high<<8) | (high<<12));
-                    low= *p & 0xF;
-                    high=*p++ >>4;
-                    low2= *q & 0xF;
-                    high2=*q++ >>4;
-                    if(low2)low=low2;
-                    if(high2)high=high2;
-                    *r++=(low | (low<<4) | (high<<8) | (high<<12));
-                     low= *p & 0xF;
-                    high=*p++ >>4;
-                    low2= *q & 0xF;
-                    high2=*q++ >>4;
-                    if(low2)low=low2;
-                    if(high2)high=high2;
-                    *r++=(low | (low<<4) | (high<<8) | (high<<12));
-                     low= *p & 0xF;
-                    high=*p++ >>4;
-                    low2= *q & 0xF;
-                    high2=*q++ >>4;
-                    if(low2)low=low2;
-                    if(high2)high=high2;
-                    *r++=(low | (low<<4) | (high<<8) | (high<<12));
-                     low= *p & 0xF;
-                    high=*p++ >>4;
-                    low2= *q & 0xF;
-                    high2=*q++ >>4;
-                    if(low2)low=low2;
-                    if(high2)high=high2;
-                    *r++=(low | (low<<4) | (high<<8) | (high<<12));
-                 }
-                gpio_clr_mask(pin);
-            }*/
+                    *q++=(M_Foreground[low] & tilefcols[pos]) | (M_Background[low] & tilebcols[pos]) ;
+                    *q++=(M_Foreground[high]& tilefcols[pos]) | (M_Background[high] & tilebcols[pos]) ;
+                    pos++;
+                }
             } else {
                 line>>=1;
                 register unsigned char *p=&DisplayBuf[line * 160];
@@ -1277,7 +1335,8 @@ void __not_in_flash_func(QVgaLine0)()
 }
 void __not_in_flash_func(QVgaLine1)()
 {
-    static int nextbuf=0,nowbuf=1,i,line,bufinx;
+    static int nextbuf=0,nowbuf=1, tile=0, tc=0;
+    int i,line,bufinx;
 	// Clear the interrupt request for DMA control channel
 	dma_hw->ints0 = (1u << QVGA_DMA_PIO);
 
@@ -1302,6 +1361,8 @@ void __not_in_flash_func(QVgaLine1)()
 	{
 		QVgaFrame++;	// increment frame counter
 		line = 0; 	// restart scanline
+        tile=0;
+        tc=0;
 	}
 	QVgaScanLine = line;	// store new scanline
 
@@ -1329,19 +1390,25 @@ void __not_in_flash_func(QVgaLine1)()
 		{
 			// prepare image line
             if(DISPLAY_TYPE==MONOVGA){
-                int ytile=(line>>4)*40;
                 uint16_t *q=&fbuff[nextbuf][0];
                 unsigned char *p=&DisplayBuf[line * 80];
+                if(tc==ytilecount){
+                    tile++;
+                    tc=0;
+                }
+                tc++;
+                register int pos=tile*X_TILE;
                 for(i=0;i<40;i++){
-                    register int pos=ytile+i;
                     register int low= *p & 0xF;
                     register int high=*p++ >>4;
                     *q++=(M_Foreground[low] & tilefcols[pos]) | (M_Background[low] & tilebcols[pos]) ;
                     *q++=(M_Foreground[high]& tilefcols[pos]) | (M_Background[high] & tilebcols[pos]) ;
+                    pos++;
                     low= *p & 0xF;
                     high=*p++ >>4;
                     *q++=(M_Foreground[low] & tilefcols[pos]) | (M_Background[low] & tilebcols[pos]) ;
                     *q++=(M_Foreground[high]& tilefcols[pos]) | (M_Background[high] & tilebcols[pos]) ;
+                    pos++;
                 }
             } else {
                 line>>=1;
@@ -1469,7 +1536,6 @@ void QVgaDmaInit()
 {
 
 // ==== prepare DMA control channel
-    dma_channel_claim (QVGA_DMA_CB);
 	// prepare DMA default config
 	dma_channel_config cfg = dma_channel_get_default_config(QVGA_DMA_CB);
 
@@ -1498,6 +1564,7 @@ void QVgaDmaInit()
 // ==== prepare DMA data channel
 
 	// prepare DMA default config
+
 	cfg = dma_channel_get_default_config(QVGA_DMA_PIO);
 
 	// increment address on read from memory
@@ -1546,6 +1613,9 @@ void QVgaDmaInit()
 // initialize QVGA (can change system clock)
 void QVgaInit()
 {
+    X_TILE=Option.X_TILE;
+    Y_TILE=Option.Y_TILE;
+    ytilecount=X_TILE==80? 12 : 16;
 	// initialize PIO
 	QVgaPioInit();
 
@@ -1603,14 +1673,157 @@ void __no_inline_not_in_flash_func(modclock)(uint16_t speed){
        ssi_hw->baudr=speed;
        ssi_hw->ssienr=1;
 }
+
+lfs_t lfs;
+lfs_dir_t lfs_dir;
+struct lfs_info lfs_info;
+void updatebootcount(void){
+    lfs_file_t lfs_file;
+    pico_lfs_cfg.block_count = (Option.FlashSize-RoundUpK4(TOP_OF_SYSTEM_FLASH))/4096;
+    int err,boot_count=0;
+ 	    err= lfs_mount(&lfs, &pico_lfs_cfg);
+    // reformat if we can't mount the filesystem
+    // this should only happen on the first boot
+    if (err) {
+        err=lfs_format(&lfs, &pico_lfs_cfg);
+        err=lfs_mount(&lfs, &pico_lfs_cfg);
+    }
+
+    err=lfs_file_open(&lfs, &lfs_file, "bootcount", LFS_O_RDWR | LFS_O_CREAT);;
+    int dt=get_fattime();
+    err=lfs_setattr(&lfs, "bootcount", 'A', &dt,   4);
+    err=lfs_file_read(&lfs, &lfs_file, &boot_count, sizeof(boot_count));;
+    boot_count+=1;
+    err=lfs_file_rewind(&lfs, &lfs_file);
+    err=lfs_file_write(&lfs, &lfs_file, &boot_count, sizeof(boot_count));
+    err=lfs_file_close(&lfs, &lfs_file);	
+}
+
+/**
+ * @brief Transforms input beginning with * into a corresponding RUN command.
+ *
+ * e.g.
+ *   *foo              =>  RUN "foo"
+ *   *"foo bar"        =>  RUN "foo bar"
+ *   *foo --wombat     =>  RUN "foo", "--wombat"
+ *   *foo "wom"        =>  RUN "foo", Chr$(34) + "wom" + Chr$(34)
+ *   *foo "wom" "bat"  =>  RUN "foo", Chr$(34) + "wom" + Chr$(34) + " " + Chr$(34) + "bat" + Chr$(34)
+ *   *foo --wom="bat"  =>  RUN "foo", "--wom=" + Chr$(34) + "bat" + Chr$(34)
+ */
+static void transform_star_command(char *input) {
+    char *src = input;
+    while (isspace(*src)) src++; // Skip leading whitespace.
+    if (*src != '*') error("Internal fault");
+    src++;
+
+    // Trim any trailing whitespace from the input.
+    char *end = input + strlen(input) - 1;
+    while (isspace(*end)) *end-- = '\0';
+
+    // Allocate extra space to avoid string overrun.
+    char *tmp = (char *) GetTempMemory(STRINGSIZE + 32);
+    strcpy(tmp, "RUN");
+    char *dst = tmp + 3;
+
+    if (*src == '"') {
+        // Everything before the second quote is the name of the file to RUN.
+        *dst++ = ' ';
+        *dst++ = *src++; // Leading quote.
+        while (*src && *src != '"') *dst++ = *src++;
+        if (*src == '"') *dst++ = *src++; // Trailing quote.
+    } else {
+        // Everything before the first space is the name of the file to RUN.
+        int count = 0;
+        while (*src && !isspace(*src)) {
+            if (++count == 1) {
+                *dst++ = ' ';
+                *dst++ = '\"';
+            }
+            *dst++ = *src++;
+        }
+        if (count) *dst++ = '\"';
+    }
+
+    while (isspace(*src)) src++; // Skip whitespace.
+
+    // Anything else is arguments.
+    if (*src) {
+        *dst++ = ',';
+        *dst++ = ' ';
+
+        // If 'src' starts with double-quote then replace with: Chr$(34) +
+        if (*src == '"') {
+            memcpy(dst, "Chr$(34) + ", 11);
+            dst += 11;
+            src++;
+        }
+
+        *dst++ = '\"';
+
+        // Copy from 'src' to 'dst'.
+        while (*src) {
+            if (*src == '"') {
+                // Close current set of quotes to insert a Chr$(34)
+                memcpy(dst, "\" + Chr$(34)", 12);
+                dst += 12;
+
+                // Open another set of quotes unless this was the last character.
+                if (*(src + 1)) {
+                    memcpy(dst, " + \"", 4);
+                    dst += 4;
+                }
+                src++;
+            } else {
+                *dst++ = *src++;
+            }
+            if (dst - tmp >= STRINGSIZE) error("String too long");
+        }
+
+        // End with a double quote unless 'src' ended with one.
+        if (*(src - 1) != '"') *dst++ = '\"';
+
+        *dst = '\0';
+    }
+
+    if (dst - tmp >= STRINGSIZE) error("String too long");
+
+    // Copy transformed string back into the input buffer.
+    memcpy(input, tmp, STRINGSIZE);
+    input[STRINGSIZE - 1] = '\0';
+
+    ClearSpecificTempMemory(tmp);
+}
+#ifdef PICOMITEWEB
+void WebConnect(void){
+    if(*Option.SSID){
+        cyw43_arch_enable_sta_mode();
+        MMPrintString("Connecting to WiFi...\r\n");
+        if (cyw43_arch_wifi_connect_timeout_ms(Option.SSID, Option.PASSWORD, CYW43_AUTH_WPA2_AES_PSK, 30000)) {
+            MMPrintString("failed to connect.\r\n");
+            WIFIconnected=0;
+        } else {
+            char buff[STRINGSIZE]={0};
+            sprintf(buff,"Connected %s\r\n",ip4addr_ntoa(netif_ip4_addr(netif_list)));
+            MMPrintString(buff);
+            WIFIconnected=1;
+            open_tcp_server(1);
+            if(!Option.disabletftp)cmd_tftp_server_init();
+        }
+    }
+}
+#endif
+
+
 int main(){
-    static int ErrorInPrompt;
+   static int ErrorInPrompt;
     repeating_timer_t timer;
     int i;
     LoadOptions();
     if(  Option.Baudrate == 0 ||
         !(Option.Tab==2 || Option.Tab==3 || Option.Tab==4 ||Option.Tab==8) ||
         !(Option.Autorun>=0 && Option.Autorun<=MAXFLASHSLOTS+1) ||
+        Option.CPU_Speed<48000 || Option.CPU_Speed>378000 ||
+        Option.PROG_FLASH_SIZE!=MAX_PROG_SIZE ||
         !(Option.Magic==MagicKey)
         ){
         ResetAllFlash();              // init the options if this is the very first startup
@@ -1618,10 +1831,12 @@ int main(){
         SoftReset();
     }
     m_alloc(M_PROG);                                           // init the variables for program memory
-    busy_wait_ms(100);
+    LibMemory = (uint8_t *)flash_libmemory;
+    uSec(100);
     if(Option.CPU_Speed>200000)vreg_set_voltage(VREG_VOLTAGE_1_25);  // Std default @ boot is 1_10
-    busy_wait_ms(100);
+    uSec(100);
     set_sys_clock_khz(Option.CPU_Speed, true);
+    PWM_FREQ=44100;
     pico_get_unique_board_id_string (id_out,12);
     clock_configure(
         clk_peri,
@@ -1632,8 +1847,8 @@ int main(){
     );
     systick_hw->csr = 0x5;
     systick_hw->rvr = 0x00FFFFFF;
-    if(Option.CPU_Speed<=252000)modclock(2);
-    busy_wait_ms(100);
+    if(Option.CPU_Speed<=200000)modclock(2);
+    uSec(100);
     if(Option.CPU_Speed==378000)QVGA_CLKDIV= 3;
     else if(Option.CPU_Speed==252000)QVGA_CLKDIV= 2;
     else QVGA_CLKDIV= 1;
@@ -1646,7 +1861,7 @@ int main(){
     adc_init();
     adc_set_temp_sensor_enabled(true);
     add_repeating_timer_us(-1000, timer_callback, NULL, &timer);
-    if(Option.SerialConsole==0) while (!tud_cdc_connected() && mSecTimer<5000) {}
+    if(!(Option.SerialConsole==1 || Option.SerialConsole==2) || Option.Telnet==-1) while (!tud_cdc_connected() && mSecTimer<5000) {}
     InitReservedIO();
     initKeyboard();
     ClearExternalIO();
@@ -1664,17 +1879,25 @@ int main(){
     InitDisplaySSD();
     InitDisplaySPI(0);
     InitDisplayI2C(0);
+    InitDisplayVirtual();
     InitTouch();
 #endif
-    ResetDisplay();
     ErrorInPrompt = false;
     exception_set_exclusive_handler(HARDFAULT_EXCEPTION,sigbus);
+    exception_set_exclusive_handler(SVCALL_EXCEPTION,sigbus);
+    exception_set_exclusive_handler(PENDSV_EXCEPTION,sigbus);
+    exception_set_exclusive_handler(NMI_EXCEPTION ,sigbus);
+    exception_set_exclusive_handler(SYSTICK_EXCEPTION,sigbus);
     while((i=getConsole())!=-1){}
 #ifdef PICOMITEVGA
+    X_TILE=Option.X_TILE;
+    Y_TILE=Option.Y_TILE;
+    ytilecount=X_TILE==80? 12 : 16;
+    bus_ctrl_hw->priority=0x100;
     multicore_launch_core1_with_stack(QVgaCore,core1stack,256);
 	memset(WriteBuf, 0, 38400);
-    if(Option.DISPLAY_TYPE!=MONOVGA)ClearScreen(Option.DefaultBC);
 #endif
+    ResetDisplay();
     if(!(_excep_code == RESTART_NOAUTORUN || _excep_code == WATCHDOG_TIMEOUT)){
         if(Option.Autorun==0 ){
             if(!(_excep_code == RESET_COMMAND))MMPrintString(MES_SIGNON); //MMPrintString(b);                                 // print sign on message
@@ -1689,21 +1912,36 @@ int main(){
         WatchdogSet = true;                                 // remember if it was a watchdog timeout
         MMPrintString("\r\n\nWatchdog timeout\r\n");
     }
+    #ifdef PICOMITEWEB
+    if (cyw43_arch_init()==0) {
+        startupcomplete=1;
+        WebConnect();
+    }
+    #endif
     if(noRTC){
         noRTC=0;
         Option.RTC=0;
         SaveOptions();
         MMPrintString("RTC not found, OPTION RTC AUTO disabled\r\n");
     }
- 	*tknbuf = 0;
-    ContinuePoint = nextstmt;                               // in case the user wants to use the continue command
+    if(noI2C){
+        noI2C=0;
+        Option.KeyboardConfig=NO_KEYBOARD;
+        SaveOptions();
+        MMPrintString("I2C Keyboard not found, OPTION KEYBOARD disabled\r\n");
+    }
+    updatebootcount();
+    *tknbuf = 0;
+     ContinuePoint = nextstmt;                               // in case the user wants to use the continue command
 	if(setjmp(mark) != 0) {
      // we got here via a long jump which means an error or CTRL-C or the program wants to exit to the command prompt
+        FlashLoad = 0;
         LoadOptions();
         ScrewUpTimer = 0;
         ProgMemory=(uint8_t *)flash_progmemory;
         ContinuePoint = nextstmt;                               // in case the user wants to use the continue command
 		*tknbuf = 0;											// we do not want to run whatever is in the token buffer
+		optionangle=1.0;
     } else {
         if(*ProgMemory == 0x01 ) ClearVars(0);
         else {
@@ -1715,6 +1953,7 @@ int main(){
             ClearRuntime();
             PrepareProgram(true);
             if(*ProgMemory == 0x01 ){
+                if(Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE) ExecuteProgram(LibMemory);  // run anything that might be in the library
                 ExecuteProgram(ProgMemory);  
             }  else {
                 Option.Autorun=0;
@@ -1764,22 +2003,18 @@ int main(){
         ErrorInPrompt = false;
         EditInputLine();
         InsertLastcmd(inpbuf);                                  // save in case we want to edit it later
-//        MMgetline(0, inpbuf);                                       // get the input
         if(!*inpbuf) continue;                                      // ignore an empty line
-	  char *p=inpbuf;
-	  skipspace(p);
-	  if(*p=='*'){ //shortform RUN command so convert to a normal version
-		  memmove(&p[4],&p[0],strlen(p)+1);
-		  p[0]='R';p[1]='U';p[2]='N';p[3]='$';p[4]=34;
-		  char  *q;
-		  if((q=strchr(p,' ')) != 0){ //command line after the filename
-			  *q=','; //chop the command at the first space character
-			  memmove(&q[1],&q[0],strlen(q)+1);
-			  q[0]=34;
-		  } else strcat(p,"\"");
-		  p[3]=' ';
-	  }
-        tokenise(true);                                             // turn into executable code
+        char *p=inpbuf;
+        skipspace(p);
+        executelocal(p);
+        if(strlen(p)==2 && p[1]==':'){
+            if(toupper(*p)=='A')strcpy(p,"drive \"a:\"");
+            if(toupper(*p)=='B')strcpy(p,"drive \"b:\"");
+        }
+        if(*p=='*'){ //shortform RUN command so convert to a normal version
+                transform_star_command(inpbuf);
+                p = inpbuf;
+        }        tokenise(true);                                             // turn into executable code
         i=0;
         if(*tknbuf==GetCommandValue((char *)"RUN"))i=1;
         if (setjmp(jmprun) != 0) {
@@ -1794,7 +2029,38 @@ int main(){
         }
 	}
 }
+void stripcomment(char *p){
+    char *q=p;
+    int toggle=0;
+    while(*q){
+        if(*q=='\'' && toggle==0){
+            *q=0;
+            break;
+        }
+        if(*q=='"')toggle^=1;
+        q++;
+    }
+}
+void testlocal(char *p, char *command, void (*func)()){
+    int len=strlen(command);
+    if((strncasecmp(p,command,len)==0) && (strlen(p)==len || p[len]==' ' || p[len]=='\'')){
+        p+=len;
+        skipspace(p);
+        cmdline=GetTempMemory(STRINGSIZE);
+        stripcomment(p);
+        strcpy(cmdline,p);
+        (*func)();
+        memset(inpbuf,0,STRINGSIZE);
+        longjmp(mark, 1);												// jump back to the input prompt
+    }
 
+}
+void executelocal(char *p){
+    testlocal(p,"FILES",cmd_files);
+    testlocal(p,"UPDATE FIRMWARE",cmd_update);
+    testlocal(p,"NEW",cmd_new);
+    testlocal(p,"AUTOSAVE",cmd_autosave);
+}
 // takes a pointer to RAM containing a program (in clear text) and writes it to memory in tokenised format
 void SaveProgramToFlash(unsigned char *pm, int msg) {
     unsigned char *p, endtoken, fontnbr, prevchar = 0, buf[STRINGSIZE];
@@ -1837,7 +2103,7 @@ void SaveProgramToFlash(unsigned char *pm, int msg) {
         while(!(p[0] == 0 && p[1] == 0)) {
             FlashWriteByte(*p++); nbr++;
 
-            if((int)((char *)realflashpointer - (uint32_t)PROGSTART) >= Option.PROG_FLASH_SIZE - 5)  goto exiterror;
+            if((int)((char *)realflashpointer - (uint32_t)PROGSTART) >= MAX_PROG_SIZE - 5)  goto exiterror;
         }
         FlashWriteByte(0); nbr++;                              // terminate that line in flash
     }
@@ -1920,7 +2186,7 @@ void SaveProgramToFlash(unsigned char *pm, int msg) {
                             enable_interrupts();
                             error("Invalid hex word");
                          }
-                         if((int)((char *)realflashpointer - (uint32_t)PROGSTART) >= Option.PROG_FLASH_SIZE - 5) goto exiterror;
+                         if((int)((char *)realflashpointer - (uint32_t)PROGSTART) >= MAX_PROG_SIZE - 5) goto exiterror;
                          n = n << 4;
                          if(*p <= '9')
                              n |= (*p - '0');
@@ -1987,7 +2253,14 @@ void SaveProgramToFlash(unsigned char *pm, int msg) {
                  error("Cannot redefine fonts 1, 6, or 7");
              }
 
-             FlashWriteWord(fontnbr - 1);             // a low number (< FONT_TABLE_SIZE) marks the entry as a font
+             //FlashWriteWord(fontnbr - 1);                        // a low number (< FONT_TABLE_SIZE) marks the entry as a font
+             // B31 = 1 now marks entry as font.
+             FlashWriteByte(fontnbr - 1);
+             FlashWriteByte(0x00);  
+             FlashWriteByte(0x00);
+             FlashWriteByte(0x80);    
+           
+
              skipelement(p);                                     // go to the end of the command
              p--;
          } else {
@@ -2025,7 +2298,7 @@ void SaveProgramToFlash(unsigned char *pm, int msg) {
                             enable_interrupts();
                             error("Invalid hex word");
                          }
-                         if((int)((char *)realflashpointer - (uint32_t)PROGSTART) >= Option.PROG_FLASH_SIZE - 5) goto exiterror;
+                         if((int)((char *)realflashpointer - (uint32_t)PROGSTART) >= MAX_PROG_SIZE - 5) goto exiterror;
                          n = n << 4;
                          if(*p <= '9')
                              n |= (*p - '0');

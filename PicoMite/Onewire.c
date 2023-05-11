@@ -298,6 +298,7 @@ void owWrite(unsigned char *p) {
 	ExtCfg(pin, EXT_NOT_CONFIG, 0);									// set pin to unconfigured
 	PinSetBit(pin, LATSET);
 	PinSetBit(pin, ODCSET);
+    PinSetBit(pin, TRISCLR);                                        // this line added by JH
 
 	if (flag & 0x01) ow_reset(pin);
 	owWriteCore(pin, buf, len, flag);	
@@ -311,22 +312,16 @@ void owWrite(unsigned char *p) {
 }
 
 void owReadCore(int pin, int * buf, int len, int flag){
-	disable_interrupts();
-	for (int i = 0; i < len; i++) {
-		if (flag & 0x04) {
-			PinSetBit(pin, LATCLR);											// drive pin low
-			uSec(3);
-			PinSetBit(pin, LATSET);											// release the bus
-			PinSetBit(pin, TRISSET);										// set as input
-			uSec(10);
-			buf[i] = PinRead(pin);											// read pin
-			PinSetBit(pin, TRISCLR);										// set as output
-			uSec(53);														// wait 56uSec
-		} else {
-			buf[i] = ow_readByte(pin);
-		}
-	}
-	enable_interrupts();
+    disable_interrupts();
+    PinSetBit(pin, TRISCLR);          // set as output *** added this line
+    for (int i = 0; i < len; i++) {
+        if (flag & 0x04) {
+            buf[i] = ow_readBit(pin);
+        } else {
+            buf[i] = ow_readByte(pin);
+        }
+    }
+    enable_interrupts();
 }
 
 // read one wire data
@@ -598,20 +593,19 @@ void __not_in_flash_func(ow_writeBit)(int pin, int bit) {
 
 // note that the uSec() function will not time short delays at low clock speeds
 // so we directly use the core timer for short delays
-int ow_readBit(int pin) {
-	int result;
-
-	PinSetBit(pin, LATCLR);											// drive pin low
+int ow_readBit(int pin) { 
+    int result;
+    PinSetBit(pin, TRISCLR);                                        // set as output *** JH
+    PinSetBit(pin, LATCLR);                                         // drive pin low
     uSec(3);
-	PinSetBit(pin, TRISSET);										// set as input
-    PinSetBit(pin, LATSET);											// release the bus
+    PinSetBit(pin, TRISSET);                                        // set as input
+    PinSetBit(pin, LATSET);                                         // release the bus
     uSec(10);
-    result = PinRead(pin);											// read pin
-	PinSetBit(pin, TRISCLR);										// set as output
-	uSec(53);														// wait 56uSec
-	return result;
+    result = PinRead(pin);                                          // read pin 
+    // PinSetBit(pin, TRISCLR);
+    uSec(53);                                                       // wait 56uSec
+    return result;
 }
-
 
 #ifdef INCLUDE_1WIRE_SEARCH
 

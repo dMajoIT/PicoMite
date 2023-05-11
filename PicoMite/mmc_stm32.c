@@ -45,6 +45,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "hardware/irq.h"
 #include "hardware/spi.h"
 #include "hardware/i2c.h"
+#ifdef PICOMITEWEB
+#include "pico/cyw43_arch.h"
+#endif
 //#include "integer.h"
 int SPISpeed=0xFF;
 //#define SD_CS_PIN Option.SD_CS
@@ -53,6 +56,7 @@ int SPISpeed=0xFF;
 //define SPI_MISO_PIN Option.SYSTEM_MISO
 int SPI_CLK_PIN,SPI_MOSI_PIN,SPI_MISO_PIN;
 int SD_CLK_PIN,SD_MOSI_PIN,SD_MISO_PIN, SD_CS_PIN;
+int AUDIO_CLK_PIN,AUDIO_MOSI_PIN,AUDIO_MISO_PIN, AUDIO_CS_PIN, AUDIO_LDAC_PIN;
 #define CD	MDD_SDSPI_CardDetectState()	/* Card detected   (yes:true, no:false, default:true) */
 #define WP	MDD_SDSPI_WriteProtectState()		/* Write protected (yes:true, no:false, default:false) */
 /* SPI bit rate controls */
@@ -71,16 +75,43 @@ BYTE (*xchg_byte)(BYTE data_out)= NULL;
 void (*xmit_byte_multi)(const BYTE *buff, int cnt)= NULL;
 void (*rcvr_byte_multi)(BYTE *buff, int cnt)= NULL;
 int (*SET_SPI_CLK)(int speed, int polarity, int edge)=NULL;
-const int mapping[101]={0,4,11,18,25,33,41,49,57,66,75,84,93,103,113,123,134,145,156,167,179,191,203,216,228,241,255,268,
-282,296,311,325,340,355,371,387,403,419,436,453,470,487,505,523,541,560,578,597,617,636,656,676,
-697,718,738,760,781,803,825,847,870,893,916,940,963,987,1012,1036,1061,1086,1111,1137,1163,1189,1216,
-1242,1269,1297,1324,1352,1380,1408,1437,1466,1495,1525,1554,1584,1615,1645,1676,1707,1739,1770,1802,1834,1867,1900,1933,1966,2000};
+const int mapping[101]={
+	0,4,11,18,25,33,41,49,57,66,75,
+	84,93,103,113,123,134,145,156,167,179,
+	191,203,216,228,241,255,268,282,296,311,
+	325,340,355,371,387,403,419,436,453,470,
+	487,505,523,541,560,578,597,617,636,656,
+	676,697,718,738,760,781,803,825,847,870,
+	893,916,940,963,987,1012,1036,1061,1086,1111,
+	1137,1163,1189,1216,1242,1269,1297,1324,1352,1380,
+	1408,1437,1466,1495,1525,1554,1584,1615,1645,1676,
+	1707,1739,1770,1802,1834,1867,1900,1933,1966,2000
+	};
 int I2C0locked=0;
 int I2C1locked=0;
 int SPI0locked=0;
 int SPI1locked=0;
 int BacklightSlice=-1;
 int BacklightChannel=-1;
+extern const unsigned short whitenoise[2];
+int AUDIO_SPI;
+
+void __not_in_flash_func(DefaultAudio)(uint16_t left, uint16_t right){
+	pwm_set_both_levels(AUDIO_SLICE,(left*AUDIO_WRAP)>>12,(right*AUDIO_WRAP)>>12);
+}
+void __not_in_flash_func(SPIAudio)(uint16_t left, uint16_t right){
+	uint16_t l=0x7000 | left, r=0xF000 | right;
+	gpio_put(AUDIO_CS_PIN,GPIO_PIN_RESET);
+	spi_write16_blocking((AUDIO_SPI==1 ? spi0 : spi1),&r,1);
+	gpio_put(AUDIO_CS_PIN,GPIO_PIN_SET);
+	gpio_put(AUDIO_CS_PIN,GPIO_PIN_RESET);
+	spi_write16_blocking((AUDIO_SPI==1 ? spi0 : spi1),&l,1);
+	gpio_put(AUDIO_CS_PIN,GPIO_PIN_SET);
+
+	
+}
+void (*AudioOutput)(uint16_t left, uint16_t right) = (void (*)(uint16_t, uint16_t))DefaultAudio;
+
 /*--------------------------------------------------------------------------
 
    Module Private Functions
@@ -130,6 +161,7 @@ BYTE MDD_SDSPI_WriteProtectState(void)
 }
 void __not_in_flash_func(on_pwm_wrap)(void) {
 	static int repeatcount=1;
+	uint16_t left,right;
     // play a tone
     pwm_clear_irq(AUDIO_SLICE);
     if(CurrentlyPlaying == P_TONE){
@@ -138,30 +170,37 @@ void __not_in_flash_func(on_pwm_wrap)(void) {
             WAVcomplete = true;
         } else {
         	SoundPlay--;
-			pwm_set_both_levels(AUDIO_SLICE,
-			(((((SineTable[(int)PhaseAC_left]-2000)  * mapping[vol_left]) / 2000)+2000)*AUDIO_WRAP)>>12,
-			(((((SineTable[(int)PhaseAC_right]-2000)  * mapping[vol_right]) / 2000)+2000)*AUDIO_WRAP)>>12);
-        	PhaseAC_left = PhaseAC_left + PhaseM_left;
-        	PhaseAC_right = PhaseAC_right + PhaseM_right;
-        	if(PhaseAC_left>=4096.0)PhaseAC_left-=4096.0;
-        	if(PhaseAC_right>=4096.0)PhaseAC_right-=4096.0;
+			if(mono){
+				left=(((((SineTable[(int)PhaseAC_left]-2000)  * mapping[vol_left]) / 2000)+2000));
+				PhaseAC_left = PhaseAC_left + PhaseM_left;
+				if(PhaseAC_left>=4096.0)PhaseAC_left-=4096.0;
+				right=left;
+			} else {
+				left=(((((SineTable[(int)PhaseAC_left]-2000)  * mapping[vol_left]) / 2000)+2000));
+				right=(((((SineTable[(int)PhaseAC_right]-2000)  * mapping[vol_right]) / 2000)+2000));
+				PhaseAC_left = PhaseAC_left + PhaseM_left;
+				PhaseAC_right = PhaseAC_right + PhaseM_right;
+				if(PhaseAC_left>=4096.0)PhaseAC_left-=4096.0;
+				if(PhaseAC_right>=4096.0)PhaseAC_right-=4096.0;
+			}
         }
-    } else if(CurrentlyPlaying == P_WAV) {
+    } else if(CurrentlyPlaying == P_WAV  || CurrentlyPlaying == P_FLAC) {
 		if(--repeatcount)return;
 		repeatcount=audiorepeat;
         if(bcount[1]==0 && bcount[2]==0 && playreadcomplete==1){
     		pwm_set_irq_enabled(AUDIO_SLICE, false);
-        }
+       }
         if(swingbuf){ //buffer is primed
         	if(swingbuf==1)playbuff=(uint16_t *)sbuff1;
         	else playbuff=(uint16_t *)sbuff2;
         	if(CurrentlyPlaying == P_WAV && mono){
-				pwm_set_both_levels(AUDIO_SLICE,playbuff[ppos],playbuff[ppos]);
+				left=right=playbuff[ppos];
 				ppos++;
         	} else {
 				if(ppos<bcount[swingbuf]){
-				pwm_set_both_levels(AUDIO_SLICE,playbuff[ppos],playbuff[ppos+1]);
-				ppos+=2;
+					left=playbuff[ppos];
+					right=playbuff[ppos+1];
+					ppos+=2;
 				}
         	}
         	if(ppos==bcount[swingbuf]){
@@ -185,36 +224,86 @@ void __not_in_flash_func(on_pwm_wrap)(void) {
         	}
         }
     } else if(CurrentlyPlaying == P_SOUND) {
+    	static int noisedwellleft[MAXSOUNDS]={0}, noisedwellright[MAXSOUNDS]={0};
+    	static uint32_t noiseleft[MAXSOUNDS]={0}, noiseright[MAXSOUNDS]={0};
     	int i,j;
     	int leftv=0, rightv=0;
     	for(i=0;i<MAXSOUNDS;i++){ //first update the 8 sound pointers
-    		if(sound_mode_left[i]!=nulltable){
-				sound_PhaseAC_left[i] = sound_PhaseAC_left[i] + sound_PhaseM_left[i];
-				if(sound_PhaseAC_left[i]>=4096.0)sound_PhaseAC_left[i]-=4096.0;
-				j = (int)sound_mode_left[i][(int)sound_PhaseAC_left[i]];
-				j= (j-2000)*mapping[sound_v_left[i]]/2000;
-				leftv+=j;
-    		}
-    		if(sound_mode_right[i]!=nulltable){
-				sound_PhaseAC_right[i] = sound_PhaseAC_right[i] + sound_PhaseM_right[i];
-				if(sound_PhaseAC_right[i]>=4096.0)sound_PhaseAC_right[i]-=4096.0;
-				j = (int)sound_mode_right[i][(int)sound_PhaseAC_right[i]];
-				j= (j-2000)*mapping[sound_v_right[i]]/2000;
-				rightv += j;
-   			}
+			if(monosound[i]){
+				if(sound_mode_left[i]!=nulltable){
+					if(sound_mode_left[i]!=whitenoise){
+						sound_PhaseAC_left[i] = sound_PhaseAC_left[i] + sound_PhaseM_left[i];
+						if(sound_PhaseAC_left[i]>=4096.0)sound_PhaseAC_left[i]-=4096.0;
+						j = (int)sound_mode_left[i][(int)sound_PhaseAC_left[i]];
+						j= (j-2000)*mapping[sound_v_left[i]]/2000;
+						leftv+=j;
+					} else {
+						if(noisedwellleft[i]<=0){
+							noisedwellleft[i]=sound_PhaseM_left[i];
+							noiseleft[i]=rand() % 3800+100;
+						}
+						if(noisedwellleft[i])noisedwellleft[i]--;
+						j = (int)noiseleft[i];
+						j= (j-2000)*mapping[sound_v_left[i]]/2000;
+						leftv+=j;
+					}
+				if(monosound[i]==1)rightv+=j;
+				else rightv-=j;
+				}
+			} else {
+				if(sound_mode_left[i]!=nulltable){
+					if(sound_mode_left[i]!=whitenoise){
+						sound_PhaseAC_left[i] = sound_PhaseAC_left[i] + sound_PhaseM_left[i];
+						if(sound_PhaseAC_left[i]>=4096.0)sound_PhaseAC_left[i]-=4096.0;
+						j = (int)sound_mode_left[i][(int)sound_PhaseAC_left[i]];
+						j= (j-2000)*mapping[sound_v_left[i]]/2000;
+						leftv+=j;
+					} else {
+						if(noisedwellleft[i]<=0){
+							noisedwellleft[i]=sound_PhaseM_left[i];
+							noiseleft[i]=rand() % 3800+100;
+						}
+						if(noisedwellleft[i])noisedwellleft[i]--;
+						j = (int)noiseleft[i];
+						j= (j-2000)*mapping[sound_v_left[i]]/2000;
+						leftv+=j;
+					}
+				}
+				if(sound_mode_right[i]!=nulltable){
+					if(sound_mode_right[i]!=whitenoise){
+						sound_PhaseAC_right[i] = sound_PhaseAC_right[i] + sound_PhaseM_right[i];
+						if(sound_PhaseAC_right[i]>=4096.0)sound_PhaseAC_right[i]-=4096.0;
+						j = (int)sound_mode_right[i][(int)sound_PhaseAC_right[i]];
+						j= (j-2000)*mapping[sound_v_right[i]]/2000;
+						rightv += j;
+					}  else {
+						if(noisedwellright[i]<=0){
+							noisedwellright[i]=sound_PhaseM_right[i];
+							noiseright[i]=rand() % 3800+100;
+						}
+						if(noisedwellright[i])noisedwellright[i]--;
+						j = (int)noiseright[i];
+						j= (j-2000)*mapping[sound_v_right[i]]/2000;
+						rightv+=j;
+					}
+				}
+			}
     	}
-		leftv+=2000;
-		rightv+=2000;
-		leftv=(leftv*AUDIO_WRAP)>>12;
-		rightv=(rightv*AUDIO_WRAP)>>12;
-		pwm_set_both_levels(AUDIO_SLICE,leftv,rightv);
+		left=leftv+2000;
+		right=rightv+2000;
+    } else if(CurrentlyPlaying == P_STOP) {
+		return;
     } else {
-        // play must be paused
-		pwm_set_both_levels(AUDIO_SLICE,AUDIO_WRAP>>1,AUDIO_WRAP>>1);
+		left=right=AUDIO_WRAP>>1;
     }
+	AudioOutput(left,right);
 }
 
+#ifdef PICOMITEVGA
 void __not_in_flash_func(BitBangSendSPI)(const BYTE *buff, int cnt){
+#else
+void BitBangSendSPI(const BYTE *buff, int cnt){
+#endif
 	int i, SPICount;
 	BYTE SPIData;
     if(SD_SPI_SPEED==SD_SLOW_SPI_SPEED){
@@ -265,7 +354,11 @@ void __not_in_flash_func(BitBangSendSPI)(const BYTE *buff, int cnt){
     	}
 	}
 }
+#ifdef PICOMITEVGA
 void __not_in_flash_func(BitBangReadSPI)(BYTE *buff, int cnt){
+#else
+void BitBangReadSPI(BYTE *buff, int cnt){
+#endif
 	int i, SPICount;
 	BYTE SPIData;
 	gpio_put(SD_CLK_PIN,GPIO_PIN_RESET);
@@ -314,7 +407,11 @@ void __not_in_flash_func(BitBangReadSPI)(BYTE *buff, int cnt){
     }
 }
 
+#ifdef PICOMITEVGA
 BYTE __not_in_flash_func(BitBangSwapSPI)(BYTE data_out){
+#else
+BYTE BitBangSwapSPI(BYTE data_out){
+#endif
 	BYTE data_in=0;
 	int SPICount;
 	if(SD_SPI_SPEED==SD_SLOW_SPI_SPEED){
@@ -456,7 +553,11 @@ int wait_ready (void)
 /*-----------------------------------------------------------------------*/
 
 static
+#ifdef PICOMITEVGA
 void __not_in_flash_func(deselect)(void)
+#else
+void deselect(void)
+#endif
 {
 //	asm("NOP");asm("NOP");//asm("NOP");
 	gpio_put(SD_CS_PIN,GPIO_PIN_SET);
@@ -471,7 +572,12 @@ void __not_in_flash_func(deselect)(void)
 /*-----------------------------------------------------------------------*/
 
 
+static
+#ifdef PICOMITEVGA
 int __not_in_flash_func(selectSD)(void)	/* 1:Successful, 0:Timeout */
+#else
+int selectSD(void)	/* 1:Successful, 0:Timeout */
+#endif
 {
 	if(SD_SPI_SPEED==SD_SLOW_SPI_SPEED)	SPISpeedSet(SDSLOW);
 	else SPISpeedSet(SDFAST);
@@ -492,7 +598,12 @@ int __not_in_flash_func(selectSD)(void)	/* 1:Successful, 0:Timeout */
 /*-----------------------------------------------------------------------*/
 
 
+static
+#ifdef PICOMITEVGA
 int __not_in_flash_func(rcvr_datablock)(	/* 1:OK, 0:Failed */
+#else
+int rcvr_datablock(	/* 1:OK, 0:Failed */
+#endif
 	BYTE *buff,			/* Data buffer to store received data */
 	UINT btr			/* Byte count (must be multiple of 4) */
 )
@@ -522,7 +633,12 @@ int __not_in_flash_func(rcvr_datablock)(	/* 1:OK, 0:Failed */
 
 
 
+static
+#ifdef PICOMITEVGA
 int __not_in_flash_func(xmit_datablock)(	/* 1:OK, 0:Failed */
+#else
+int xmit_datablock(	/* 1:OK, 0:Failed */
+#endif
 	const BYTE *buff,	/* 512 byte data block to be transmitted */
 	BYTE token			/* Data token */
 )
@@ -699,7 +815,11 @@ DSTATUS disk_initialize (
 /* Read Sector(s)                                                        */
 /*-----------------------------------------------------------------------*/
 
+#ifdef PICOMITEVGA
 DRESULT __not_in_flash_func(disk_read)(BYTE pdrv, BYTE* buff, LBA_t sector, UINT count)
+#else
+DRESULT disk_read(BYTE pdrv, BYTE* buff, LBA_t sector, UINT count)
+#endif
 {
 	if (pdrv || !count) return RES_PARERR;
 	if (SDCardStat & STA_NOINIT) return RES_NOTRDY;
@@ -732,7 +852,11 @@ DRESULT __not_in_flash_func(disk_read)(BYTE pdrv, BYTE* buff, LBA_t sector, UINT
 /*-----------------------------------------------------------------------*/
 
 
+#ifdef PICOMITEVGA
 DRESULT __not_in_flash_func(disk_write)(BYTE pdrv, const BYTE* buff, LBA_t sector, UINT count)
+#else
+DRESULT disk_write(BYTE pdrv, const BYTE* buff, LBA_t sector, UINT count)
+#endif
 {
 	if (pdrv || !count) return RES_PARERR;
 	if (SDCardStat & STA_NOINIT) return RES_NOTRDY;
@@ -769,7 +893,11 @@ DRESULT __not_in_flash_func(disk_write)(BYTE pdrv, const BYTE* buff, LBA_t secto
 /*-----------------------------------------------------------------------*/
 
 
+#ifdef PICOMITEVGA
 DRESULT __not_in_flash_func(disk_ioctl)(
+#else
+DRESULT disk_ioctl(
+#endif
 	BYTE pdrv,		/* Physical drive nmuber (0) */
 	BYTE cmd,		/* Control code */
 	void *buff		/* Buffer to send/receive data block */
@@ -923,7 +1051,7 @@ void InitReservedIO(void) {
 		ExtCfg(26, EXT_BOOT_RESERVED, 0);
 		ExtCfg(27, EXT_BOOT_RESERVED, 0);
 #else
-	if(Option.DISPLAY_TYPE>=SSDPANEL){
+	if(Option.DISPLAY_TYPE>=SSDPANEL && Option.DISPLAY_TYPE<VIRTUAL){
 		ExtCfg(SSD1963_DC_PIN, EXT_BOOT_RESERVED, 0);gpio_init(SSD1963_DC_GPPIN);gpio_put(SSD1963_DC_GPPIN,GPIO_PIN_SET);gpio_set_dir(SSD1963_DC_GPPIN, GPIO_OUT);
 		ExtCfg(SSD1963_RESET_PIN, EXT_BOOT_RESERVED, 0);gpio_init(SSD1963_RESET_GPPIN);gpio_put(SSD1963_RESET_GPPIN,GPIO_PIN_SET);gpio_set_dir(SSD1963_RESET_GPPIN, GPIO_OUT);
 		ExtCfg(SSD1963_WR_PIN, EXT_BOOT_RESERVED, 0);gpio_init(SSD1963_WR_GPPIN);gpio_put(SSD1963_WR_GPPIN,GPIO_PIN_SET);gpio_set_dir(SSD1963_WR_GPPIN, GPIO_OUT);
@@ -1109,24 +1237,30 @@ void InitReservedIO(void) {
 		gpio_set_function(PinDef[Option.SYSTEM_I2C_SDA].GPno, GPIO_FUNC_I2C);
 		if(PinDef[Option.SYSTEM_I2C_SDA].mode & I2C0SDA){
 			I2C0locked=1;
-			i2c_init(i2c0, 100000);
+			i2c_init(i2c0,(Option.SYSTEM_I2C_SLOW ? 100000:400000));
 			gpio_pull_up(PinDef[Option.SYSTEM_I2C_SCL].GPno);
 			gpio_pull_up(PinDef[Option.SYSTEM_I2C_SDA].GPno);
 			I2C_enabled=1;
 			I2C0SDApin=Option.SYSTEM_I2C_SDA;
 			I2C0SCLpin=Option.SYSTEM_I2C_SCL;
-			I2C_Timeout=100;
+			I2C_Timeout=500;
 		} else {
 			I2C1locked=1;
-			i2c_init(i2c1, 100000);
+			i2c_init(i2c1,(Option.SYSTEM_I2C_SLOW ? 100000:400000));
 			gpio_pull_up(PinDef[Option.SYSTEM_I2C_SCL].GPno);
 			gpio_pull_up(PinDef[Option.SYSTEM_I2C_SDA].GPno);
 			I2C2_enabled=1;	
 			I2C1SDApin=Option.SYSTEM_I2C_SDA;
 			I2C1SCLpin=Option.SYSTEM_I2C_SCL;
-			I2C2_Timeout=100;
+			I2C2_Timeout=500;
 		}
 		if(Option.RTC)RtcGetTime(1);
+		if(Option.KeyboardConfig==CONFIG_I2C){
+			CheckI2CKeyboard(1,0);
+			uSec(2000);
+			CheckI2CKeyboard(1,1);
+			uSec(2000);
+		}
 	}
 	if(Option.SYSTEM_CLK){
 		SPI_CLK_PIN=PinDef[Option.SYSTEM_CLK].GPno;
@@ -1201,20 +1335,63 @@ void InitReservedIO(void) {
 			SD_MISO_PIN=SPI_MISO_PIN;
 		}
 	}
-	if(Option.AUDIO_L){ //enable the audio system
-		ExtCfg(Option.AUDIO_L, EXT_BOOT_RESERVED, 0);
-		ExtCfg(Option.AUDIO_R, EXT_BOOT_RESERVED, 0);
-		AUDIO_L_PIN=PinDef[Option.AUDIO_L].GPno;
-		AUDIO_R_PIN=PinDef[Option.AUDIO_R].GPno;
-		AUDIO_SLICE=Option.AUDIO_SLICE;
-		gpio_set_function(AUDIO_L_PIN, GPIO_FUNC_PWM);
-		gpio_set_function(AUDIO_R_PIN, GPIO_FUNC_PWM);
-		gpio_set_slew_rate(AUDIO_L_PIN, GPIO_SLEW_RATE_SLOW);
-		gpio_set_slew_rate(AUDIO_R_PIN, GPIO_SLEW_RATE_SLOW);
+	if(Option.AUDIO_L || Option.AUDIO_CLK_PIN){ //enable the audio system
+		if(Option.AUDIO_L){
+			ExtCfg(Option.AUDIO_L, EXT_BOOT_RESERVED, 0);
+			ExtCfg(Option.AUDIO_R, EXT_BOOT_RESERVED, 0);
+			AUDIO_L_PIN=PinDef[Option.AUDIO_L].GPno;
+			AUDIO_R_PIN=PinDef[Option.AUDIO_R].GPno;
+			AUDIO_SLICE=Option.AUDIO_SLICE;
+			gpio_set_function(AUDIO_L_PIN, GPIO_FUNC_PWM);
+			gpio_set_function(AUDIO_R_PIN, GPIO_FUNC_PWM);
+			gpio_set_slew_rate(AUDIO_L_PIN, GPIO_SLEW_RATE_SLOW);
+			gpio_set_slew_rate(AUDIO_R_PIN, GPIO_SLEW_RATE_SLOW);
+		} else {
+			AUDIO_SLICE=Option.AUDIO_SLICE;
+			ExtCfg(Option.AUDIO_CS_PIN, EXT_BOOT_RESERVED, 0);
+			AUDIO_CS_PIN=PinDef[Option.AUDIO_CS_PIN].GPno;
+//
+			gpio_init(AUDIO_CS_PIN);
+			gpio_set_drive_strength(AUDIO_CS_PIN,GPIO_DRIVE_STRENGTH_12MA);
+			gpio_put(AUDIO_CS_PIN,GPIO_PIN_SET);
+			gpio_set_dir(AUDIO_CS_PIN, GPIO_OUT);
+			gpio_set_slew_rate(AUDIO_CS_PIN, GPIO_SLEW_RATE_SLOW);
+//
+			AUDIO_CLK_PIN=PinDef[Option.AUDIO_CLK_PIN].GPno;
+			AUDIO_MOSI_PIN=PinDef[Option.AUDIO_MOSI_PIN].GPno;
+			ExtCfg(Option.AUDIO_CLK_PIN, EXT_BOOT_RESERVED, 0);
+			ExtCfg(Option.AUDIO_MOSI_PIN, EXT_BOOT_RESERVED, 0);
+			if(PinDef[Option.AUDIO_CLK_PIN].mode & SPI0SCK && PinDef[Option.AUDIO_MOSI_PIN].mode & SPI0TX){
+				SPI0locked=1;
+				AUDIO_SPI=1;
+			} else if(PinDef[Option.AUDIO_CLK_PIN].mode & SPI1SCK && PinDef[Option.AUDIO_MOSI_PIN].mode & SPI1TX){
+				SPI1locked=1;
+				AUDIO_SPI=2;
+			} 
+			gpio_init(AUDIO_CLK_PIN);
+			gpio_set_drive_strength(AUDIO_CLK_PIN,GPIO_DRIVE_STRENGTH_12MA);
+			gpio_put(AUDIO_CLK_PIN,GPIO_PIN_RESET);
+			gpio_set_dir(AUDIO_CLK_PIN, GPIO_OUT);
+			gpio_set_slew_rate(AUDIO_CLK_PIN, GPIO_SLEW_RATE_FAST);
+			gpio_set_function(AUDIO_CLK_PIN, GPIO_FUNC_SPI);
+			gpio_set_drive_strength(AUDIO_MOSI_PIN,GPIO_DRIVE_STRENGTH_12MA);
+			gpio_put(AUDIO_MOSI_PIN,GPIO_PIN_RESET);
+			gpio_set_dir(AUDIO_MOSI_PIN, GPIO_OUT);
+			gpio_set_slew_rate(AUDIO_MOSI_PIN, GPIO_SLEW_RATE_FAST);
+			gpio_set_function(AUDIO_MOSI_PIN, GPIO_FUNC_SPI);
+        	spi_init((AUDIO_SPI==1 ? spi0 : spi1), 16000000);
+        	spi_set_format((AUDIO_SPI==1 ? spi0 : spi1), 16, true, true, SPI_MSB_FIRST);
+		}
         AUDIO_WRAP=(Option.CPU_Speed*10)/441  - 1 ;
 		pwm_set_wrap(AUDIO_SLICE, AUDIO_WRAP);
-        pwm_set_chan_level(AUDIO_SLICE, PWM_CHAN_A, AUDIO_WRAP>>1);
-        pwm_set_chan_level(AUDIO_SLICE, PWM_CHAN_B, AUDIO_WRAP>>1);
+		if(Option.AUDIO_L){
+			pwm_set_chan_level(AUDIO_SLICE, PWM_CHAN_A, AUDIO_WRAP>>1);
+			pwm_set_chan_level(AUDIO_SLICE, PWM_CHAN_B, AUDIO_WRAP>>1);
+			AudioOutput=DefaultAudio;
+		} else {
+			AudioOutput=SPIAudio;
+		}
+		AudioOutput(2000,2000);
 	    pwm_clear_irq(AUDIO_SLICE);
 //    	pwm_set_irq_enabled(AUDIO_SLICE, true);
     	irq_set_exclusive_handler(PWM_IRQ_WRAP, on_pwm_wrap);
@@ -1222,30 +1399,37 @@ void InitReservedIO(void) {
 		irq_set_priority(PWM_IRQ_WRAP,255);
 		pwm_set_enabled(AUDIO_SLICE, true);
 	}
-	if(Option.PWM){
-		gpio_init(23);
-		gpio_put(23,GPIO_PIN_SET);
-		gpio_set_dir(23, GPIO_OUT);
-	} else {
-		gpio_init(23);
-		gpio_put(23,GPIO_PIN_RESET);
-		gpio_set_dir(23, GPIO_OUT);
+#ifndef PICOMITEWEB
+	if(!Option.AUDIO_CS_PIN){
+		if(Option.PWM){
+			if(CheckPin(41, CP_NOABORT | CP_IGNORE_INUSE | CP_IGNORE_RESERVED)){
+				gpio_init(23);
+				gpio_put(23,GPIO_PIN_SET);
+				gpio_set_dir(23, GPIO_OUT);
+			}
+		} else {
+			if(CheckPin(41, CP_NOABORT | CP_IGNORE_INUSE | CP_IGNORE_RESERVED)){
+				gpio_init(23);
+				gpio_put(23,GPIO_PIN_RESET);
+				gpio_set_dir(23, GPIO_OUT);
+			}
+		}
 	}
+#endif
 	if(Option.SerialConsole){
-//		printf("here\r\n");
 		ExtCfg(Option.SerialTX, EXT_BOOT_RESERVED, 0);
 		ExtCfg(Option.SerialRX, EXT_BOOT_RESERVED, 0);
 		gpio_set_function(PinDef[Option.SerialTX].GPno, GPIO_FUNC_UART);
 		gpio_set_function(PinDef[Option.SerialRX].GPno, GPIO_FUNC_UART);		
-		uart_init(Option.SerialConsole==1 ? uart0: uart1, Option.Baudrate);
-		uart_set_hw_flow(Option.SerialConsole==1 ? uart0: uart1, false, false);
-		uart_set_format(Option.SerialConsole==1 ? uart0: uart1, 8, 1, UART_PARITY_NONE);
-		uart_set_fifo_enabled(Option.SerialConsole==1 ? uart0: uart1,  false);
-		irq_set_exclusive_handler(Option.SerialConsole==1 ? UART0_IRQ : UART1_IRQ, Option.SerialConsole==1 ? on_uart_irq0 : on_uart_irq1);
-		irq_set_enabled(Option.SerialConsole==1 ? UART0_IRQ : UART1_IRQ, true);
-		uart_set_irq_enables(Option.SerialConsole==1 ? uart0: uart1, true, false);
+		uart_init((Option.SerialConsole & 3)==1 ? uart0: uart1, Option.Baudrate);
+		uart_set_hw_flow((Option.SerialConsole & 3)==1 ? uart0: uart1, false, false);
+		uart_set_format((Option.SerialConsole & 3)==1  ? uart0: uart1, 8, 1, UART_PARITY_NONE);
+		uart_set_fifo_enabled((Option.SerialConsole & 3)==1 ? uart0: uart1,  false);
+		irq_set_exclusive_handler((Option.SerialConsole & 3)==1 ? UART0_IRQ : UART1_IRQ, (Option.SerialConsole & 3)==1 ? on_uart_irq0 : on_uart_irq1);
+		irq_set_enabled((Option.SerialConsole & 3)==1  ? UART0_IRQ : UART1_IRQ, true);
+		uart_set_irq_enables((Option.SerialConsole & 3)==1  ? uart0: uart1, true, false);
 	}
-	if(Option.KeyboardConfig!=NO_KEYBOARD){
+	if(!(Option.KeyboardConfig==NO_KEYBOARD || Option.KeyboardConfig==CONFIG_I2C)){
 		ExtCfg(KEYBOARD_CLOCK, EXT_BOOT_RESERVED, 0);
     	ExtCfg(KEYBOARD_DATA, EXT_BOOT_RESERVED, 0);
 		gpio_init(PinDef[KEYBOARD_CLOCK].GPno);
@@ -1255,7 +1439,6 @@ void InitReservedIO(void) {
 		gpio_init(PinDef[KEYBOARD_DATA].GPno);
 		gpio_set_pulls(PinDef[KEYBOARD_DATA].GPno,true,false);
 		gpio_set_dir(PinDef[KEYBOARD_DATA].GPno, GPIO_IN);
-//		gpio_set_input_hysteresis_enabled(PinDef[KEYBOARD_DATA].GPno,true);
 	}
 }
 

@@ -66,7 +66,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 
 #ifndef AUDIO_HEADER
 #define AUDIO_HEADER
-typedef enum { P_NOTHING, P_PAUSE_TONE, P_TONE, P_PAUSE_SOUND, P_SOUND, P_WAV, P_PAUSE_WAV, P_FLAC, P_MP3, P_PAUSE_FLAC, P_PAUSE_MP3} e_CurrentlyPlaying;
+typedef enum { P_NOTHING, P_PAUSE_TONE, P_TONE, P_PAUSE_SOUND, P_SOUND, P_WAV, P_PAUSE_WAV, P_FLAC, P_MP3, P_PAUSE_FLAC, P_PAUSE_MP3, P_STOP} e_CurrentlyPlaying;
 extern volatile e_CurrentlyPlaying CurrentlyPlaying; 
 extern char *WAVInterrupt;
 extern int WAVcomplete;
@@ -97,9 +97,12 @@ extern volatile float PhaseAC_left, PhaseAC_right;
 extern volatile int swingbuf,nextbuf, playreadcomplete;
 extern volatile int mono;
 extern volatile int audiorepeat;
+extern int PWM_FREQ;
+extern void (*AudioOutput)(uint16_t left, uint16_t right);
+extern volatile int monosound[MAXSOUNDS];
 typedef struct sa_flist {
     char fn[FF_MAX_LFN];
 } a_flist;
-
+extern a_flist *alist;
 #endif
 #endif

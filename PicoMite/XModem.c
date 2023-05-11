@@ -53,23 +53,35 @@ void cmd_xmodem(void) {
     if(*cmdline == 0 || *cmdline == '\'') {
         // no file name, so this is a transfer to/from program memory
         if(CurrentLinePtr) error("Invalid in a program");
+        if(Option.DISPLAY_TYPE>=VIRTUAL && WriteBuf)FreeMemorySafe((void **)&WriteBuf);
         if(rcv)ClearProgram();                                             // we need all the RAM
-        else ClearVars(0);
+        else {
+            if(FrameBuf)FreeMemory(FrameBuf);
+            FrameBuf=NULL;
+            if(LayerBuf)FreeMemory(FrameBuf);
+            LayerBuf=NULL;
+            CloseAudio(1);
+            ClearVars(0);
+        }
         buf = GetTempMemory(EDIT_BUFFER_SIZE);
         if(rcv) {
             xmodemReceive(buf, EDIT_BUFFER_SIZE, 0, crunch);
             ClearSavedVars();                                       // clear any saved variables
             SaveProgramToFlash(buf, true);
         } else {
+            int nbrlines = 0;
             // we must copy program memory into RAM expanding tokens as we go
             fromp  = ProgMemory;
             p = buf;                                                // the RAM buffer
             while(1) {
                 if(*fromp == T_NEWLINE) {
                     fromp = llist(p, fromp);                        // expand the line into the buffer
-                    p += strlen(p);
-                    if(p - buf + 40 > EDIT_BUFFER_SIZE) error("Not enough memory");
-                    *p++ = '\n'; *p = 0;                            // terminate that line
+                    nbrlines++;
+                    if(!(nbrlines==1 && p[0]=='\'' && p[1]=='#')){
+                        p += strlen(p);
+                        if((p - buf) > (EDIT_BUFFER_SIZE - STRINGSIZE)) error("Not enough memory");
+                        *p++ = '\n'; *p = 0;                            // terminate that line
+                    }
                 }
                 if(fromp[0] == 0 || fromp[0] == 0xff) break;        // finally, is it the end of the program?
             }
@@ -81,7 +93,7 @@ void cmd_xmodem(void) {
         if(crunch) error("Invalid command");
         if(!InitSDCard()) return;
         fnbr = FindFreeFileNbr();
-        fname = getCstring(cmdline);                                // get the file name
+        fname = getFstring(cmdline);                                // get the file name
 
         if(rcv) {
             if(!BasicFileOpen(fname, fnbr, FA_WRITE | FA_CREATE_ALWAYS)) return;
@@ -93,6 +105,7 @@ void cmd_xmodem(void) {
         FileClose(fnbr);
     }
     BreakKey = BreakKeySave;
+    cmd_end();
 }
 
 
@@ -157,7 +170,11 @@ static int check(const unsigned char *buf, int sz)
 
 static void flushinput(void)
 {
-  while (_inbyte(((DLY_1S)*3)>>1) >= 0);
+  while (_inbyte(((DLY_1S)*3)>>1) >= 0)
+#ifdef PICOMITEWEB
+  ProcessWeb()
+#endif
+  ;
 }
 
 
@@ -191,7 +208,7 @@ void xmodemReceive(char *sp, int maxbytes, int fnbr, int crunch) {
                     return;                                         // no more data
                 case CAN:
                     flushinput();
-                    MMputchar(ACK,1);;
+                    MMputchar(ACK,1);
                     error("Cancelled by remote");
                     break;
                 default:

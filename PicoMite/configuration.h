@@ -23,36 +23,52 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 
 ************************************************************************************************************************/#ifndef __CONFIGURATION_H
 #define __CONFIGURATION_H
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define FLASH_TARGET_OFFSET (1024 * 1024) 
 #ifdef PICOMITEVGA
-#define MagicKey 0x6755DDF4
-#define HEAPTOP 0x2003f800
-#else
-#define MagicKey 0x865533E7
-#define HEAPTOP 0x2003f800
+#define MAXVARS             512                     // 8 + MAXVARLEN + MAXDIM * 2  (ie, 56 bytes) - these do not incl array members
+#define FLASH_TARGET_OFFSET (704 * 1024) 
+#define MagicKey 0x25758342
+#define HEAPTOP 0x2003f000
+#define HEAP_MEMORY_SIZE (100*1024) 
+#define MAX_CPU     378000
+#define MIN_CPU     126000
+#define MAXSUBFUN           256                     // each entry takes up 4 bytes
 #endif
+#ifdef PICOMITEWEB
+#include "lwipopts_examples_common.h"
+#define MAXVARS             480                    // 8 + MAXVARLEN + MAXDIM * 2  (ie, 56 bytes) - these do not incl array members
+#define FLASH_TARGET_OFFSET (1024 * 1024) 
+#define MagicKey 0x28137327
+#define HEAPTOP 0x2003fc00
+#define HEAP_MEMORY_SIZE (80*1024) 
+#define MaxPcb 8
+#define MAX_CPU     378000
+#define MIN_CPU     64000
+#define MAXSUBFUN           256                     // each entry takes up 4 bytes
+#endif
+#ifdef PICOMITE
+#define MAXVARS             512                     // 8 + MAXVARLEN + MAXDIM * 2  (ie, 56 bytes) - these do not incl array members
+#define FLASH_TARGET_OFFSET (704 * 1024) 
+#define MagicKey 0x47421427
+#define HEAPTOP 0x2003c700
+#define HEAP_MEMORY_SIZE (124*1024) 
+#define MAX_CPU     378000
+#define MIN_CPU     48000
+#define MAXSUBFUN           256                     // each entry takes up 4 bytes
+#endif
+
 
 #define MMFLOAT double
 #define FLOAT3D float
 #define sqrt3d sqrtf
 #define round3d roundf
 #define fabs3d fabsf
-#ifdef PICOMITEVGA
-#define ALL_MEMORY_SIZE (172*1024) 
-#define HEAP_MEMORY_SIZE (100*1024) 
-#else
-#define ALL_MEMORY_SIZE (176*1024) 
-#define HEAP_MEMORY_SIZE (120*1024) 
-#endif
 #define MAX_PROG_SIZE HEAP_MEMORY_SIZE
 #define SAVEDVARS_FLASH_SIZE 16384
 #define FLASH_ERASE_SIZE 4096
-#define MAXFLASHSLOTS ((((1024*1024)-FLASH_ERASE_SIZE-SAVEDVARS_FLASH_SIZE)/MAX_PROG_SIZE)-1)
-#define MAXVARS             512                     // 8 + MAXVARLEN + MAXDIM * 2  (ie, 56 bytes) - these do not incl array members
+#define MAXFLASHSLOTS 4
 #define MAXVARHASH				MAXVARS/2
 
 // more static memory allocations (less important)
@@ -61,15 +77,18 @@ extern "C" {
 #define MAXGOSUB            50                     // each entry uses 4 bytes
 #define MAX_MULTILINE_IF    20                      // each entry uses 8 bytes
 #define MAXTEMPSTRINGS      64                      // each entry takes up 4 bytes
-#define MAXSUBFUN           224               // each entry takes up 4 bytes
 #define MAXSUBHASH          MAXSUBFUN
 // operating characteristics
 #define MAXVARLEN           32                      // maximum length of a variable name
 #define MAXSTRLEN           255                     // maximum length of a string
 #define STRINGSIZE          256                     // must be 1 more than MAXSTRLEN.  2 of these buffers are staticaly created
 #define MAXOPENFILES        10                      // maximum number of open files
-#define MAXDIM              5                       // maximum nbr of dimensions to an array
+#define MAXDIM              6                       // maximum nbr of dimensions to an array
+#ifdef PICOMITEWEB
+#define CONSOLE_RX_BUF_SIZE TCP_MSS
+#else
 #define CONSOLE_RX_BUF_SIZE 256
+#endif
 #define CONSOLE_TX_BUF_SIZE 256
 #define MAXOPENFILES  10
 #define MAXCOMPORTS 2
@@ -80,23 +99,28 @@ extern "C" {
 // each entry uses zero bytes.  The number is limited by the length of a command line
 #define MAX_ARG_COUNT       50
 #define STR_AUTO_PRECISION  999 
+#define STR_FLOAT_PRECISION  998 
 #define STR_SIG_DIGITS 9                            // number of significant digits to use when converting MMFLOAT to a string
+#define STR_FLOAT_DIGITS 6                            // number of significant digits to use when converting MMFLOAT to a string
 #define NBRSETTICKS         4                       // the number of SETTICK interrupts available
+#ifndef PICOMITEWEB
 #define NBRPINS             44
+#else
+#define NBRPINS             40
+#endif
 #define MAXPROMPTLEN        49                      // max length of a prompt incl the terminating null
 #define BREAK_KEY           3                       // the default value (CTRL-C) for the break key.  Reset at the command prompt.
 #define FNV_prime           16777619
 #define FNV_offset_basis    2166136261
 #define use_hash
 #define DISKCHECKRATE       500                    //check for removal of SDcard every 500mSec
-#define EDIT_BUFFER_SIZE    Option.HEAP_SIZE-1024-3*HRes// this is the maximum RAM that we can get
+#define EDIT_BUFFER_SIZE    HEAP_MEMORY_SIZE-1024-3*HRes// this is the maximum RAM that we can get
 #define SCREENWIDTH     80
 #define SCREENHEIGHT    24                          // this is the default and it can be changed using the OPTION command
 #define CONSOLE_BAUDRATE        115200               // only applies to the serial console
 #define MAXCFUNCTION	20
 #define SAVEDVARS_FLASH_SIZE 16384
 #define FLASH_ERASE_SIZE 4096
-#define MAX_CPU     378000
 #define MAX3D   8
 #define MAXCAM  3
 #define MAX_POLYGON_VERTICES 10
@@ -136,17 +160,29 @@ extern "C" {
 #define PWM5A     (1 << 28)
 #define PWM5B     (1 << 29)
 #define PWM6A     (1 << 30)
-#define PWM6B     (1 << 31)
+#define PWM6B     2147483648
 #define PWM7A     4294967296
 #define PWM7B     8589934592
 #define MAXCOLLISIONS 4
 #define MAXLAYER   4
+#define MAXCONTROLS 200
 //#define DO_NOT_RESET (1 << 5)
 //#define HEARTBEAT    (1 << 6)
 #define HEARTBEATpin  43
 #define PATH_MAX 1024
+// QVGA PIO and state machines
+#define QVGA_PIO	pio0	// QVGA PIO
+#define QVGA_SM		0	// QVGA state machine
+
+// QVGA DMA channel
+#define QVGA_DMA_CB	0	// DMA control block of base layer
+#define QVGA_DMA_PIO	1	// DMA copy data to PIO (raises IRQ0 on quiet)
+#define ADC_DMA 2
+#define PIO_RX_DMA 3
+#define PIO_TX_DMA 4
 #define PROGSTART (FLASH_TARGET_OFFSET + FLASH_ERASE_SIZE + SAVEDVARS_FLASH_SIZE + ((MAXFLASHSLOTS) * MAX_PROG_SIZE))
 #define TOP_OF_SYSTEM_FLASH  (FLASH_TARGET_OFFSET + FLASH_ERASE_SIZE + SAVEDVARS_FLASH_SIZE + ((MAXFLASHSLOTS+1) * MAX_PROG_SIZE))
+#define RoundUpK4(a)     (((a) + (4096 - 1)) & (~(4096 - 1)))// round up to the nearest page size      [position 131:9]	
 #ifdef __cplusplus
 }
 #endif

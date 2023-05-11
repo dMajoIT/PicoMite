@@ -110,7 +110,7 @@ void ConfigDisplaySSD(unsigned char *p) {
 // initialise the display controller
 // this is used in the initial boot sequence of the Micromite
 void InitDisplaySSD(void) {
-    if(Option.DISPLAY_TYPE<SSDPANEL)return;
+    if(Option.DISPLAY_TYPE<SSDPANEL || Option.DISPLAY_ORIENTATION>=VIRTUAL)return;
 
     // the parameters for the display panel are set here (refer to the data sheet for the glass)
     switch(Option.DISPLAY_TYPE) {
@@ -228,6 +228,7 @@ void InitDisplaySSD(void) {
     ScrollLCD = ScrollSSD1963;
     DrawBuffer = DrawBufferSSD1963;
     ReadBuffer = ReadBufferSSD1963;
+    DrawPixel = DrawPixelNormal;
     InitSSD1963();
     SetFont(Option.DefaultFont);
     PromptFont = gui_font;

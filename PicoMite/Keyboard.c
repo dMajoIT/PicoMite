@@ -408,20 +408,19 @@ void initKeyboard(void)
 {
   //	GPIO_InitTypeDef GPIO_InitDef;
 
-  if (Option.KeyboardConfig == NO_KEYBOARD)
-    return;
-  KBDIntEnable(0); // disable interrupt in case called from within CNInterrupt()
+    if (Option.KeyboardConfig ==  NO_KEYBOARD || Option.KeyboardConfig==CONFIG_I2C) return;
+    KBDIntEnable(0); // disable interrupt in case called from within CNInterrupt()
 
-  // enable pullups on the clock and data lines.
-  //	sendCommand(0xFF);
-  //	HAL_Delay(100);
-  // setup Change Notification interrupt
-  KBDIntEnable(1); // enable interrupt
-  PS2State = PS2START;
-  CapsLock = Option.capslock;
-  NumLock = Option.numlock;
-  uSec(100000);
-  setLEDs(CapsLock, NumLock, 0);
+    // enable pullups on the clock and data lines.
+    //	sendCommand(0xFF);
+    //	HAL_Delay(100);
+    // setup Change Notification interrupt
+    KBDIntEnable(1); // enable interrupt
+    PS2State = PS2START;
+    CapsLock = Option.capslock;
+    NumLock = Option.numlock;
+    uSec(100000);
+    setLEDs(CapsLock, NumLock, 0);
 }
 
 /***************************************************************************************************
@@ -584,7 +583,7 @@ void __not_in_flash_func(CNInterrupt)(int dd)
     case PS2STOP:
       if (d)
       { // PS2DAT == 1
-        if(!(Code==0xe0 || Code==0xf0 || (Code==0x12 && KeyE0) || (Code==12 && KeyUpCode)) && Code){
+        if(!(Code==0xe0 || Code==0xf0 || (Code==0x12 && KeyE0) || (Code==0x12 && KeyUpCode)) && Code){
           PS2int=true;
           PS2code=Code;
         }

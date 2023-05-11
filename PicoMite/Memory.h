@@ -95,13 +95,14 @@ extern int FreeSpaceOnHeap(void);
 extern unsigned char *DOS_ProgMemory;
 extern void *ReAllocMemory(void *addr, size_t msize);
 extern void FreeMemorySafe(void **addr);
-extern unsigned char *MMHeap;//=DOS_ProgMemory+Option.PROG_FLASH_SIZE;
-extern unsigned char __attribute__ ((aligned (1024))) AllMemory[ALL_MEMORY_SIZE];
+extern void *GetAlignedMemory(int size);
+extern void FreeMemorySafe(void **addr);
+extern unsigned char MMHeap[];
 extern unsigned char *WriteBuf;
 extern unsigned char *FrameBuf;
 extern unsigned char *DisplayBuf;
 extern unsigned char *LayerBuf;
-
+extern char FRAMEBUFFER[];
 struct s_ctrl {
     short int x1, y1, x2, y2;           // the coordinates of the touch sensitive area
     int fc, bc;                         // foreground and background colours

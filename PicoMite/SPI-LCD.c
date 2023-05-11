@@ -44,16 +44,16 @@ const struct Displays display_details[]={
 		{12,"ST7789_135", LCD_SPI_SPEED, 240, 135, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
 		{13,"ST7789_320", 20000000, 320, 240, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
 		{14,"ILI9488W", 40000000, 480, 320, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
-		{15,"GC9A01", LCD_SPI_SPEED, 240, 240, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
-		{16,"ILI9481IPS", 12000000, 480, 320, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
-		{17,"N5110", NOKIA_SPI_SPEED, 84, 48, 1, 1, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
-		{18,"SSD1306SPI", LCD_SPI_SPEED, 128, 64, 1, 1, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
-		{19,"ST7920", ST7920_SPI_SPEED, 128, 64, 1, 1, SPI_POLARITY_HIGH, SPI_PHASE_2EDGE},
-		{20,"", TOUCH_SPI_SPEED, 0, 0, 0, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
-		{21,"SPIReadSpeed", 12000000, 480, 320, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
-		{22,"ST7789RSpeed", 6000000, 320, 240, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
-		{23,"Dummy", 0, 0, 0, 0, 0, 0 ,0},
-		{24,"Dummy", 0, 0, 0, 0, 0, 0 ,0},
+		{15,"ST7735S_W", LCD_SPI_SPEED, 128, 128, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
+		{16,"GC9A01", LCD_SPI_SPEED, 240, 240, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
+		{17,"ILI9481IPS", 12000000, 480, 320, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
+		{18,"N5110", NOKIA_SPI_SPEED, 84, 48, 1, 1, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
+		{19,"SSD1306SPI", LCD_SPI_SPEED, 128, 64, 1, 1, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
+		{10,"ST7920", ST7920_SPI_SPEED, 128, 64, 1, 1, SPI_POLARITY_HIGH, SPI_PHASE_2EDGE},
+		{21,"", TOUCH_SPI_SPEED, 0, 0, 0, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
+		{22,"SPIReadSpeed", 12000000, 480, 320, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
+		{23,"ST7789RSpeed", 6000000, 320, 240, 16, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
+		{24,"", SLOW_TOUCH_SPEED, 0, 0, 0, 0, SPI_POLARITY_LOW, SPI_PHASE_1EDGE},
 		{25,"User", 0, 0, 0, 0, 0, 0 ,0},
 		{26,"Dummy", 0, 0, 0, 0, 0, 0 ,0},
 		{27,"Dummy", 0, 0, 0, 0, 0, 0 ,0},
@@ -62,15 +62,18 @@ const struct Displays display_details[]={
 		{30,"SSD1963_5A", 0, 0, 0, 0, 0, 0 ,0},
 		{31,"SSD1963_7", 0, 0, 0, 0, 0, 0 ,0},
 		{32,"SSD1963_7A", 0, 0, 0, 0, 0, 0 ,0},
-		{33,"SSD1963_8", 0, 0, 0, 0, 0, 0 ,0}
+		{33,"SSD1963_8", 0, 0, 0, 0, 0, 0 ,0},
+		{34,"VIRTUAL_C", 0, 320, 240, 0, 0, 0, 0},
+		{35,"VIRTUAL_M", 0, 640, 480, 0, 0, 0, 0},
+
 };
 int LCD_CS_PIN=0;
 int LCD_CD_PIN=0;
 int LCD_Reset_PIN=0;
 
+#ifndef PICOMITEVGA
 unsigned char LCDBuffer[1440]={0};
-
-
+#endif
 
 void DefineRegionSPI(int xstart, int ystart, int xend, int yend, int rw);
 void DrawBitmapSPI(int x1, int y1, int width, int height, int scale, int fc, int bc, unsigned char *bitmap);
@@ -130,6 +133,8 @@ void ConfigDisplaySPI(unsigned char *p) {
         DISPLAY_TYPE = ILI9488W;
     } else if(checkstring(argv[0], "ILI9341")) {
         DISPLAY_TYPE = ILI9341;
+    } else if(checkstring(argv[0], "ST7735S_W")) {
+        DISPLAY_TYPE = ST7735S_W;
     } else if(checkstring(argv[0], "GC9A01")) {
         DISPLAY_TYPE = GC9A01;
     } else if(checkstring(argv[0], "N5110")) {
@@ -179,6 +184,7 @@ void ConfigDisplaySPI(unsigned char *p) {
 	}
 	CheckPin(CD, CP_IGNORE_INUSE);
     CheckPin(RESET, CP_IGNORE_INUSE);
+	if(CS==CD || CS==RESET || CS==BACKLIGHT || CD==RESET || CD==BACKLIGHT || RESET==BACKLIGHT)error("Duplicated pin");
 	Option.LCD_CD = CD;
 	Option.LCD_Reset = RESET;
 	Option.DISPLAY_BL = BACKLIGHT;
@@ -215,6 +221,7 @@ void InitDisplaySPI(int InitOnly) {
         	DrawBuffer = DrawBufferMEM;
 			ReadBuffer = ReadBufferMEM;
         }
+		DrawPixel=DrawPixelNormal;
     }
     // the parameters for the display panel are set here
     // the initialisation sequences and the SPI driver code was written by Peter Mather (matherp on The Back Shed forum)
@@ -654,6 +661,7 @@ void InitDisplaySPI(int InitOnly) {
             break;
         case ST7735:
         case ST7735S:
+		case ST7735S_W:
             ResetController();
             spi_write_command(ILI9341_SOFTRESET);                           //software reset
             uSec(20000);
@@ -669,7 +677,7 @@ void InitDisplaySPI(int InitOnly) {
 			spi_write_cd(ST7735_PWCTR4,2,0x8A,0x2A);                //power control
 			spi_write_cd(ST7735_PWCTR5,2,0x8A,0xEE);                //power control
 			spi_write_cd(ST7735_VMCTR1,1,0x0E);                     //power control
-			if(Option.DISPLAY_TYPE==ST7735)spi_write_command(ST7735_INVOFF);                       //don't invert display
+			if(Option.DISPLAY_TYPE==ST7735 || Option.DISPLAY_TYPE==ST7735S_W)spi_write_command(ST7735_INVOFF);                       //don't invert display
 			else spi_write_command(ST7735_INVON);
 			spi_write_cd(ST7735_COLMOD,1,0x05);                     //set color mode
 			spi_write_cd(ST7735_CASET,4,0,0,0,0x7F);                //column addr set
@@ -725,6 +733,7 @@ void InitDisplaySPI(int InitOnly) {
             uSec(20000);
             break;
         case SSD1306SPI:
+            ResetController();
             spi_write_command(0xAE);//DISPLAYOFF
             spi_write_command(0xD5);//DISPLAYCLOCKDIV
             spi_write_command(0x80);//the suggested ratio &H80
@@ -791,6 +800,29 @@ void SetCS(void) {
     else gpio_put(LCD_CS_PIN,GPIO_PIN_SET);
 }
 
+void __not_in_flash_func(spi_write_fast)(spi_inst_t *spi, const uint8_t *src, size_t len) {
+    // Write to TX FIFO whilst ignoring RX, then clean up afterward. When RX
+    // is full, PL022 inhibits RX pushes, and sets a sticky flag on
+    // push-on-full, but continues shifting. Safe if SSPIMSC_RORIM is not set.
+    for (size_t i = 0; i < len; ++i) {
+        while (!spi_is_writable(spi))
+            tight_loop_contents();
+        spi_get_hw(spi)->dr = (uint32_t)src[i];
+    }
+}
+void __not_in_flash_func(spi_finish)(spi_inst_t *spi){
+    // Drain RX FIFO, then wait for shifting to finish (which may be *after*
+    // TX FIFO drains), then drain RX FIFO again
+    while (spi_is_readable(spi))
+        (void)spi_get_hw(spi)->dr;
+    while (spi_get_hw(spi)->sr & SPI_SSPSR_BSY_BITS)
+        tight_loop_contents();
+    while (spi_is_readable(spi))
+        (void)spi_get_hw(spi)->dr;
+
+    // Don't leave overrun flag set
+    spi_get_hw(spi)->icr = SPI_SSPICR_RORIC_BITS;
+}
 
 
 void spi_write_data(unsigned char data){
@@ -843,7 +875,7 @@ void ResetController(void){
     PinSetBit(Option.LCD_Reset, LATCLR);
     uSec(10000);
     PinSetBit(Option.LCD_Reset, LATSET);
-    uSec(20000);
+    uSec(200000);
 }
 
 
@@ -943,6 +975,34 @@ void DefineRegionSPI(int xstart, int ystart, int xend, int yend, int rw) {
 				yend++;
 			}
 		}
+		if(Option.DISPLAY_TYPE==ST7735S_W){
+			switch(Option.DISPLAY_ORIENTATION) {
+				case LANDSCAPE:
+				ystart+=2;
+				yend+=2;
+				xstart+=3;
+				xend+=3;
+				break;
+				case PORTRAIT: 
+				xstart+=2;
+				xend+=2;
+				ystart+=3;
+				yend+=3;
+				break;
+				case RLANDSCAPE:
+				ystart+=2;
+				yend+=2;
+				xstart+=1;
+				xend+=1;
+				break;
+				case RPORTRAIT:
+				xstart+=2;
+				xend+=2;
+				ystart+=1;
+				yend+=1;
+				break;
+			}
+		}
 		SetCS();
     	gpio_put(LCD_CD_PIN,GPIO_PIN_RESET);//gpio_put(LCD_CD_PIN,GPIO_PIN_RESET);
 		SPIsend(ILI9341_COLADDRSET);
@@ -1033,7 +1093,10 @@ void DrawRectangleSPI(int x1, int y1, int x2, int y2, int c){
 			col[1]=(c>>8) & 0xFF;
 			col[2]=(c & 0xFF);
 			for(t=0;t<i;t+=3){p[t]=col[0];p[t+1]=col[1];p[t+2]=col[2];}
-			for(y=y1;y<=y2;y++)xmit_byte_multi(p,i);
+			for(y=y1;y<=y2;y++){
+				if(PinDef[Option.SYSTEM_CLK].mode & SPI0SCK)spi_write_fast(spi0,p,i);
+				else spi_write_fast(spi1,p,i);
+			}
 		} else {
 			i = x2 - x1 + 1;
 			i*=2;
@@ -1045,9 +1108,19 @@ void DrawRectangleSPI(int x1, int y1, int x2, int y2, int c){
 				col[1]=~col[1];
 			}
 			for(t=0;t<i;t+=2){p[t]=col[0];p[t+1]=col[1];}
-			for(t=y1;t<=y2;t++)xmit_byte_multi(p,i);
+			if(PinDef[Option.SYSTEM_CLK].mode & SPI0SCK){
+				for(t=y1;t<=y2;t++){
+					spi_write_fast(spi0,p,i);
+				} 
+			} else {
+				for(t=y1;t<=y2;t++){
+					spi_write_fast(spi1,p,i);
+				} 
+			}
 		}
 	}
+	if(PinDef[Option.SYSTEM_CLK].mode & SPI0SCK)spi_finish(spi0);
+	else spi_finish(spi1);
 	ClearCS(Option.LCD_CS);                                       //set CS high
 }
 
@@ -1374,6 +1447,9 @@ void DrawRectangleMEM(int x1, int y1, int x2, int y2, int c){
            }
         }
     }
+}
+void DrawPixelMEM(int x1,int y1, int c){
+	DrawRectangleMEM(x1,y1,x1,y1,c);
 }
 void DrawBitmapMEM(int x1, int y1, int width, int height, int scale, int fc, int bc, unsigned char *bitmap){
     int i, j, k, m, x, y,t, loc;

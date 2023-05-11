@@ -94,7 +94,7 @@ void cmd_mid(void);
 **********************************************************************************/
 #ifdef INCLUDE_COMMAND_TABLE
 
-	{ (unsigned char *)"?",			T_CMD,				0, cmd_print	},
+//	{ (unsigned char *)"?",			T_CMD,				0, cmd_print	},
 	{ (unsigned char *)"Call",		T_CMD,				0, cmd_call	},
 	{ (unsigned char *)"Clear",		T_CMD,				0, cmd_clear	},
 	{ (unsigned char *)"Continue",           T_CMD,                          0, cmd_continue	},
@@ -133,7 +133,7 @@ void cmd_mid(void);
 	{ (unsigned char *)"Load",		T_CMD,				0, cmd_load		},
 	{ (unsigned char *)"Local",		T_CMD,				0, cmd_dim	},
 	{ (unsigned char *)"Loop",		T_CMD,				0, cmd_loop	},
-	{ (unsigned char *)"New",		T_CMD,				0, cmd_new	},
+//	{ (unsigned char *)"New",		T_CMD,				0, cmd_new	},
 	{ (unsigned char *)"Next",		T_CMD,				0, cmd_next	},
 	{ (unsigned char *)"On",			T_CMD,				0, cmd_on	},
 	{ (unsigned char *)"Print",		T_CMD,				0, cmd_print	},
@@ -241,5 +241,4 @@ struct sa_data{
 };
 extern struct sa_data datastore[MAXRESTORE];
 extern int restorepointer;
-
 #endif

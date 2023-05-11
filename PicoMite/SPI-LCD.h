@@ -24,6 +24,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 ************************************************************************************************************************/
 #ifndef SPI_LCD_HEADER
 #define SPI_LCD_HEADER
+#include "hardware/spi.h"
+
 
 
 
@@ -43,7 +45,10 @@ extern void ReadBufferSPI(int x1, int y1, int x2, int y2, unsigned char* p) ;
 extern void spi_write_command(unsigned char data);
 extern void spi_write_cd(unsigned char command, int data, ...);
 extern void spi_write_data(unsigned char data);
+extern void DrawBitmapSPI(int x1, int y1, int width, int height, int scale, int fc, int bc, unsigned char *bitmap);
 extern void set_cs(void);
+extern void __not_in_flash_func(spi_write_fast)(spi_inst_t *spi, const uint8_t *src, size_t len);
+extern void __not_in_flash_func(spi_finish)(spi_inst_t *spi);
 #define SSD1331_COLORORDER_RGB
 #define SSD1331_CMD_DRAWLINE 		0x21
 #define SSD1331_CMD_DRAWRECT 		0x22
@@ -266,15 +271,17 @@ extern void set_cs(void);
 #define ST7789A         12
 #define ST7789B         13
 #define ILI9488W        14
-#define GC9A01          15
-#define ILI9481IPS        16
-#define N5110			17
+#define ST7735S_W       15
+#define GC9A01          16
+#define ILI9481IPS      17
+#define N5110			18
 #define BufferedPanel	N5110
-#define SSD1306SPI      18
-#define ST7920			19
-#define TOUCH           20
-#define SPIReadSpeed    21
-#define ST7789RSpeed    22
+#define SSD1306SPI      19
+#define ST7920			20
+#define TOUCH           21
+#define SPIReadSpeed    22
+#define ST7789RSpeed    23
+#define SLOWTOUCH       24
 #define DISP_USER       25
 #define MONOVGA         26
 #define VGADISPLAY      MONOVGA  
@@ -286,7 +293,9 @@ extern void set_cs(void);
 #define SSD1963_7       31
 #define SSD1963_7A      32
 #define SSD1963_8       33
-
+#define VIRTUAL_C       34
+#define VIRTUAL         VIRTUAL_C
+#define VIRTUAL_M       35
 #define TFT_NOP 0x00
 #define TFT_SWRST 0x01
 
@@ -374,7 +383,8 @@ extern void set_cs(void);
 
 #define FLASH_SPI_SPEED 20000000
 #define LCD_SPI_SPEED   25000000                                   // the speed of the SPI bus when talking to an SPI LCD display controller
-#define TOUCH_SPI_SPEED 1000000
+#define TOUCH_SPI_SPEED 300000
+#define SLOW_TOUCH_SPEED 240000
 #define NOKIA_SPI_SPEED 4000000
 #define ST7920_SPI_SPEED 1200000
 #define SDCARD_SPI_SPEED 0

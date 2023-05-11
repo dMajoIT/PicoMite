@@ -28,6 +28,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "MMBasic_Includes.h"
 #include "Hardware_Includes.h"
 #include "hardware/flash.h"
+#include "hardware/dma.h"
+
 #include <math.h>
 void flist(int, int, int);
 //void clearprog(void);
@@ -77,7 +79,7 @@ void __not_in_flash_func(cmd_null)(void) {
 }
 
 void cmd_inc(void){
-	unsigned char *p;
+	unsigned char *p, *q;
     int vtype;
 	getargs(&cmdline,3,",");
 	if(argc==1){
@@ -94,7 +96,9 @@ void cmd_inc(void){
 		if(vartbl[VarIndex].type & T_CONST) error("Cannot change a constant");
         vtype = TypeMask(vartbl[VarIndex].type);
         if(vtype & T_STR){
-			Mstrcat(p, getstring(argv[2]));
+        	q=getstring(argv[2]);
+    		if(*p + *q > MAXSTRLEN) error("String too long");
+			Mstrcat(p, q);
         } else if(vtype & T_NBR){
         	 (*(MMFLOAT *)p) = (*(MMFLOAT *)p)+getnumber(argv[2]);
         } else if(vtype & T_INT){
@@ -291,20 +295,17 @@ void ListFile(char *pp, int all) {
     FILINFO fno;
     int fnbr;
     int i,ListCnt = 1;
-    fr = f_stat(pp, &fno);
-    if(fr == FR_OK  && !(fno.fattrib & AM_DIR)){
-    	fnbr = FindFreeFileNbr();
-    	if(!BasicFileOpen(pp, fnbr, FA_READ)) return;
-    	while(!FileEOF(fnbr)) {                                     // while waiting for the end of file
-    		memset(buff,0,256);
-    		MMgetline(fnbr, (char *)buff);									    // get the input line
-    		for(i=0;i<strlen(buff);i++)if(buff[i] == TAB) buff[i] = ' ';
-    		MMPrintString(buff);
-    		ListCnt+=strlen(buff)/Option.Width;
-            ListNewLine(&ListCnt, all);
-    	}
-    	FileClose(fnbr);
-    } else error("File not found");
+	fnbr = FindFreeFileNbr();
+	if(!BasicFileOpen(pp, fnbr, FA_READ)) return;
+	while(!FileEOF(fnbr)) {                                     // while waiting for the end of file
+		memset(buff,0,256);
+		MMgetline(fnbr, (char *)buff);									    // get the input line
+		for(i=0;i<strlen(buff);i++)if(buff[i] == TAB) buff[i] = ' ';
+		MMPrintString(buff);
+		ListCnt+=strlen(buff)/Option.Width;
+		ListNewLine(&ListCnt, all);
+	}
+	FileClose(fnbr);
 }
 
 void cmd_list(void) {
@@ -315,7 +316,7 @@ void cmd_list(void) {
         	getargs(&p,1,",");
         	char *buff=GetTempMemory(STRINGSIZE);
         	strcpy(buff,getCstring(argv[0]));
-    		if(strchr(buff, '.') == NULL) strcat(buff, ".BAS");
+    		if(strchr(buff, '.') == NULL) strcat(buff, ".bas");
             ListFile(buff, true);
         } else {
         	ListProgram((char *)ProgMemory, true);
@@ -324,14 +325,18 @@ void cmd_list(void) {
    } else if((p = checkstring(cmdline, "COMMANDS"))) {
     	step=5;
     	m=0;
-		char** c=GetTempMemory((CommandTableSize+5)*sizeof(*c)+(CommandTableSize+5)*18);
-		for(i=0;i<CommandTableSize+5;i++){
-				c[m]= (char *)((int)c + sizeof(char *) * (CommandTableSize+5) + m*18);
+		char** c=GetTempMemory((CommandTableSize+9)*sizeof(*c)+(CommandTableSize+9)*18);
+		for(i=0;i<CommandTableSize+9;i++){
+				c[m]= (char *)((int)c + sizeof(char *) * (CommandTableSize+9) + m*18);
     			if(m<CommandTableSize)strcpy(c[m],commandtbl[i].name);
     			else if(m==CommandTableSize)strcpy(c[m],"Color");
     			else if(m==CommandTableSize+1)strcpy(c[m],"Else If");
     			else if(m==CommandTableSize+2)strcpy(c[m],"End If");
     			else if(m==CommandTableSize+3)strcpy(c[m],"Exit Do");
+				else if(m==CommandTableSize+4)strcpy(c[m],"New");
+				else if(m==CommandTableSize+5)strcpy(c[m],"Autosave");
+				else if(m==CommandTableSize+6)strcpy(c[m],"Files");
+				else if(m==CommandTableSize+7)strcpy(c[m],"Update Firmware");
     			else strcpy(c[m],"Cat");
     			m++;
 		}
@@ -379,7 +384,7 @@ void cmd_list(void) {
         	getargs(&cmdline,1,",");
         	char *buff=GetTempMemory(STRINGSIZE);
         	strcpy(buff,getCstring(argv[0]));
-    		if(strchr(buff, '.') == NULL) strcat(buff, ".BAS");
+    		if(strchr(buff, '.') == NULL) strcat(buff, ".bas");
 			ListFile(buff, false);
         } else {
 			ListProgram(ProgMemory, false);
@@ -405,19 +410,19 @@ void ListProgram(unsigned char *p, int all) {
 	char b[STRINGSIZE];
 	char *pp;
     int ListCnt = 1;
-
-
 	while(!(*p == 0 || *p == 0xff)) {                               // normally a LIST ends at the break so this is a safety precaution
         if(*p == T_NEWLINE) {
 			p = llist(b, p);                                        // otherwise expand the line
-			pp = b;
-			while(*pp) {
-				if(MMCharPos >= Option.Width) ListNewLine(&ListCnt, all);
-				MMputchar(*pp++,0);
+            if(!(ListCnt==1 && b[0]=='\'' && b[1]=='#')){
+				pp = b;
+				while(*pp) {
+					if(MMCharPos >= Option.Width) ListNewLine(&ListCnt, all);
+					MMputchar(*pp++,0);
+				}
+				fflush(stdout);
+				ListNewLine(&ListCnt, all);
+				if(p[0] == 0 && p[1] == 0) break;                       // end of the listing ?
 			}
-    		fflush(stdout);
-            ListNewLine(&ListCnt, all);
-			if(p[0] == 0 && p[1] == 0) break;                       // end of the listing ?
 		}
 	}
 }
@@ -425,15 +430,60 @@ void ListProgram(unsigned char *p, int all) {
 
 
 void cmd_run(void) {
-	skipspace(cmdline);
-	if(*cmdline && *cmdline != '\'')
-		if(!FileLoadProgram(cmdline))
-			return;
-	ClearRuntime();
+/*	skipspace(cmdline);
+	if(*cmdline && *cmdline != '\''){
+		if(!FileLoadProgram(cmdline))return;
+	}
+	ClearRuntime();*/
+    // RUN [ filename$ ] [, cmd_args$ ]
+    unsigned char *filename = "", *cmd_args = "";
+    getargs(&cmdline, 3, ",");
+    switch (argc) {
+        case 0:
+            break;
+        case 1:
+            filename = getCstring(argv[0]);
+            break;
+        case 2:
+            cmd_args = getCstring(argv[1]);
+            break;
+        default:
+            filename = getCstring(argv[0]);
+            cmd_args = getCstring(argv[2]);
+            break;
+    }
+
+// The memory allocated by getCstring() is not preserved across
+   // a call to FileLoadProgram() so we need to cache 'filename' and
+   // 'cmd_args' on the stack.
+    unsigned char buf[MAXSTRLEN + 1];
+    if (snprintf(buf, MAXSTRLEN + 1, "\"%s\",%s", filename, cmd_args) > MAXSTRLEN) {
+        error("RUN command line too long");
+    }
+    unsigned char *pcmd_args = buf + strlen(filename) + 3; // *** THW 16/4/23
+
+    if (*filename && !FileLoadProgram(buf)) return;
+
+    ClearRuntime();
     WatchdogSet = false;
-	PrepareProgram(true);
+    PrepareProgram(true);
+
+    // Create a global constant MM.CMDLINE$ containing 'cmd_args'.
+    void *ptr = findvar("MM.CMDLINE$", V_FIND | V_DIM_VAR | T_CONST);
+    CtoM(pcmd_args);
+    memcpy(ptr, pcmd_args, *pcmd_args + 1); // *** THW 16/4/23
+
     IgnorePIN = false;
+	if(Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE) ExecuteProgram(LibMemory );       // run anything that might be in the library
     if(*ProgMemory != T_NEWLINE) return;                             // no program to run
+#ifdef PICOMITEWEB
+    void *v;
+    v = findvar("MM.TOPIC$", T_STR | V_NOFIND_NULL);    // create the variable
+    if(v==NULL)findvar("MM.TOPIC$", V_FIND | V_DIM_VAR | T_CONST);
+    v = findvar("MM.MESSAGE$", T_STR | V_NOFIND_NULL);    // create the variable
+    if(v==NULL)findvar("MM.MESSAGE$", V_FIND | V_DIM_VAR | T_CONST);
+	cleanserver();
+#endif
 	nextstmt = ProgMemory;
 }
 
@@ -467,7 +517,7 @@ void cmd_new(void) {
     flash_range_erase(realflashpointer, MAX_PROG_SIZE);
     FlashWriteByte(0); FlashWriteByte(0); FlashWriteByte(0);    // terminate the program in flash
     FlashWriteClose();
-     memset(inpbuf,0,STRINGSIZE);
+    memset(inpbuf,0,STRINGSIZE);
 	longjmp(mark, 1);							                    // jump back to the input prompt
 }
 
@@ -519,7 +569,11 @@ void cmd_clear(void) {
 }
 
 
+#ifdef PICOMITEWEB
+void cmd_goto(void) {
+#else
 void __no_inline_not_in_flash_func(cmd_goto)(void) {
+#endif
 	if(isnamestart(*cmdline))
 		nextstmt = findlabel(cmdline);								// must be a label
 	else
@@ -529,7 +583,11 @@ void __no_inline_not_in_flash_func(cmd_goto)(void) {
 
 
 
+#ifdef PICOMITEWEB
+void cmd_if(void) {
+#else
 void __not_in_flash_func(cmd_if)(void) {
+#endif
  	int r, i, testgoto, testelseif;
 	unsigned char ss[3];														// this will be used to split up the argument line
 	unsigned char *p, *tp;
@@ -673,7 +731,11 @@ retest_an_if:
 
 
 
+#ifdef PICOMITEWEB
+void cmd_else(void) {
+#else
 void __not_in_flash_func(cmd_else)(void) {
+#endif
 	int i;
 	unsigned char *p, *tp;
 
@@ -705,22 +767,34 @@ void __not_in_flash_func(cmd_else)(void) {
 
 
 void cmd_end(void) {
+	if(dma_channel_is_busy(dma_rx_chan))
+	{
+		dma_channel_abort(dma_rx_chan);
+//		dma_channel_unclaim(dma_rx_chan);
+	}
+    if(dma_channel_is_busy(dma_tx_chan)){
+		dma_channel_abort(dma_tx_chan);
+//		dma_channel_unclaim(dma_tx_chan);
+	}
 	for(int i=0; i< NBRSETTICKS;i++){
 		TickPeriod[i]=0;
 		TickTimer[i]=0;
 		TickInt[i]=NULL;
 		TickActive[i]=0;
 	}
-	InterruptUsed=0;    
-	InterruptReturn = NULL ;
+	InterruptUsed=0;       
+    InterruptReturn = NULL ; 
     memset(inpbuf,0,STRINGSIZE);
 	CloseAudio(1);
 #ifdef PICOMITEVGA
-	WriteBuf=&AllMemory[HEAP_MEMORY_SIZE + MAXVARS * sizeof(struct s_vartbl) + 2048];
-	DisplayBuf=&AllMemory[HEAP_MEMORY_SIZE + MAXVARS * sizeof(struct s_vartbl) + 2048];
-	LayerBuf=&AllMemory[HEAP_MEMORY_SIZE + MAXVARS * sizeof(struct s_vartbl) + 2048];
-	FrameBuf=&AllMemory[HEAP_MEMORY_SIZE + MAXVARS * sizeof(struct s_vartbl) + 2048];
+	WriteBuf=FRAMEBUFFER;
+	DisplayBuf=FRAMEBUFFER;
+	LayerBuf=FRAMEBUFFER;
+	FrameBuf=FRAMEBUFFER;
 #endif
+
+	if(g_myrand)FreeMemory((void *)g_myrand);
+	g_myrand=NULL;
 	longjmp(mark, 1);												// jump back to the input prompt
 }
 
@@ -955,9 +1029,15 @@ void cmd_trace(void) {
         i = TraceBuffIndex - i;
         if(i < 0) i += TRACE_BUFF_SIZE;
         while(i != TraceBuffIndex) {
-            inpbuf[0] = '[';
-            IntToStr(inpbuf + 1, CountLines(TraceBuff[i]), 10);
-            strcat((char *)inpbuf, "]");
+			if(TraceBuff[i] >= ProgMemory && TraceBuff[i] <= ProgMemory+MAX_PROG_SIZE){
+           		 inpbuf[0] = '[';
+            	IntToStr(inpbuf + 1, CountLines(TraceBuff[i]), 10);
+            	strcat((char *)inpbuf, "]");
+			}else if(TraceBuff[i]){
+                strcpy(inpbuf, "[Lib]");	
+			}else{
+			    inpbuf[0] = 0;
+			}	
             MMPrintString((char *)inpbuf);
             if(++i >= TRACE_BUFF_SIZE) i = 0;
         }
@@ -968,7 +1048,11 @@ void cmd_trace(void) {
 
 
 // FOR command
+#ifdef PICOMITEWEB
+void cmd_for(void) {
+#else
 void __not_in_flash_func(cmd_for)(void) {
+#endif
 	int i, t, vlen, test;
 	unsigned char ss[4];														// this will be used to split up the argument line
 	unsigned char *p, *tp, *xp;
@@ -1084,7 +1168,11 @@ void __not_in_flash_func(cmd_for)(void) {
 
 
 
+#ifdef PICOMITEWEB
+void cmd_next(void) {
+#else
 void __not_in_flash_func(cmd_next)(void) {
+#endif
 	int i, vindex, test;
 	void *vtbl[MAXFORLOOPS];
 	int vcnt;
@@ -1164,7 +1252,11 @@ void __not_in_flash_func(cmd_next)(void) {
 
 
 
+#ifdef PICOMITEWEB
+void cmd_do(void) {
+#else
 void __not_in_flash_func(cmd_do)(void) {
+#endif
 	int i;
 	unsigned char *p, *tp, *evalp;
     if(cmdtoken==cmdWHILE)error("Unknown command");
@@ -1234,7 +1326,11 @@ void __not_in_flash_func(cmd_do)(void) {
 
 
 
+#ifdef PICOMITEWEB
+void cmd_loop(void) {
+#else
 void __not_in_flash_func(cmd_loop)(void) {
+#endif
     unsigned char *p;
 	int tst = 0;                                                    // initialise tst to stop the compiler from complaining
 	int i;
@@ -1306,8 +1402,15 @@ void cmd_error(void) {
 	unsigned char *s;
 	if(*cmdline && *cmdline != '\'') {
 		s = getCstring(cmdline);
-    	CurrentLinePtr = NULL;                                      // suppress printing the line that caused the issue
-		error(s);
+		char *p=GetTempMemory(STRINGSIZE);
+		strcpy(p,"[");
+		int ln=CountLines(CurrentLinePtr);
+		IntToStr(&p[1],ln,10);
+		SaveCurrentLinePtr=CurrentLinePtr;
+		CurrentLinePtr = NULL;                                      // suppress printing the line that caused the issue
+		strcat(p,"] ");
+		strcat(p,s);
+		error(p);
 	}
 	else
 		error("");
@@ -1351,21 +1454,20 @@ void cmd_subfun(void) {
     }
 }
 
-
-
-
 void cmd_gosub(void) {
-	if(gosubindex >= MAXGOSUB) error("Too many nested GOSUB");
-    errorstack[gosubindex] = CurrentLinePtr;
-	gosubstack[gosubindex++] = nextstmt;
-	LocalIndex++;
-	if(isnamestart(*cmdline))
-		nextstmt = findlabel(cmdline);								// must be a label
-	else
-		nextstmt = findline(getinteger(cmdline), true);				// try for a line number
-	CurrentLinePtr = nextstmt;
-}
+   if(gosubindex >= MAXGOSUB) error("Too many nested GOSUB");
+   char *return_to = nextstmt;
+   if(isnamestart(*cmdline))
+       nextstmt = findlabel(cmdline);
+   else
+       nextstmt = findline(getinteger(cmdline), true);
+   IgnorePIN = false;
 
+   errorstack[gosubindex] = CurrentLinePtr;
+   gosubstack[gosubindex++] = return_to;
+   LocalIndex++;
+   CurrentLinePtr = nextstmt;
+}
 
 void cmd_mid(void){
 	unsigned char *p;
@@ -1515,8 +1617,78 @@ search_again:
             if(vtype[vidx] & T_STR) {
                 char *p1, *p2;
                 if(*argv[NextData] == '"') {                               // if quoted string
-                    for(len = 0, p1 = vtbl[vidx], p2 = argv[NextData] + 1; *p2 && *p2 != '"'; len++, p1++, p2++) {
-                       *p1 = *p2;                                   // copy up to the quote
+                  	int toggle=0;
+                    for(len = 0, p1 = vtbl[vidx], p2 = argv[NextData] + 1; *p2 && *p2 != '"'; len++) {
+                    	if(*p2=='\\' && p2[1]!='"' && OptionEscape)toggle^=1;
+	                    if(toggle){
+	                        if(*p2=='\\' && isdigit(p2[1]) && isdigit(p2[2]) && isdigit(p2[3])){
+	                            p2++;
+	                            i=(*p2++)-48;
+	                            i*=10;
+	                            i+=(*p2++)-48;
+	                            i*=10;
+	                            i+=(*p2++)-48;
+	                            *p1++=i;
+	                        } else {
+	                            p2++;
+	                            switch(*p2){
+	                                case '\\':
+	                                    *p1++='\\';
+	                                    p2++;
+	                                    break;
+	                                case 'a':
+	                                    *p1++='\a';
+	                                    p2++;
+	                                    break;
+	                                case 'b':
+	                                    *p1++='\b';
+	                                    p2++;
+	                                    break;
+	                                case 'e':
+	                                    *p1++='\e';
+	                                    p2++;
+	                                    break;
+	                                case 'f':
+	                                    *p1++='\f';
+	                                    p2++;
+	                                    break;
+	                                case 'n':
+	                                    *p1++='\n';
+	                                    p2++;
+	                                    break;
+	                                case 'q':
+	                                    *p1++='\"';
+	                                    p2++;
+	                                    break;
+	                                case 'r':
+	                                    *p1++='\r';
+	                                    p2++;
+	                                    break;
+	                                case 't':
+	                                    *p1++='\t';
+	                                    p2++;
+	                                    break;
+	                                case 'v':
+	                                    *p1++='\v';
+	                                    p2++;
+	                                    break;
+	                                case '&':
+	                                    p2++;
+	                                    if(isxdigit(*p2) && isxdigit(p2[1])){
+	                                        i=0;
+	                                        i = (i << 4) | ((mytoupper(*p2) >= 'A') ? mytoupper(*p2) - 'A' + 10 : *p2 - '0');
+	                                        p++;
+	                                        i = (i << 4) | ((mytoupper(*p2) >= 'A') ? mytoupper(*p2) - 'A' + 10 : *p2 - '0');
+	                                        p2++;
+	                                        *p1++=i;
+	                                    } else *p1++='x';
+	                                    break;
+	                                default:
+	                                    *p1++=*p2++;
+	                            }
+	                        }
+	                        toggle=0;
+	                    } else *p1++ = *p2++;
                     }
                 } else {                                            // else if not quoted
                     for(len = 0, p1 = vtbl[vidx], p2 = argv[NextData]; *p2 && *p2 != '\'' ; len++, p1++, p2++) {
@@ -1569,7 +1741,10 @@ void cmd_call(void){
 
 void cmd_restore(void) {
 	if(*cmdline == 0 || *cmdline == '\'') {
-        NextDataLine = ProgMemory;
+       if(CurrentLinePtr >= ProgMemory && CurrentLinePtr < ProgMemory + MAX_PROG_SIZE )
+           NextDataLine = ProgMemory;
+       else
+           NextDataLine = LibMemory;
 		NextData = 0;
 	} else {
 		skipspace(cmdline);
@@ -1603,7 +1778,6 @@ void cmd_restore(void) {
 		}
 	}
 }
-
 
 
 
