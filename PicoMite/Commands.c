@@ -482,6 +482,8 @@ void cmd_run(void) {
     if(v==NULL)findvar("MM.TOPIC$", V_FIND | V_DIM_VAR | T_CONST);
     v = findvar("MM.MESSAGE$", T_STR | V_NOFIND_NULL);    // create the variable
     if(v==NULL)findvar("MM.MESSAGE$", V_FIND | V_DIM_VAR | T_CONST);
+    v = findvar("MM.ADDRESS$", T_STR | V_NOFIND_NULL);    // create the variable
+    if(v==NULL)findvar("MM.ADDRESS$", V_FIND | V_DIM_VAR | T_CONST);
 	cleanserver();
 #endif
 	nextstmt = ProgMemory;
@@ -509,6 +511,14 @@ void  cmd_continue(void) {
 }
 
 void cmd_new(void) {
+#ifdef PICOMITEVGA
+	WriteBuf=FRAMEBUFFER;
+	DisplayBuf=FRAMEBUFFER;
+	LayerBuf=FRAMEBUFFER;
+	FrameBuf=FRAMEBUFFER;
+#else
+	closeframebuffer();
+#endif	
 	checkend(cmdline);
 	ClearProgram();
 	FlashLoad=0;
@@ -767,16 +777,23 @@ void __not_in_flash_func(cmd_else)(void) {
 
 
 void cmd_end(void) {
-	if(dma_channel_is_busy(dma_rx_chan))
-	{
-		dma_channel_abort(dma_rx_chan);
-//		dma_channel_unclaim(dma_rx_chan);
-	}
-    if(dma_channel_is_busy(dma_tx_chan)){
-		dma_channel_abort(dma_tx_chan);
-//		dma_channel_unclaim(dma_tx_chan);
-	}
-	for(int i=0; i< NBRSETTICKS;i++){
+    irq_set_enabled(DMA_IRQ_1, false);
+    dma_hw->abort = ((1u << dma_rx_chan2) | (1u << dma_rx_chan));
+    if(dma_channel_is_busy(dma_rx_chan))dma_channel_abort(dma_rx_chan);
+    if(dma_channel_is_busy(dma_rx_chan2))dma_channel_abort(dma_rx_chan2);
+    dma_channel_cleanup(dma_rx_chan);
+    dma_channel_cleanup(dma_rx_chan2);
+    dma_hw->abort = ((1u << dma_tx_chan2) | (1u << dma_tx_chan));
+    if(dma_channel_is_busy(dma_tx_chan))dma_channel_abort(dma_tx_chan);
+    if(dma_channel_is_busy(dma_tx_chan2))dma_channel_abort(dma_tx_chan2);
+    dma_channel_cleanup(dma_tx_chan);
+    dma_channel_cleanup(dma_tx_chan2);
+    dma_hw->abort = ((1u << ADC_dma_chan2) | (1u << ADC_dma_chan));
+    if(dma_channel_is_busy(ADC_dma_chan))dma_channel_abort(ADC_dma_chan);
+    if(dma_channel_is_busy(ADC_dma_chan2))dma_channel_abort(ADC_dma_chan2);
+    dma_channel_cleanup(ADC_dma_chan);
+    dma_channel_cleanup(ADC_dma_chan2);
+ 	for(int i=0; i< NBRSETTICKS;i++){
 		TickPeriod[i]=0;
 		TickTimer[i]=0;
 		TickInt[i]=NULL;
@@ -1486,10 +1503,15 @@ void cmd_mid(void){
 	if(!*cmdline) error("Syntax");
 	char *value = getstring(cmdline);
 	if(num==0)num=value[0];
-	if(num>value[0])error("Supplied string too short");
 	p=&value[1];
-	memcpy(&sourcestring[start],p,num);
-//	SCB_CleanDCache();
+	if(num==value[0]) memcpy(&sourcestring[start],p,num);
+	else {
+		int change=value[0]-num;
+		if(sourcestring[0]+change>255)error("String too long");
+		memmove(&sourcestring[start+value[0]],&sourcestring[start+num],sourcestring[0]-(start+num-1));
+		sourcestring[0]+=change;
+		memcpy(&sourcestring[start],p,value[0]);
+	}
 }
 
 void __not_in_flash_func(cmd_return)(void) {
@@ -1713,18 +1735,8 @@ search_again:
 
 void cmd_call(void){
 	int i;
-	unsigned char *q;
 	unsigned char *p=getCstring(cmdline); //get the command we want to call
-/*	q=p;
-	while(*q){ //convert to upper case for the match
-		*q=mytoupper(*q);
-		q++;
-	}*/
-	q=cmdline;
-	while(*q){
-		if(*q==',' || *q=='\'')break;
-		q++;
-	}
+    unsigned char *q = skipexpression(cmdline);
 	if(*q==',')q++;
 	i = FindSubFun(p, false);                   // it could be a defined command
 	strcat(p," ");
@@ -2305,12 +2317,12 @@ void execute(char* mycmd) {
 		memset(inpbuf, 0, STRINGSIZE);
 		tknbuf[strlen((char *)tknbuf)] = 0;
 		tknbuf[strlen((char*)tknbuf) + 1] = 0;
-		ttp = nextstmt;                                                 // save the globals used by commands
+		if(CurrentLinePtr)ttp = nextstmt;                                                 // save the globals used by commands
 		ScrewUpTimer = 1000;
 		ExecuteProgram(tknbuf);                                              // execute the function's code
 		ScrewUpTimer = 0;
 		// TempMemoryIsChanged = true;                                     // signal that temporary memory should be checked
-		nextstmt = ttp;
+		if(CurrentLinePtr)nextstmt = ttp;
 		return;
 	}
 	else {

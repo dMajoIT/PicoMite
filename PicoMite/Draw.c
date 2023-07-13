@@ -317,9 +317,6 @@ void cmd_guiMX170(void) {
                 x = GetTouch(GET_X_AXIS);
                 y = GetTouch(GET_Y_AXIS);
                 if(x != TOUCH_ERROR && y != TOUCH_ERROR) DrawBox(x - 1, y - 1, x + 1, y + 1, 0, WHITE, WHITE);
-        #ifdef PICOMITEWEB
-                {if(startupcomplete)cyw43_arch_poll();}
-        #endif
             }
             ClearScreen(gui_bcolour);
             return;
@@ -3128,7 +3125,7 @@ void showsafe(int bnbr, int x, int y) {
 void loadsprite(unsigned char* p) {
     int fnbr, width, number, height = 0, newsprite = 1, startsprite = 1, bnbr, lc, i, toggle=0;;
     char *q, *fname;
-    char buff[256];
+    unsigned char buff[256], *z;
     uint32_t data;
     getargs(&p, 3, (unsigned char *)",");
     fnbr = FindFreeFileNbr();
@@ -3139,70 +3136,77 @@ void loadsprite(unsigned char* p) {
     if (!BasicFileOpen(fname, fnbr, FA_READ)) error((char *)"File not found");
     MMgetline(fnbr, (char*)buff);							    // get the input line
     while (buff[0] == 39)MMgetline(fnbr, (char*)buff);
-    sscanf((char*)buff, "%d,%d, %d", &width, &number, &height);
-    if (height == 0)height = width;
-    bnbr = startsprite;
-    if (number + startsprite > MAXBLITBUF) {
-        FileClose(fnbr);
-        error((char *)"Maximum of % sprites",MAXBLITBUF);
-    }
-    while (!MMfeof(fnbr) && bnbr <= number + startsprite) {                                     // while waiting for the end of file
-        if (newsprite) {
-            newsprite = 0;
-            if (blitbuff[bnbr].blitbuffptr == NULL)blitbuff[bnbr].blitbuffptr = (char *)GetMemory((width * height + 1)>>1);
-            if (blitbuff[bnbr].blitstoreptr == NULL)blitbuff[bnbr].blitstoreptr = (char*)GetMemory((width * height + 1)>>1);
-            blitbuff[bnbr].bc = 0;
-            blitbuff[bnbr].w = width;
-            blitbuff[bnbr].h = height;
-            blitbuff[bnbr].master = 0;
-            blitbuff[bnbr].mymaster = -1;
-            blitbuff[bnbr].x = 10000;
-            blitbuff[bnbr].y = 10000;
-            blitbuff[bnbr].layer = -1;
-            blitbuff[bnbr].next_x = 10000;
-            blitbuff[bnbr].next_y = 10000;
-            blitbuff[bnbr].active = false;
-            blitbuff[bnbr].lastcollisions = 0;
-            blitbuff[bnbr].edges = 0;
-            q = blitbuff[bnbr].blitbuffptr;
-            lc = height;
+    z=buff;
+    { 
+        getargs(&z,5,", ");
+        width=getinteger(argv[0]);
+        number=getinteger(argv[2]);
+        if(argc==5)height=getinteger(argv[4]);
+        if (height == 0)height = width;
+        bnbr = startsprite;
+        if (number + startsprite > MAXBLITBUF) {
+            FileClose(fnbr);
+            error((char *)"Maximum of % sprites",MAXBLITBUF);
         }
-        while (lc--) {
-            MMgetline(fnbr, (char*)buff);									    // get the input line
-            while (buff[0] == 39)MMgetline(fnbr, (char*)buff);
-            if ((int)strlen(buff) < width)memset(&buff[strlen(buff)], 32, width - strlen(buff));
-                 for (i = 0; i < width; i++) {
-                    if (buff[i] == ' ')data = 0;
-                    else if (buff[i] == '0')data = BLACK;
-                    else if (buff[i] == '1')data = BLUE;
-                    else if (buff[i] == '2')data = GREEN;
-                    else if (buff[i] == '3')data = CYAN;
-                    else if (buff[i] == '4')data = RED;
-                    else if (buff[i] == '5')data = MAGENTA;
-                    else if (buff[i] == '6')data = YELLOW;
-                    else if (buff[i] == '7')data = WHITE;
-                    else if (buff[i] == '8')data = MYRTLE;
-                    else if (buff[i] == '9')data = COBALT;
-                    else if (buff[i] == 'A' || buff[i] == 'a')data = MIDGREEN;
-                    else if (buff[i] == 'B' || buff[i] == 'b')data = CERULEAN;
-                    else if (buff[i] == 'C' || buff[i] == 'c')data = RUST;
-                    else if (buff[i] == 'D' || buff[i] == 'd')data = FUCHSIA;
-                    else if (buff[i] == 'E' || buff[i] == 'e')data = BROWN;
-                    else if (buff[i] == 'F' || buff[i] == 'f')data = LILAC;
-                    else data = 0;
-                    if(toggle){
-                        *q++ |= ((data & 0x800000)>> 16) | ((data & 0xC000)>>9) | ((data & 0x80)>>3);
-                    } else {
-                        *q=((data & 0x800000)>> 20) | ((data & 0xC000)>>13) | ((data & 0x80)>>7);
-                    }
-                    toggle=!toggle;
-                }
+        while (!MMfeof(fnbr) && bnbr <= number + startsprite) {                                     // while waiting for the end of file
+            if (newsprite) {
+                newsprite = 0;
+                if (blitbuff[bnbr].blitbuffptr == NULL)blitbuff[bnbr].blitbuffptr = (char *)GetMemory((width * height + 1)>>1);
+                if (blitbuff[bnbr].blitstoreptr == NULL)blitbuff[bnbr].blitstoreptr = (char*)GetMemory((width * height + 1)>>1);
+                blitbuff[bnbr].bc = 0;
+                blitbuff[bnbr].w = width;
+                blitbuff[bnbr].h = height;
+                blitbuff[bnbr].master = 0;
+                blitbuff[bnbr].mymaster = -1;
+                blitbuff[bnbr].x = 10000;
+                blitbuff[bnbr].y = 10000;
+                blitbuff[bnbr].layer = -1;
+                blitbuff[bnbr].next_x = 10000;
+                blitbuff[bnbr].next_y = 10000;
+                blitbuff[bnbr].active = false;
+                blitbuff[bnbr].lastcollisions = 0;
+                blitbuff[bnbr].edges = 0;
+                q = blitbuff[bnbr].blitbuffptr;
+                lc = height;
             }
-        bnbr++;
-        newsprite = 1;
+            while (lc--) {
+                MMgetline(fnbr, (char*)buff);									    // get the input line
+                while (buff[0] == 39)MMgetline(fnbr, (char*)buff);
+                if ((int)strlen(buff) < width)memset(&buff[strlen(buff)], 32, width - strlen(buff));
+                    for (i = 0; i < width; i++) {
+                        if (buff[i] == ' ')data = 0;
+                        else if (buff[i] == '0')data = BLACK;
+                        else if (buff[i] == '1')data = BLUE;
+                        else if (buff[i] == '2')data = GREEN;
+                        else if (buff[i] == '3')data = CYAN;
+                        else if (buff[i] == '4')data = RED;
+                        else if (buff[i] == '5')data = MAGENTA;
+                        else if (buff[i] == '6')data = YELLOW;
+                        else if (buff[i] == '7')data = WHITE;
+                        else if (buff[i] == '8')data = MYRTLE;
+                        else if (buff[i] == '9')data = COBALT;
+                        else if (buff[i] == 'A' || buff[i] == 'a')data = MIDGREEN;
+                        else if (buff[i] == 'B' || buff[i] == 'b')data = CERULEAN;
+                        else if (buff[i] == 'C' || buff[i] == 'c')data = RUST;
+                        else if (buff[i] == 'D' || buff[i] == 'd')data = FUCHSIA;
+                        else if (buff[i] == 'E' || buff[i] == 'e')data = BROWN;
+                        else if (buff[i] == 'F' || buff[i] == 'f')data = LILAC;
+                        else data = 0;
+                        if(toggle){
+                            *q++ |= ((data & 0x800000)>> 16) | ((data & 0xC000)>>9) | ((data & 0x80)>>3);
+                        } else {
+                            *q=((data & 0x800000)>> 20) | ((data & 0xC000)>>13) | ((data & 0x80)>>7);
+                        }
+                        toggle=!toggle;
+                    }
+                }
+            bnbr++;
+            newsprite = 1;
+        }
+        FileClose(fnbr);
     }
-    FileClose(fnbr);
 }
+
 void loadarray(unsigned char* p) {
     int bnbr, w, h, size, i, toggle=0;
     int maxH = VRes;
@@ -3405,7 +3409,7 @@ void cmd_blit(void) {
                     if (blitbuff[bnbr].layer == 0) zeroLIFOadd(bnbr);
                     else LIFOadd(bnbr);
                     sprites_in_use++;
-                    BlitShowBuffer(bnbr, x1, y1, 1);
+                    BlitShowBuffer(bnbr, x1, y1, mode);
                 }
                 else {
                     showsafe(bnbr, x1, y1);
@@ -3540,7 +3544,9 @@ void cmd_blit(void) {
         //
     }
    else if ((p = checkstring(cmdline, (unsigned char*)"SWAP"))) {
-        int rbnbr=0;
+        int rbnbr=0, mode=2;
+        int64_t master;
+        signed char mymaster;
         getargs(&p, 5, (unsigned char*)",");
         if (argc < 3) error((char *)"Syntax");
         if (hideall)error((char *)"Sprites are hidden");
@@ -3550,9 +3556,15 @@ void cmd_blit(void) {
         rbnbr = (int)getint(argv[2], 1, MAXBLITBUF);									// get the number
         if (blitbuff[bnbr].blitbuffptr == NULL || blitbuff[bnbr].active == false) error((char *)"Original buffer not displayed");
         if (!blitbuff[bnbr].active)error((char *)"Original buffer not displayed");
+//        if (blitbuff[bnbr].master == -1)error((char *)"Can't swap a copy");
         if (blitbuff[rbnbr].active) error((char *)"New buffer already displayed");
+//        if (blitbuff[rbnbr].master == -1)error((char *)"Can't swap a copy");
         if (!(blitbuff[rbnbr].w == blitbuff[bnbr].w && blitbuff[rbnbr].h == blitbuff[bnbr].h)) error((char *)"Size mismatch");
         // copy the relevant data
+        master=blitbuff[rbnbr].master;
+        mymaster=blitbuff[rbnbr].mymaster;
+        blitbuff[rbnbr].master=blitbuff[bnbr].master;
+        blitbuff[rbnbr].mymaster=blitbuff[bnbr].mymaster;
         blitbuff[rbnbr].blitstoreptr = blitbuff[bnbr].blitstoreptr;
         blitbuff[rbnbr].x = blitbuff[bnbr].x;
         blitbuff[rbnbr].y = blitbuff[bnbr].y;
@@ -3561,6 +3573,8 @@ void cmd_blit(void) {
         if (blitbuff[rbnbr].layer == 0)zeroLIFOswap(bnbr, rbnbr);
         else LIFOswap(bnbr, rbnbr);
         // "Hide" the old sprite
+        blitbuff[bnbr].master=master;
+        blitbuff[bnbr].mymaster=mymaster;
         blitbuff[bnbr].x = 10000;
         blitbuff[bnbr].y = 10000;
         blitbuff[bnbr].layer = -1;
@@ -3568,11 +3582,14 @@ void cmd_blit(void) {
         blitbuff[bnbr].next_y = 10000;
         blitbuff[bnbr].active = 0;
         blitbuff[bnbr].lastcollisions = 0;
-        if (argc == 5)blitbuff[rbnbr].rotation = (char)getint(argv[4], 0, 3);
-        else blitbuff[rbnbr].rotation = 0;
-        BlitShowBuffer(rbnbr, blitbuff[rbnbr].x, blitbuff[rbnbr].y, 2);
+        if (argc == 5)blitbuff[rbnbr].rotation = (int)getint(argv[4], 0, 7);
+        else blitbuff[bnbr].rotation = 0;
+        if(blitbuff[rbnbr].rotation>3){
+            mode |=8;
+            blitbuff[rbnbr].rotation&=3;
+        }
+        BlitShowBuffer(rbnbr, blitbuff[rbnbr].x, blitbuff[rbnbr].y, mode);
         if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
-
     }
     else if ((p = checkstring(cmdline, (unsigned char*)"READ"))) {
         getargs(&p, 11, (unsigned char*)",");
@@ -3775,6 +3792,7 @@ void cmd_blit(void) {
         getargs(&p, 11, ",");                                            // this MUST be the first executable line in the function
         if(*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
         bnbr = getint(argv[0], 1, MAXBLITBUF);                  // get the buffer number
+        if(blitbuff[bnbr].blitbuffptr)error("Buffer % in use",bnbr);
         if(argc == 0) error("Argument count");
         if(!InitSDCard()) return;
         p = getCstring(argv[2]);                                        // get the file name
@@ -4211,12 +4229,12 @@ void cmd_framebuffer(void){
         } else error("Layer already exists");
     } else if((p=checkstring(cmdline, "CLOSE"))) {
         if(checkstring(p, "F")){
-            restoreSPIpanel();            
+            if(WriteBuf!=LayerBuf)restoreSPIpanel();            
             if(FrameBuf)FreeMemory(FrameBuf);
             FrameBuf=NULL;
         } else if(checkstring(p, "L")){
-            restoreSPIpanel();            
-            if(LayerBuf)FreeMemory(FrameBuf);
+            if(WriteBuf!=FrameBuf)restoreSPIpanel();            
+            if(LayerBuf)FreeMemory(LayerBuf);
             LayerBuf=NULL;
         } else  closeframebuffer();
     } else if((p=checkstring(cmdline, "BLIT"))) {
@@ -4253,8 +4271,8 @@ void cmd_framebuffer(void){
         if(y1 + h > VRes) h = VRes - y1;
         if(y2 + h > VRes) h = VRes - y2;
         if(w < 1 || h < 1 || x1 < 0 || x1 + w > HRes || x2 < 0 || x2 + w > HRes || y1 < 0 || y1 + h > VRes || y2 < 0 || y2 + h > VRes) return;
-        char *LCDBuffer=GetTempMemory(1440);
-        int step=sizeof(LCDBuffer)/3/w;
+        unsigned char *LCDBuffer=GetTempMemory(1440);
+        int step=sizeof(1440)/3/w;
         int y_top=(h/step)*step;
         for(int y=0;y<y_top;y+=step){
             if(s==NULL)restoreSPIpanel();
@@ -4262,13 +4280,13 @@ void cmd_framebuffer(void){
                 setframebuffer();
                 WriteBuf=s;
             }
-            ReadBuffer(x1, y1+y, x1+w-1, y1+y+step-1, (char *)&LCDBuffer);
+            ReadBuffer(x1, y1+y, x1+w-1, y1+y+step-1, LCDBuffer);
             if(d==NULL)restoreSPIpanel();
             else {
                 setframebuffer();
                 WriteBuf=d;
             }
-            DrawBuffer(x2, y2+y, x2+w-1, y2+y+step-1, (char *)&LCDBuffer);
+            DrawBuffer(x2, y2+y, x2+w-1, y2+y+step-1, LCDBuffer);
         }
         for(int y=y_top;y<h;y++){
             if(s==NULL)restoreSPIpanel();
@@ -4276,13 +4294,13 @@ void cmd_framebuffer(void){
                 setframebuffer();
                 WriteBuf=s;
             }
-            ReadBuffer(x1, y1+y, x1+w-1, y1+y, (char *)&LCDBuffer);
+            ReadBuffer(x1, y1+y, x1+w-1, y1+y, LCDBuffer);
             if(d==NULL)restoreSPIpanel();
             else {
                 setframebuffer();
                 WriteBuf=d;
             }
-            DrawBuffer(x2, y2+y, x2+w-1, y2+y, (char *)&LCDBuffer);
+            DrawBuffer(x2, y2+y, x2+w-1, y2+y, LCDBuffer);
         }
         if(SPImode) restoreSPIpanel();  
         else {
@@ -4292,9 +4310,10 @@ void cmd_framebuffer(void){
         return;
     } else if((p=checkstring(cmdline, "COPY"))) {
         int complex=0;
+        unsigned char *buff = WriteBuf;
         getargs(&p,3,",");
         if(!(argc==3))error("Syntax");
-        uint8_t *s,*d;
+        uint8_t *s=NULL,*d=NULL;
         if(checkstring(argv[0],"N")){
             complex=1;
             if((void *)ReadBuffer == (void *)DisplayNotSet) error("Invalid on this display");
@@ -4321,9 +4340,10 @@ void cmd_framebuffer(void){
                     WriteBuf=d;
                     for(int y=0;y<VRes;y++){
                         restoreSPIpanel();   
-                        ReadBuffer(0,y,HRes-1,y,(char *)&LCDBuffer);
+                        ReadBuffer(0,y,HRes-1,y,(char *)LCDBuffer);
+                        WriteBuf=d;
                         setframebuffer();
-                        DrawBuffer(0,y,HRes-1,y,(char *)&LCDBuffer);
+                        DrawBuffer(0,y,HRes-1,y,(char *)LCDBuffer);
                     }
                     if(SPImode) restoreSPIpanel();  
                 } else { //copying to the real display
@@ -4371,6 +4391,7 @@ void cmd_framebuffer(void){
                 }
             }
         }
+        WriteBuf=buff;
     } else error("Syntax");
 }
 
@@ -4389,6 +4410,7 @@ void cmd_blit(void) {
         getargs(&p, 11, ",");                                            // this MUST be the first executable line in the function
         if(*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
         bnbr = getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
+        if(blitbuff[bnbr].blitbuffptr)error("Buffer % in use",bnbr);
         if(argc == 0) error("Argument count");
         if(!InitSDCard()) return;
         p = getCstring(argv[2]);                                        // get the file name

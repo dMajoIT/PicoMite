@@ -39,13 +39,13 @@ extern "C" {
 #ifdef PICOMITEWEB
 #include "lwipopts_examples_common.h"
 #define MAXVARS             480                    // 8 + MAXVARLEN + MAXDIM * 2  (ie, 56 bytes) - these do not incl array members
-#define FLASH_TARGET_OFFSET (1024 * 1024) 
-#define MagicKey 0x28137327
+#define FLASH_TARGET_OFFSET (1096 * 1024) 
+#define MagicKey 0x45637327
 #define HEAPTOP 0x2003fc00
 #define HEAP_MEMORY_SIZE (80*1024) 
 #define MaxPcb 8
 #define MAX_CPU     378000
-#define MIN_CPU     64000
+#define MIN_CPU     126000
 #define MAXSUBFUN           256                     // each entry takes up 4 bytes
 #endif
 #ifdef PICOMITE
@@ -178,8 +178,11 @@ extern "C" {
 #define QVGA_DMA_CB	0	// DMA control block of base layer
 #define QVGA_DMA_PIO	1	// DMA copy data to PIO (raises IRQ0 on quiet)
 #define ADC_DMA 2
-#define PIO_RX_DMA 3
+#define ADC_DMA2 7
+#define PIO_RX_DMA 8
 #define PIO_TX_DMA 4
+#define PIO_RX_DMA2 9
+#define PIO_TX_DMA2 6
 #define PROGSTART (FLASH_TARGET_OFFSET + FLASH_ERASE_SIZE + SAVEDVARS_FLASH_SIZE + ((MAXFLASHSLOTS) * MAX_PROG_SIZE))
 #define TOP_OF_SYSTEM_FLASH  (FLASH_TARGET_OFFSET + FLASH_ERASE_SIZE + SAVEDVARS_FLASH_SIZE + ((MAXFLASHSLOTS+1) * MAX_PROG_SIZE))
 #define RoundUpK4(a)     (((a) + (4096 - 1)) & (~(4096 - 1)))// round up to the nearest page size      [position 131:9]	

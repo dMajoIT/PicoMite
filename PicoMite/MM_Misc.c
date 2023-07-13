@@ -42,6 +42,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "hardware/pio.h"
 #include "hardware/pio_instructions.h"
 #include <malloc.h>
+#include "xregex.h"
 
 uint32_t getTotalHeap(void) {
    extern char __StackLimit, __bss_end__;
@@ -75,6 +76,8 @@ extern const char *FErrorMsg[];
 #ifdef PICOMITEWEB
 	char *MQTTInterrupt=NULL;
 	volatile int MQTTComplete=0;
+    char *UDPinterrupt=NULL;
+    volatile int UDPreceive=0;
 #endif
 extern const uint8_t *flash_target_contents;
 int TickPeriod[NBRSETTICKS]={0};
@@ -970,10 +973,10 @@ void fun_LInstr(void){
         char *srch;
         char *str=NULL;
         int slen,found=0,i,j,n;
-        getargs(&ep, 5, ",");
-        if(argc <3  || argc > 5)error("Argument count");
+        getargs(&ep, 7, ",");
+        if(argc <3  || argc > 7)error("Argument count");
         int64_t start;
-        if(argc==5)start=getinteger(argv[4])-1;
+        if(argc>=5 && *argv[4])start=getinteger(argv[4])-1;
         else start=0;
         ptr1 = findvar(argv[0], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
         if(vartbl[VarIndex].type & T_INT) {
@@ -986,20 +989,49 @@ void fun_LInstr(void){
         } else error("Argument 1 must be integer array");
         j=(vartbl[VarIndex].dims[0] - OptionBase);
         srch=getstring(argv[2]);
-        slen=*srch;
-        iret=0;
-        if(start>dest[0] || start<0 || slen==0 || dest[0]==0 || slen>dest[0]-start)found=1;
-        if(!found){
-            n=dest[0]- slen - start;
+        if(argc<7){
+            slen=*srch;
+            iret=0;
+            if(start>dest[0] || start<0 || slen==0 || dest[0]==0 || slen>dest[0]-start)found=1;
+            if(!found){
+                n=dest[0]- slen - start;
 
-            for(i = start; i <= n + start; i++) {
-                if(str[i + 8] == srch[1]) {
-                    for(j = 0; j < slen; j++)
-                        if(str[j + i + 8] != srch[j + 1])
-                            break;
-                    if(j == slen) {iret= i + 1; break;}
+                for(i = start; i <= n + start; i++) {
+                    if(str[i + 8] == srch[1]) {
+                        for(j = 0; j < slen; j++)
+                            if(str[j + i + 8] != srch[j + 1])
+                                break;
+                        if(j == slen) {iret= i + 1; break;}
+                    }
                 }
             }
+        } else { //search string is a regular expression
+            regex_t regex;
+            int reti;
+            regmatch_t pmatch;
+            MMFLOAT *temp=NULL;
+            MtoC(srch);
+            temp = findvar(argv[6], V_FIND);
+            if(!(vartbl[VarIndex].type & T_NBR)) error("Invalid variable");
+            reti = regcomp(&regex, srch, 0);
+            if( reti ) {
+                regfree(&regex);
+                error("Could not compile regex");
+            }
+	        reti = regexec(&regex, &str[start+8], 1, &pmatch, 0);
+            if( !reti ){
+                iret=pmatch.rm_so+1+start;
+                if(temp)*temp=(MMFLOAT)(pmatch.rm_eo-pmatch.rm_so);
+            }
+            else if( reti == REG_NOMATCH ){
+                iret=0;
+                if(temp)*temp=0.0;
+            }
+            else{
+		        regfree(&regex);
+                error("Regex execution error");
+            }
+		    regfree(&regex);
         }
         targ = T_INT;
 }
@@ -1787,10 +1819,29 @@ void printoptions(void){
     if(*Option.SSID){
         char password[]="****************************************************************";
         password[strlen(Option.PASSWORD)]=0;
-        PO3Str("WIFI",Option.SSID,password);
+        PO("WIFI");
+        MMPrintString(Option.SSID);MMputchar(',',1);MMputchar(' ',1);
+        MMPrintString(password);
+        MMputchar(',',1);
+            MMputchar(' ',1);
+        MMPrintString(Option.hostname);
+        if(*Option.ipaddress){
+            MMputchar(',',1);
+            MMputchar(' ',1);
+            MMPrintString(Option.ipaddress);
+            MMputchar(',',1);
+            MMputchar(' ',1);
+            MMPrintString(Option.mask);
+            MMputchar(',',1);
+            MMputchar(' ',1);
+            MMPrintString(Option.gateway);
+        }
+        PRet();
     }
     if(Option.TCP_PORT && Option.ServerResponceTime!=5000)PO3Int("TCP SERVER PORT", Option.TCP_PORT, Option.ServerResponceTime);
     if(Option.TCP_PORT && Option.ServerResponceTime==5000)PO2Int("TCP SERVER PORT", Option.TCP_PORT);
+    if(Option.UDP_PORT && Option.UDPServerResponceTime!=5000)PO3Int("UDP SERVER PORT", Option.UDP_PORT, Option.UDPServerResponceTime);
+    if(Option.UDP_PORT && Option.UDPServerResponceTime==5000)PO2Int("UDP SERVER PORT", Option.UDP_PORT);
     if(Option.Telnet==1)PO2Str("TELNET", "CONSOLE ON");
     if(Option.Telnet==-1)PO2Str("TELNET", "CONSOLE ONLY");
     if(Option.disabletftp==1)PO2Str("TFTP", "OFF");
@@ -2236,17 +2287,47 @@ void cmd_option(void) {
 #ifdef PICOMITEWEB
     tp = checkstring(cmdline, "WIFI");
     if(tp) {
-        getargs(&tp,3,",");
-        if(argc!=3)error("Syntax");
+        getargs(&tp,11,",");
+        if(!(argc==3 || argc==5 || argc==11))error("Syntax");
    	    if(CurrentLinePtr) error("Invalid in a program");
         char *ssid=GetTempMemory(STRINGSIZE);
         char *password=GetTempMemory(STRINGSIZE);
+        char *hostname=GetTempMemory(STRINGSIZE);
+        char *ipaddress=GetTempMemory(STRINGSIZE);
+        char *mask=GetTempMemory(STRINGSIZE);
+        char *gateway=GetTempMemory(STRINGSIZE);
         strcpy(ssid,getCstring(argv[0]));
         strcpy(password,getCstring(argv[2]));
         if(strlen(ssid)>MAXKEYLEN-1)error("SSID too long, max 63 chars");
         if(strlen(password)>MAXKEYLEN-1)error("Password too long, max 63 chars");
+        if(argc==11){
+            strcpy(ipaddress,getCstring(argv[6]));
+            strcpy(mask,getCstring(argv[8]));
+            strcpy(gateway,getCstring(argv[10]));
+            ip4_addr_t ipaddr;
+            if(!ip4addr_aton(ipaddress, &ipaddr))error("Invalid IP address");
+            if(!ip4addr_aton(mask, &ipaddr))error("Invalid mask address");
+            if(!ip4addr_aton(gateway, &ipaddr))error("Invalid gateway address");
+        }
+        if(argc>=5 && *argv[4]){
+            strcpy(hostname,getCstring(argv[4]));
+            if(strlen(hostname)>31)error("Hostname too long, max 31 chars");
+        }  else {
+            strcpy(hostname,"PICO");
+            strcat(hostname,id_out);
+        }
         strcpy(Option.SSID,ssid);
         strcpy(Option.PASSWORD,password);
+        if(argc==11){
+            strcpy(Option.ipaddress,ipaddress);    
+            strcpy(Option.mask,mask);
+            strcpy(Option.gateway,gateway);
+        } else {
+            memset(Option.ipaddress,0,16);
+            memset(Option.mask,0,16);
+            memset(Option.gateway,0,16);
+        }
+        strcpy(Option.hostname,hostname);
         SaveOptions();
          _excep_code = RESET_COMMAND;
         SoftReset();
@@ -2259,6 +2340,18 @@ void cmd_option(void) {
         Option.TCP_PORT=getint(argv[0],0,65535);
         Option.ServerResponceTime=5000;
         if(argc==3)Option.ServerResponceTime=getint(argv[2],1000,20000);
+        SaveOptions();
+         _excep_code = RESET_COMMAND;
+        SoftReset();
+        return;
+    }
+    tp = checkstring(cmdline, "UDP SERVER PORT");
+    if(tp) {
+        getargs(&tp,3,",");
+   	    if(CurrentLinePtr) error("Invalid in a program");
+        Option.UDP_PORT=getint(argv[0],0,65535);
+        Option.UDPServerResponceTime=5000;
+        if(argc==3)Option.UDPServerResponceTime=getint(argv[2],1000,20000);
         SaveOptions();
          _excep_code = RESET_COMMAND;
         SoftReset();
@@ -2936,6 +3029,10 @@ void fun_info(void){
         targ=T_INT;
         return;
 #endif
+    } else if((tp=checkstring(ep, "ADC"))){
+        targ=T_INT;
+        iret=((adcint==adcint1 && adcint) ? 1 : ((adcint==adcint2 && adcint) ? 2 : 0));
+        return;
     } else if(checkstring(ep, "BCOLOUR") || checkstring(ep, "BCOLOR")){
             iret=gui_bcolour;
             targ=T_INT;
@@ -3232,8 +3329,11 @@ void fun_info(void){
 			targ=T_INT;
 			return;
 		} else if(checkstring(tp, "ANGLE")){
-			if(optionangle==1.0)strcpy(sret,"DEGREES");
-			else strcpy(sret,"RADIANS");
+			if(optionangle==1.0)strcpy(sret,"RADIANS");
+			else strcpy(sret,"DEGREES");
+            CtoM(sret);
+            targ=T_STR;
+            return;
  		} else if(checkstring(tp, "DEFAULT")){
 			if(DefaultType == T_INT)strcpy(sret,"Integer");
 			else if(DefaultType == T_NBR)strcpy(sret,"Float");
@@ -3362,11 +3462,14 @@ void fun_info(void){
         if(checkstring(ep, "SDCARD")){
             int i=OptionFileErrorAbort;
             OptionFileErrorAbort=0;
+            FatFSFileSystemSave = FatFSFileSystem;
+            FatFSFileSystem=1;
             if(!InitSDCard())strcpy(sret,"Not present");
             else  strcpy(sret,"Ready");
             CtoM(sret);
             targ=T_STR;
             OptionFileErrorAbort=i;
+            FatFSFileSystem = FatFSFileSystemSave;
             return;
         } else if(checkstring(ep, "SPI SPEED")){
             SPISpeedSet(Option.DISPLAY_TYPE);
@@ -3390,17 +3493,7 @@ void fun_info(void){
             targ=T_INT;
             return;
         } else if(checkstring(ep, "SOUND")){
-            switch(CurrentlyPlaying){
-            case P_NOTHING:strcpy(sret,"OFF");break;
-            case P_PAUSE_TONE:
-            case P_PAUSE_WAV:
-            case P_PAUSE_SOUND:
-            case P_PAUSE_FLAC:strcpy(sret,"PAUSED");break;
-            case P_TONE:strcpy(sret,"TONE");break;
-            case P_WAV:strcpy(sret,"WAV");break;
-            case P_FLAC:strcpy(sret,"FLAC");break;
-            case P_SOUND:strcpy(sret,"SOUND");break;
-            }
+            strcpy(sret,PlayingStr[CurrentlyPlaying]);
             CtoM(sret);
             targ=T_STR;
             return;
@@ -3963,10 +4056,15 @@ int checkdetailinterrupts(void) {
         intaddr = MQTTInterrupt;                                      // set the next stmt to the interrupt location
         goto GotAnInterrupt;
     }
+    if(UDPreceive && UDPinterrupt != NULL) {
+        UDPreceive = false;
+        intaddr = UDPinterrupt;                                     // set the next stmt to the interrupt location
+        goto GotAnInterrupt;
+    }
 #endif
 
     if(ADCInterrupt && dmarunning){
-        if(!dma_channel_is_busy(dma_chan)){
+        if(!dma_channel_is_busy(ADC_dma_chan)){
             __compiler_memory_barrier();
             adc_run(false);
             adc_fifo_drain();
@@ -3985,6 +4083,12 @@ int checkdetailinterrupts(void) {
         goto GotAnInterrupt;
         }
     }
+    if(ADCInterrupt && ADCrunning){
+        ADCrunning=0;
+        intaddr = ADCInterrupt;
+        goto GotAnInterrupt;
+    }
+
 
 //#ifdef INCLUDE_I2C_SLAVE
 

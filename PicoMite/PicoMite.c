@@ -159,8 +159,6 @@ static int64_t PinReadFunc(int a){return gpio_get(PinDef[a].GPno);}
 extern void CallExecuteProgram(char *p);
 extern void CallCFuncmSec(void);
 void executelocal(char *p);
-static uint64_t timer_target;
-unsigned int CFuncFastTimer = (unsigned int)NULL;
 #define CFUNCRAM_SIZE   256
 int CFuncRam[CFUNCRAM_SIZE/sizeof(int)];
 MMFLOAT IntToFloat(long long int a){ return a; }
@@ -330,15 +328,15 @@ void __not_in_flash_func(routinechecks)(void){
 
 int __not_in_flash_func(getConsole)(void) {
     int c=-1;
+#ifdef PICOMITEWEB
+    ProcessWeb();
+#endif
     CheckAbort();
     if(ConsoleRxBufHead != ConsoleRxBufTail) {                            // if the queue has something in it
         c = ConsoleRxBuf[ConsoleRxBufTail];
         ConsoleRxBufTail = (ConsoleRxBufTail + 1) % CONSOLE_RX_BUF_SIZE;   // advance the head of the queue
 	}
     return c;
-#ifdef PICOMITEWEB
-    ProcessWeb();
-#endif
 }
 
 void putConsole(int c, int flush) {
@@ -1796,9 +1794,22 @@ static void transform_star_command(char *input) {
 #ifdef PICOMITEWEB
 void WebConnect(void){
     if(*Option.SSID){
-        cyw43_arch_enable_sta_mode();
-        MMPrintString("Connecting to WiFi...\r\n");
-        if (cyw43_arch_wifi_connect_timeout_ms(Option.SSID, Option.PASSWORD, CYW43_AUTH_WPA2_AES_PSK, 30000)) {
+        if(*Option.ipaddress){
+            cyw43_arch_enable_sta_mode();
+            dhcp_stop(cyw43_state.netif);
+            ip4_addr_t ipaddr, gateway, mask;
+            ip4addr_aton(Option.ipaddress, &ipaddr);
+            ip4addr_aton(Option.gateway, &gateway);
+            ip4addr_aton(Option.mask, &mask);
+            netif_set_addr( cyw43_state.netif,&ipaddr,&mask,&gateway);
+        } else cyw43_arch_enable_sta_mode();
+        if(*Option.hostname){
+            MMPrintString(Option.hostname);
+            netif_set_hostname(cyw43_state.netif, Option.hostname);
+        }
+        cyw43_wifi_pm(&cyw43_state, CYW43_NO_POWERSAVE_MODE);        
+        MMPrintString(" connecting to WiFi...\r\n");
+        if (cyw43_arch_wifi_connect_timeout_ms(Option.SSID, (*Option.PASSWORD ? Option.PASSWORD : NULL), (*Option.PASSWORD ? CYW43_AUTH_WPA2_AES_PSK : CYW43_AUTH_OPEN), 30000)) {
             MMPrintString("failed to connect.\r\n");
             WIFIconnected=0;
         } else {
@@ -1806,8 +1817,9 @@ void WebConnect(void){
             sprintf(buff,"Connected %s\r\n",ip4addr_ntoa(netif_ip4_addr(netif_list)));
             MMPrintString(buff);
             WIFIconnected=1;
-            open_tcp_server(1);
+            open_tcp_server();
             if(!Option.disabletftp)cmd_tftp_server_init();
+            if(Option.UDP_PORT)open_udp_server();
         }
     }
 }
@@ -1822,7 +1834,7 @@ int main(){
     if(  Option.Baudrate == 0 ||
         !(Option.Tab==2 || Option.Tab==3 || Option.Tab==4 ||Option.Tab==8) ||
         !(Option.Autorun>=0 && Option.Autorun<=MAXFLASHSLOTS+1) ||
-        Option.CPU_Speed<48000 || Option.CPU_Speed>378000 ||
+        Option.CPU_Speed<MIN_CPU || Option.CPU_Speed>MAX_CPU ||
         Option.PROG_FLASH_SIZE!=MAX_PROG_SIZE ||
         !(Option.Magic==MagicKey)
         ){
@@ -1912,12 +1924,6 @@ int main(){
         WatchdogSet = true;                                 // remember if it was a watchdog timeout
         MMPrintString("\r\n\nWatchdog timeout\r\n");
     }
-    #ifdef PICOMITEWEB
-    if (cyw43_arch_init()==0) {
-        startupcomplete=1;
-        WebConnect();
-    }
-    #endif
     if(noRTC){
         noRTC=0;
         Option.RTC=0;
@@ -1947,14 +1953,21 @@ int main(){
         else {
             ClearProgram();
         }
+    #ifdef PICOMITEWEB
+    if (cyw43_arch_init()==0) {
+        startupcomplete=1;
+        WebConnect();
+    }
+    #endif
         PrepareProgram(true);
         if(FindSubFun("MM.STARTUP", 0) >= 0) ExecuteProgram("MM.STARTUP\0");
         if(Option.Autorun && _excep_code != RESTART_DOAUTORUN) {
             ClearRuntime();
             PrepareProgram(true);
             if(*ProgMemory == 0x01 ){
-                if(Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE) ExecuteProgram(LibMemory);  // run anything that might be in the library
-                ExecuteProgram(ProgMemory);  
+                memset(tknbuf,0,STRINGSIZE);
+                *tknbuf=GetCommandValue((char *)"RUN");
+                goto autorun;
             }  else {
                 Option.Autorun=0;
                 SaveOptions();
@@ -2015,6 +2028,7 @@ int main(){
                 transform_star_command(inpbuf);
                 p = inpbuf;
         }        tokenise(true);                                             // turn into executable code
+autorun:
         i=0;
         if(*tknbuf==GetCommandValue((char *)"RUN"))i=1;
         if (setjmp(jmprun) != 0) {
