@@ -1581,9 +1581,25 @@ IF sTyp(best) = T_STATION THEN
 sEne(best) = bEne(sBp(best))
 AngerStation
 ELSE
+IF lasView(vw) = LAS_MINING THEN Mine best
 Explode best
 ENDIF
 ENDIF
+END SUB
+SUB Mine(n AS INTEGER)
+LOCAL INTEGER i, cnt, m, t
+SELECT CASE sTyp(n)
+CASE T_ASTEROID, T_HERMIT : t = T_BOULDER
+CASE T_BOULDER            : t = T_SPLINTER
+CASE ELSE                 : EXIT SUB
+END SELECT
+cnt = INT(RND * 4)
+FOR i = 1 TO cnt
+MATH Q_EULER RND * 6, RND * 6, 0, qA() : qA(4) = 1
+m = NewShip(t, sX(n) + (RND * 400 - 200), sY(n) + (RND * 400 - 200), sZ(n) + (RND * 400 - 200), qA())
+IF m < 0 THEN EXIT SUB
+sRol(m) = 130 : sPit(m) = 5
+NEXT i
 END SUB
 SUB Explode(n AS INTEGER)
 sExp(n) = 18
@@ -2296,12 +2312,15 @@ END FUNCTION
 FUNCTION Scoopable(t AS INTEGER) AS INTEGER
 Scoopable = 0
 IF t = T_CANISTER OR t = T_ESCAPE OR t = T_THARGON THEN Scoopable = 1
+IF t = T_SPLINTER THEN Scoopable = 1
 END FUNCTION
 SUB ScoopIt(n AS INTEGER, t AS INTEGER)
 LOCAL INTEGER item
 SELECT CASE t
 CASE T_ESCAPE  : item = 3
 CASE T_THARGON : item = 16
+CASE T_SPLINTER
+IF INT(RND * 8) = 0 THEN item = 15 ELSE item = 12
 CASE ELSE      : item = INT(RND * 8)
 END SELECT
 IF item < 13 AND HoldUsed() >= holdSize THEN
@@ -2443,7 +2462,13 @@ CASE ELSE : ViewWord$ = "Right "
 END SELECT
 END FUNCTION
 FUNCTION LaserWord$(p AS INTEGER)
-IF p >= 128 THEN LaserWord$ = "Beam Laser" ELSE LaserWord$ = "Pulse Laser"
+SELECT CASE p
+CASE LAS_PULSE    : LaserWord$ = "Pulse Laser"
+CASE LAS_BEAM     : LaserWord$ = "Beam Laser"
+CASE LAS_MINING   : LaserWord$ = "Mining Laser"
+CASE LAS_MILITARY : LaserWord$ = "Military Laser"
+CASE ELSE         : LaserWord$ = "Pulse Laser"
+END SELECT
 END FUNCTION
 FUNCTION CondName$()
 IF docked THEN
@@ -2605,16 +2630,20 @@ SUB BuyEquip(i AS INTEGER)
 LOCAL INTEGER v
 IF eqTech(i) > sysTech + 1 THEN EXIT SUB
 IF cashTenths < eqPrice(i) * 10 THEN EXIT SUB
-IF i = EQ_PULSE OR i = EQ_BEAM THEN
+IF i = EQ_PULSE OR i = EQ_BEAM OR i = EQ_MINING OR i = EQ_MILITARY THEN
 v = AskView()
 IF v < 0 THEN EXIT SUB
 IF i = EQ_PULSE THEN
 IF lasView(v) <> 0 THEN Sfx SFX_BOOP : EXIT SUB
 lasView(v) = LAS_PULSE
 ELSE
-IF lasView(v) >= 128 THEN Sfx SFX_BOOP : EXIT SUB
-IF lasView(v) <> 0 THEN cashTenths = cashTenths + eqPrice(EQ_PULSE) * 10
-lasView(v) = LAS_BEAM
+IF i = EQ_BEAM AND lasView(v) = LAS_BEAM THEN Sfx SFX_BOOP : EXIT SUB
+IF i = EQ_MINING AND lasView(v) = LAS_MINING THEN Sfx SFX_BOOP : EXIT SUB
+IF i = EQ_MILITARY AND lasView(v) = LAS_MILITARY THEN Sfx SFX_BOOP : EXIT SUB
+IF lasView(v) = LAS_PULSE THEN cashTenths = cashTenths + eqPrice(EQ_PULSE) * 10
+IF i = EQ_BEAM THEN lasView(v) = LAS_BEAM
+IF i = EQ_MINING THEN lasView(v) = LAS_MINING
+IF i = EQ_MILITARY THEN lasView(v) = LAS_MILITARY
 ENDIF
 cashTenths = cashTenths - eqPrice(i) * 10
 EXIT SUB
@@ -2724,6 +2753,8 @@ DATA "Energy Bomb",900,7
 DATA "Energy Unit",1500,8
 DATA "Docking Computer",1500,9
 DATA "Galactic Hyperdrive",5000,10
+DATA "Extra Military Lasers",6000,10
+DATA "Extra Mining Lasers",800,10
 FUNCTION TitleScreen() AS INTEGER
 LOCAL INTEGER k
 DO

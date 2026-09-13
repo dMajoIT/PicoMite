@@ -61,7 +61,13 @@ FUNCTION ViewWord$(v AS INTEGER)
 END FUNCTION
 
 FUNCTION LaserWord$(p AS INTEGER)
-  IF p >= 128 THEN LaserWord$ = "Beam Laser" ELSE LaserWord$ = "Pulse Laser"
+  SELECT CASE p
+    CASE LAS_PULSE    : LaserWord$ = "Pulse Laser"
+    CASE LAS_BEAM     : LaserWord$ = "Beam Laser"
+    CASE LAS_MINING   : LaserWord$ = "Mining Laser"
+    CASE LAS_MILITARY : LaserWord$ = "Military Laser"
+    CASE ELSE         : LaserWord$ = "Pulse Laser"
+  END SELECT
 END FUNCTION
 
 FUNCTION CondName$()
@@ -258,7 +264,7 @@ SUB BuyEquip(i AS INTEGER)
   ' A laser is not owned once and for all: there is a mount for each of the
   ' four views and one can be bought for each, which is why these two rows
   ' never grey out until every mount is full.
-  IF i = EQ_PULSE OR i = EQ_BEAM THEN
+  IF i = EQ_PULSE OR i = EQ_BEAM OR i = EQ_MINING OR i = EQ_MILITARY THEN
     v = AskView()
     IF v < 0 THEN EXIT SUB
     IF i = EQ_PULSE THEN
@@ -266,11 +272,16 @@ SUB BuyEquip(i AS INTEGER)
       IF lasView(v) <> 0 THEN Sfx SFX_BOOP : EXIT SUB
       lasView(v) = LAS_PULSE
     ELSE
-      ' A beam will replace a pulse, and the original hands back what the
-      ' pulse cost when it does.  Only another beam is refused.
-      IF lasView(v) >= 128 THEN Sfx SFX_BOOP : EXIT SUB
-      IF lasView(v) <> 0 THEN cashTenths = cashTenths + eqPrice(EQ_PULSE) * 10
-      lasView(v) = LAS_BEAM
+      ' Anything else replaces what is there, and the original hands back
+      ' what a pulse cost when it does - but it will not sell you the same
+      ' laser twice for one mount.
+      IF i = EQ_BEAM AND lasView(v) = LAS_BEAM THEN Sfx SFX_BOOP : EXIT SUB
+      IF i = EQ_MINING AND lasView(v) = LAS_MINING THEN Sfx SFX_BOOP : EXIT SUB
+      IF i = EQ_MILITARY AND lasView(v) = LAS_MILITARY THEN Sfx SFX_BOOP : EXIT SUB
+      IF lasView(v) = LAS_PULSE THEN cashTenths = cashTenths + eqPrice(EQ_PULSE) * 10
+      IF i = EQ_BEAM THEN lasView(v) = LAS_BEAM
+      IF i = EQ_MINING THEN lasView(v) = LAS_MINING
+      IF i = EQ_MILITARY THEN lasView(v) = LAS_MILITARY
     ENDIF
     cashTenths = cashTenths - eqPrice(i) * 10
     EXIT SUB
@@ -396,3 +407,5 @@ DATA "Energy Bomb",900,7
 DATA "Energy Unit",1500,8
 DATA "Docking Computer",1500,9
 DATA "Galactic Hyperdrive",5000,10
+DATA "Extra Military Lasers",6000,10
+DATA "Extra Mining Lasers",800,10

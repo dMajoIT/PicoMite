@@ -59,9 +59,31 @@ SUB FireLaser
       sEne(best) = bEne(sBp(best))       ' a station cannot be shot down
       AngerStation
     ELSE
+      ' A mining laser is the only thing that breaks a rock into anything
+      ' worth scooping.  Shoot one with anything else and it is simply gone.
+      IF lasView(vw) = LAS_MINING THEN Mine best
       Explode best
     ENDIF
   ENDIF
+END SUB
+
+' Break a rock up.  The original spawns nought to three of the next thing
+' down - an asteroid or a rock hermit gives boulders, a boulder gives
+' splinters - and a splinter is already the smallest piece there is.
+SUB Mine(n AS INTEGER)
+  LOCAL INTEGER i, cnt, m, t
+  SELECT CASE sTyp(n)
+    CASE T_ASTEROID, T_HERMIT : t = T_BOULDER
+    CASE T_BOULDER            : t = T_SPLINTER
+    CASE ELSE                 : EXIT SUB
+  END SELECT
+  cnt = INT(RND * 4)
+  FOR i = 1 TO cnt
+    MATH Q_EULER RND * 6, RND * 6, 0, qA() : qA(4) = 1
+    m = NewShip(t, sX(n) + (RND * 400 - 200), sY(n) + (RND * 400 - 200), sZ(n) + (RND * 400 - 200), qA())
+    IF m < 0 THEN EXIT SUB
+    sRol(m) = 130 : sPit(m) = 5
+  NEXT i
 END SUB
 
 ' Start a ship exploding.  The cloud grows for a while and then goes out,

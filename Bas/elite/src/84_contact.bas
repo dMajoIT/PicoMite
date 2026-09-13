@@ -111,6 +111,8 @@ END FUNCTION
 FUNCTION Scoopable(t AS INTEGER) AS INTEGER
   Scoopable = 0
   IF t = T_CANISTER OR t = T_ESCAPE OR t = T_THARGON THEN Scoopable = 1
+  ' What a mining laser leaves behind, which is the whole point of owning one.
+  IF t = T_SPLINTER THEN Scoopable = 1
 END FUNCTION
 
 SUB ScoopIt(n AS INTEGER, t AS INTEGER)
@@ -118,6 +120,10 @@ SUB ScoopIt(n AS INTEGER, t AS INTEGER)
   SELECT CASE t
     CASE T_ESCAPE  : item = 3            ' an escape pod is slaves
     CASE T_THARGON : item = 16           ' and a Thargon is alien items
+    ' A splinter is minerals, and one time in eight it is gem-stones -
+    ' which is what makes mining pay at all.
+    CASE T_SPLINTER
+      IF INT(RND * 8) = 0 THEN item = 15 ELSE item = 12
     CASE ELSE      : item = INT(RND * 8) ' a canister, anything up to computers
   END SELECT
   IF item < 13 AND HoldUsed() >= holdSize THEN

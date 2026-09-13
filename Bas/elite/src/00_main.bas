@@ -200,12 +200,22 @@ CONST SRDX = 5                     ' our pixels per galaxy unit across
 CONST SRDY = 2                     ' and down
 
 ' Equipment on offer, gated by the system's technology level.
-CONST NEQUIP = 11
+CONST NEQUIP = 13
 ' Rows of the shop that other code has to know about by name.
 CONST EQ_ECM = 2, EQ_PULSE = 3, EQ_BEAM = 4, EQ_SCOOPS = 5, EQ_POD = 6
 CONST EQ_BOMB = 7, EQ_ENERGY = 8, EQ_DOCK = 9, EQ_GALHYP = 10
+' The disc version's two extra lasers, in its own order and at the same
+' place in the list - which is why both appear at once, at tech level 9.
+CONST EQ_MILITARY = 11, EQ_MINING = 12
+' A laser is a power with bit 7 meaning it fires continuously rather than in
+' pulses, which is the original's own encoding.  A beam is a pulse laser that
+' does not stop; a military laser is a beam at half again the damage; and a
+' mining laser hits far harder than any of them but only in pulses, and is the
+' only thing that will break an asteroid up.
 CONST LAS_PULSE = 15, LAS_BEAM = 143
-DIM eqName$(NEQUIP-1) LENGTH 20
+CONST LAS_MINING = 50                  ' Mlas in the original
+CONST LAS_MILITARY = 151               ' INT(128.5 + 1.5 * 15), as the original
+DIM eqName$(NEQUIP-1) LENGTH 24    ' "Extra Military Lasers" is 21 of them
 DIM INTEGER eqPrice(NEQUIP-1), eqTech(NEQUIP-1), eqOwned(NEQUIP-1)
 
 CONST NGOODS = 17

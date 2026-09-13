@@ -235,7 +235,9 @@ From the **disc version** (and the Master, which is built on it):
 
 - A second space station, the Dodo, at the safer end of a system.
 - Rock hermits: the ship is here, but not the trading post it turns out to be.
-- Mining lasers and military lasers, and asteroids worth splitting for gems.
+- Kill credit for canisters, asteroids, escape pods and Thargons - which this
+  port already gives, having been written to the simpler rule. The cassette
+  game awards nothing for junk; this and the disc version award for everything.
 - A real docking computer that flies you in, which is where our flown approach
   comes from.
 - The two missions: the Constrictor, and the Thargoid documents run.
@@ -256,6 +258,16 @@ Taken from it so far:
 
 - **Buying and selling a stated number of tonnes** rather than one at a time.
   `Space` still trades one, so nothing that used to be quick got slower.
+- **Mining and military lasers**, at the original's own powers and prices: a
+  mining laser is 50 at 800 Cr, a military laser 151 at 6000 Cr - and 151 has
+  the top bit set, so it fires continuously like a beam at half again a beam's
+  damage. Both appear at tech level 9, which is where the original unlocks the
+  whole list at once.
+- **Asteroids worth splitting.** A mining laser is the only thing that breaks a
+  rock into anything: an asteroid or a rock hermit gives nought to three
+  boulders, a boulder gives splinters, and a splinter scooped is minerals - or,
+  one time in eight, gem-stones. Anything else you shoot a rock with simply
+  destroys it, as before.
 
 From the **6502 Second Processor version**, which had a whole second computer
 to spend - and which this port now follows, because a PicoComputer has that
