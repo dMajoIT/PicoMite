@@ -2197,6 +2197,152 @@ void MIPS16 cmd_library(void)
         CurrentLinePtr = NULL; // keep the NEW command happy
         cmd_new();             //  delete the program,add the library code and return to the command prompt
     }
+#ifndef PICOMITEMIN
+    /********************************************************************************************************************
+    ******* LIBRARY LOAD ************************************************************************************************
+
+      LIBRARY LOAD fname$ [, O]
+
+      Puts a BASIC file into the library from inside a running program, so a
+      program can guarantee its own library rather than relying on somebody
+      having typed LIBRARY SAVE first.
+
+      It has to run before the program declares anything.  The library's own
+      top level - its CONSTs and DIMs - is executed at RUN, before the
+      program's first line, and a second declaration of the same name is an
+      error; so a library loaded after the program had started would arrive
+      too late to be initialised.  The same rule has a happy side effect: with
+      nothing declared the heap is empty, so the whole of it is available for
+      the source.
+
+      Loading is idempotent.  The hash of the source is kept in the options, so
+      a program that does this on every run reads the file, finds the library
+      already matches, and touches no flash at all.  Only when it differs is
+      anything erased - and then it asks first, because the library it is about
+      to replace may belong to another program.  O (or OVERWRITE) skips the
+      question for a program running unattended.
+
+      Having written it, there is no way to initialise the library in the
+      middle of a run, so the program is restarted: PrepareProgram rebuilds the
+      subroutine tables over both halves, the library's top level runs, and
+      execution begins again at line 1 - where this command is now a no-op
+      because the hash matches.
+    ********************************************************************************************************************/
+    if ((tp = checkstring(cmdline, (unsigned char *)"LOAD")))
+    {
+        int overwrite = 0, haslib;
+        uint32_t hash = 0;
+        unsigned char *image = NULL;
+        /* Captured before anything else runs.  Loading the file clears
+           CurrentLinePtr somewhere down in the file layer, and writing the
+           image sets it to a line inside the library, so by the end of this
+           command it no longer says anything about where we are.  We need it
+           both to know we are in a program at all and to put it back. */
+        unsigned char *savedline = CurrentLinePtr;
+        getcsargs(&tp, 3);
+        if (!(argc == 1 || argc == 3))
+            SyntaxError();
+        if (argc == 3)
+        {
+            if (checkstring(argv[2], (unsigned char *)"O") || checkstring(argv[2], (unsigned char *)"OVERWRITE"))
+                overwrite = 1;
+            else
+                SyntaxError();
+        }
+        /* Must be the program's first statement.  Counting variables cannot
+           tell us that: by the time the program's first line runs, the
+           library's own top level has already declared everything in it, so
+           a variable count is never zero once a library is working.  What
+           actually matters is that the PROGRAM has not declared anything,
+           because the restart below would run those declarations a second
+           time.  So test the position instead, stepping over leading comment
+           and blank lines - the '#filename header a loaded program carries is
+           one of them, and neither kind declares anything. */
+        if (savedline)
+        {
+            const unsigned char *q = ProgMemory;
+            for (;;)
+            {
+                const unsigned char *body;
+                if (*q != T_NEWLINE)
+                    break;
+                body = q + T_NEWLINE_HDR;
+                if (*body == T_LINENBR)
+                    body += 3;
+                while (*body == ' ')
+                    body++;
+                if (*body != 0 && *body != 39) /* 39 is a quote: a comment */
+                    break;                     /* real code - this is the first statement */
+                q = body;
+                while (*q)
+                    q++;
+                q++;
+            }
+            if (savedline != q)
+                error("Must be the first statement in the program");
+        }
+        haslib = (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE);
+        if (!haslib)
+        {
+            /* The library shares the last flash slot. */
+            uint32_t *c = (uint32_t *)(flash_progmemory - MAX_PROG_SIZE);
+            if (*c != 0xFFFFFFFF)
+                error("Flash Slot % already in use", MAXFLASHSLOTS);
+        }
+        if (!FileLoadLibrary(argv[0], &hash, &image))
+            return;
+        if (haslib && Option.LIBRARY_HASH == hash)
+            return; /* already have exactly this one - nothing to do */
+        if (haslib && !overwrite)
+        {
+            MMPrintString("\r\nThis replaces the library already in flash - are you sure (Y/N) ? ");
+            int i;
+            while ((i = MMInkey()) == -1)
+            {
+            };
+            putConsole(i, 1);
+            PRet();
+            if (mytoupper(i) != 'Y')
+                /* Stop rather than carry on: the program asked for a library it
+                   has not got, and running it against a different one would be
+                   worse than not running it at all. */
+                error("Library not replaced");
+        }
+        /* SaveProgramToFlash scans the image it has just written and sets
+           CurrentLinePtr as it goes, so on return it points into the library
+           rather than at the line we are executing.  Everything after this
+           depends on it - error reporting, and the restart below - so put it
+           back. */
+        SaveProgramToFlash(image, false, LIBRARY_FLASH);
+        CurrentLinePtr = savedline;
+        Option.LIBRARY_FLASH_SIZE = MAX_PROG_SIZE;
+        Option.LIBRARY_HASH = hash;
+        SaveOptions();
+        if (savedline)
+        {
+            /* From here this is simply what RUN does, in the same order, and
+               for the same reason: the library's top level is about to declare
+               its CONSTs and DIMs, and if a different library was already
+               loaded then its declarations are still there and the new ones
+               would collide.  The guard above has already established that the
+               program itself has declared nothing, so there is nothing of the
+               program's to lose. */
+            ClearRuntime(true);
+        }
+        if (PrepareProgram(true))
+        {
+            PrintPreprogramError();
+            return;
+        }
+        if (savedline)
+        {
+            ExecuteProgram(LibMemory);
+            nextstmt = (unsigned char *)ProgMemory;
+        }
+        return;
+    }
+#endif
+
     /********************************************************************************************************************
     ******* LIBRARY DELETE **********************************************************************************************/
 

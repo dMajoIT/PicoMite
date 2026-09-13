@@ -2,3 +2,6 @@
 biglib.bas
 bigmain.bas
 sizelib.bas
+lib2.bas
+libload_alt.bas
+libload_alt_o.bas

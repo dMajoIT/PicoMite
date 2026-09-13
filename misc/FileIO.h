@@ -368,10 +368,24 @@ extern "C"
                    normal extensions[75], so the whole struct stays exactly 896
                    bytes (== 7 XMODEM blocks). */
                 float mousespeed;
-                unsigned char extensions[67];
+                unsigned char extensions[63];
 #else
-                unsigned char extensions[75]; // 896 bytes == 7 XMODEM blocks
+                unsigned char extensions[71]; // 896 bytes == 7 XMODEM blocks
 #endif
+                /* Hash of the source file the library was last loaded from, so
+                   LIBRARY LOAD can tell "already have this one" from "about to
+                   replace somebody else's library".  Zero means not recorded - a
+                   library put there by LIBRARY SAVE, or by a firmware predating
+                   this field - and is treated as unknown, so it asks first.
+
+                   Placed LAST in the 896 byte region and paid for by shrinking
+                   extensions[] by the same 4 bytes, for two reasons.  Nothing
+                   that already exists moves, which matters because CFunctions
+                   reach into Option by offset and because bt_tlv after it holds
+                   bonded keys.  And ending at 896 puts it at offset 892, which
+                   is 4-aligned - worth having in a packed struct, where the
+                   compiler would otherwise have to take it apart byte by byte. */
+                uint32_t LIBRARY_HASH;
                                               // #else
                                               //                 unsigned char extensions[79];    // 896 bytes == 7 XMODEM blocks
                                               // #endif
@@ -389,6 +403,18 @@ extern "C"
 
                 /* NOTE: To enable older CFunctions to run, any new options MUST be added at the end of the list */
         } __attribute__((packed));
+
+        /* The options live in one flash sector and are shipped over XMODEM as
+           exactly 7 blocks, so the size is not free to drift; and LIBRARY_HASH
+           is only 4-aligned because it sits at the very end.  Both are worth
+           asserting rather than believing - a new field added in the middle
+           breaks them silently. */
+#if !defined(PICOMITEBT) && !defined(PICOMITEBTH) && !defined(PICOMITEHDMIBTH)
+        _Static_assert(sizeof(struct option_s) == 896, "struct option_s must stay 896 bytes");
+#else
+        _Static_assert(sizeof(struct option_s) == 896 + 2048, "struct option_s must stay 896 bytes plus bt_tlv");
+#endif
+        _Static_assert(offsetof(struct option_s, LIBRARY_HASH) == 892, "LIBRARY_HASH must be the last 4 bytes of the 896");
 
         /* ============================================================================
          * WiFi regulatory domain (PICOMITEWEB) — index stored in Option.wifi_country_code

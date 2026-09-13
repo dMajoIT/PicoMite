@@ -3634,6 +3634,65 @@ int FileLoadCMM2Program(char *fname, bool message)
 }
 #endif
 // load a file into program memory
+/* Load a BASIC file from disk straight into the library flash area.
+ *
+ * Modelled on FileLoadProgram below, with three differences.  It does not
+ * clear the runtime, because it is meant to be called from inside a running
+ * program - that is the whole point of LIBRARY LOAD.  It writes to
+ * LIBRARY_FLASH rather than to program memory.  And it hashes the raw source
+ * as it reads it, so the caller can tell "we already have this exact library"
+ * (do nothing, touch no flash) from "this would replace a different one" (ask
+ * first).
+ *
+ * The source is crunched on the way in, as LIBRARY SAVE does, so comments in
+ * a library source cost nothing.
+ *
+ * Returns true on success, with *hashout set.  The caller decides, from the
+ * hash, whether to go on and commit it.
+ */
+int FileLoadLibrary(unsigned char *fname, uint32_t *hashout, unsigned char **image)
+{
+    int fnbr, fsize;
+    char *p, *buf;
+    int c;
+    uint32_t h = 2166136261u; /* FNV-1a over the raw file, before crunching */
+    if (!InitSDCard())
+        return false;
+    initFonts();
+    fnbr = FindFreeFileNbr();
+    p = (char *)getFstring(fname);
+    AppendDefaultExtension(p, ".bas");
+    fsize = FileSize(p);
+    if (fsize <= 0)
+        error("File not found");
+    if (fsize > MAX_PROG_SIZE)
+        error("File size % cannot exceed %", fsize, MAX_PROG_SIZE);
+    if (!BasicFileOpen(p, fnbr, FA_READ))
+        return false;
+    /* Sized from the file rather than taking the whole heap: LIBRARY LOAD runs
+     * before the program has declared anything, so the heap is free, but there
+     * is no reason to demand all of it for a small library. */
+    p = buf = GetTempMemory(fsize + 512);
+    CrunchData((unsigned char **)&p, 0); /* reset the crunch state machine */
+    while (!FileEOF(fnbr))
+    {
+        c = FileGetChar(fnbr) & 0x7f;
+        h ^= (uint32_t)(unsigned char)c;
+        h *= 16777619u;
+        if (isprint(c) || c == 13 || c == 10 || c == TAB)
+        {
+            if (c == TAB)
+                c = ' ';
+            CrunchData((unsigned char **)&p, c);
+        }
+    }
+    *p = 0;
+    FileClose(fnbr);
+    *hashout = h;
+    *image = (unsigned char *)buf;
+    return true;
+}
+
 int FileLoadProgram(unsigned char *fname, bool chain, bool crunch)
 {
     int fnbr;

@@ -188,3 +188,58 @@ program memory 63% full, so on the present course the table runs out first.
 What relieves it: inlining constants at build time (the source keeps readable
 names, the built program gets literals, and 144 slots come back in one move),
 and folding groups of related globals into arrays.
+
+## `LIBRARY LOAD` - a program that guarantees its own library
+
+The objection to libraries is that one has to be there before the program will
+even link, which makes a library a deployment liability rather than an asset.
+`LIBRARY LOAD` removes it: ship `lib.bas` beside `main.bas` and the program
+sorts itself out.
+
+    LIBRARY LOAD "A:/lib.bas" [, O]
+
+`libload_main.bas` is that program. Measured, in order:
+
+| | |
+|---|---|
+| no library present | writes it, restarts, runs - **1.64 s** |
+| same library | hash matches, **no flash touched** - 0.34 s |
+| a different library, answered `N` | `Error : Library not replaced` |
+| a different library, answered `Y` | swapped, checksum 1816 (was 920) |
+| `, O` | no question asked |
+| after a `DIM` | `Error : Must be the first statement in the program` |
+
+### Why it must be the first statement
+
+Not linking - variables. The library's own top level runs at `RUN`, before the
+program's first line, and MMBasic will not let a name be declared twice. A
+library loaded after the program had started declaring things would arrive too
+late to be initialised, and the restart would run the program's declarations a
+second time.
+
+Counting variables cannot enforce this, which is the trap: by the time the
+program's first line runs, the library's declarations already exist, so the
+count is never zero once a library is working. The test has to be positional -
+stepping over leading comment and blank lines, since the `'#filename` header a
+loaded program carries is itself a comment.
+
+### Why it is idempotent
+
+A hash of the source is kept in the options, so a program that does this on
+every run reads the file, finds the library already matches, and touches no
+flash at all. Only a genuine change costs an erase - and then it asks first,
+because the library it would replace may belong to another program.
+
+### Two things that bit
+
+`SaveProgramToFlash` sets `CurrentLinePtr` as it scans the image it has just
+written, so on return it points at a line **inside the library**. Harmless for
+every previous caller, because `SAVE`, `LOAD` and the editor only run from the
+command prompt where it is NULL anyway - but not harmless for a command that
+has to carry on executing afterwards. Something in the file layer clears it
+too. It is captured once at the top of the command and put back.
+
+And replacing a *different* library has to clear the old one's declarations
+first, or the new library's top level collides with them. That is simply what
+`RUN` does, in the same order: `ClearRuntime`, `PrepareProgram`,
+`ExecuteProgram(LibMemory)`, restart.
