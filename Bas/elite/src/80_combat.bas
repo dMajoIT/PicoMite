@@ -318,7 +318,57 @@ SUB Bystander(n AS INTEGER)
   ENDIF
   IF sTyp(tgt) = 0 THEN EXIT SUB
   TurnToward n, tgt
-  IF sAcc(n) = 0 THEN sAcc(n) = 1
+  IF tgt = SLOT_STAR THEN
+    DockNPC n
+  ELSEIF sAcc(n) = 0 THEN
+    sAcc(n) = 1
+  ENDIF
+END SUB
+
+' A ship that has reached the station goes inside it.
+'
+' The original flies an NPC in with the same routine as the player's docking
+' computer, and when it arrives it sets bit 7 of the ship's NEWB flags - the
+' bit that means "scooped or docked" on a ship in the bubble, as against
+' "carries an escape pod" in the table of defaults.  The main loop sees that
+' bit on a later pass, takes the ship off the scanner and removes it without
+' paying a bounty.  Ours has already steered the ship in above, so all that is
+' left is to ask whether it has got there, and there is nothing to defer to a
+' later pass: the ship is simply gone.  No explosion, no bounty, no kill - it
+' docked, it did not die.
+'
+' The two tests are the first two the player has to pass: close enough to
+' touch, and on the side the slot is on.  A ship is not asked to line its
+' wings up with the letterbox as the player is, because nothing would be
+' gained by watching it fail and go round again.
+SUB DockNPC(n AS INTEGER)
+  LOCAL FLOAT dx, dy, dz, d, nz
+  IF sTyp(SLOT_STAR) <> T_STATION THEN EXIT SUB
+  dx = sX(n) - sX(SLOT_STAR)
+  dy = sY(n) - sY(SLOT_STAR)
+  dz = sZ(n) - sZ(SLOT_STAR)
+  d = SQR(dx*dx + dy*dy + dz*dz)
+  IF d > DOCKRANGE THEN
+    ' Ease off on the way in, as the docking algorithm itself does, so the
+    ' ship arrives at the slot rather than through it.  Tactics services one
+    ' slot in eight, so a ship still doing twenty would cover most of the
+    ' window below between one look and the next.
+    IF d < 2000 THEN
+      IF sSpd(n) > 6 THEN sAcc(n) = -2
+    ELSEIF sAcc(n) = 0 THEN
+      sAcc(n) = 1
+    ENDIF
+    EXIT SUB
+  ENDIF
+  ' Which way the station is facing, and whether this ship is in front of it.
+  MATH SLICE sQ(), , SLOT_STAR, qA()
+  MATH Q_VECTOR 0, 0, 1, qB() : MATH Q_ROTATE qA(), qB(), qV()
+  IF d > 1 THEN
+    nz = (qV(1) * dx + qV(2) * dy + qV(3) * dz) / d
+    IF nz > -DOCKFACE THEN EXIT SUB
+  ENDIF
+  sNewb(n) = sNewb(n) OR NB_GONE
+  KillShip n
 END SUB
 
 ' Swing a ship towards something that is not us.  TurnTowards steers at the

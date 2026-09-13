@@ -271,6 +271,63 @@ SUB NewbOne(t AS INTEGER, nm$)
   KillShip n
 END SUB
 
+' --- a trader flying itself into the station
+'
+' The docking flag is only any use if something comes of it, so this puts a
+' trader out beyond the station with the flag set and runs the game's own
+' movement and tactics until it either docks or gives up.  What it must not
+' do is blow up, pay a bounty or count as a kill: it docked, it did not die.
+SUB DockNPCScene
+  LOCAL INTEGER n, f, gone, k0
+  NewCommander
+  LaunchState
+  ' Put the station in front of us rather than behind, so the ship coming in
+  ' is somewhere we could watch it.
+  MATH Q_EULER RAD(180), 0, 0, qA() : qA(4) = 1
+  KillShip SLOT_STAR
+  n = NewShip(T_STATION, 0, 0, 8000, qA())
+  IF n >= 0 THEN sRol(n) = 255 : sAI(n) = 1
+  dSpeed = 0
+
+  ' A trader, well beyond the station, told to dock.
+  newbFlags = NB_DOCKING
+  n = NewFacing(T_TRADER, 600, -400, 14000, 180)
+  IF n < 0 THEN PRINT "no slot for the trader" : EXIT SUB
+  sSpd(n) = 20
+  sAI(n) = 128 OR 64
+  k0 = kills
+  PRINT "trader in slot"; n; " flags"; sNewb(n); " at range"; ShipRange(n)
+  PRINT "station at z"; sZ(SLOT_STAR)
+  gone = 0
+  ' One whole tick an iteration.  This drives the game's own movement without
+  ' the frame clock, so the run is the same every time and takes no longer
+  ' than the arithmetic does.
+  tick = 1
+  tickWhole = 1
+  FOR f = 1 TO 4000
+    MoveShips
+    Tactics
+    mcnt = (mcnt + 1) AND 255
+    IF sTyp(n) <> T_TRADER THEN gone = f : EXIT FOR
+    IF (f AND 255) = 0 THEN PRINT "  frame"; f; " range"; ShipRange(n); " speed"; sSpd(n)
+  NEXT f
+  IF gone THEN
+    PRINT "docked at frame"; gone
+  ELSE
+    PRINT "still out there after 4000 frames, range"; ShipRange(n)
+  ENDIF
+  PRINT "kills went from"; k0; "to"; kills; " (must not change)"
+  PRINT "slots in use"; nUsed; " (planet, station)"
+END SUB
+
+FUNCTION ShipRange(n AS INTEGER) AS INTEGER
+  LOCAL FLOAT dx, dy, dz
+  dx = sX(n) - sX(SLOT_STAR)
+  dy = sY(n) - sY(SLOT_STAR)
+  dz = sZ(n) - sZ(SLOT_STAR)
+  ShipRange = SQR(dx*dx + dy*dy + dz*dz)
+END FUNCTION
+
 SUB SaveShot(f AS INTEGER)
   SAVE IMAGE "A:/fly" + STR$(f) + ".bmp"
 END SUB

@@ -28,7 +28,13 @@ RunGame
 ENDIF
 LOOP
 ELSE
-IF DEMOSCENE = 7 THEN
+IF DEMOSCENE = 8 THEN
+FRAMEBUFFER CLOSE
+MODE 1
+DockNPCScene
+PRINT "npc dock done"
+END
+ELSEIF DEMOSCENE = 7 THEN
 FRAMEBUFFER CLOSE
 MODE 1
 NewbScene
@@ -1331,6 +1337,48 @@ PRINT nm$ + SPACE$(20 - LEN(nm$)); keep; SPACE$(6); c0; "%"; SPACE$(4); c1; "%"
 legal = 0
 KillShip n
 END SUB
+SUB DockNPCScene
+LOCAL INTEGER n, f, gone, k0
+NewCommander
+LaunchState
+MATH Q_EULER RAD(180), 0, 0, qA() : qA(4) = 1
+KillShip SLOT_STAR
+n = NewShip(T_STATION, 0, 0, 8000, qA())
+IF n >= 0 THEN sRol(n) = 255 : sAI(n) = 1
+dSpeed = 0
+newbFlags = NB_DOCKING
+n = NewFacing(T_TRADER, 600, -400, 14000, 180)
+IF n < 0 THEN PRINT "no slot for the trader" : EXIT SUB
+sSpd(n) = 20
+sAI(n) = 128 OR 64
+k0 = kills
+PRINT "trader in slot"; n; " flags"; sNewb(n); " at range"; ShipRange(n)
+PRINT "station at z"; sZ(SLOT_STAR)
+gone = 0
+tick = 1
+tickWhole = 1
+FOR f = 1 TO 4000
+MoveShips
+Tactics
+mcnt = (mcnt + 1) AND 255
+IF sTyp(n) <> T_TRADER THEN gone = f : EXIT FOR
+IF (f AND 255) = 0 THEN PRINT "  frame"; f; " range"; ShipRange(n); " speed"; sSpd(n)
+NEXT f
+IF gone THEN
+PRINT "docked at frame"; gone
+ELSE
+PRINT "still out there after 4000 frames, range"; ShipRange(n)
+ENDIF
+PRINT "kills went from"; k0; "to"; kills; " (must not change)"
+PRINT "slots in use"; nUsed; " (planet, station)"
+END SUB
+FUNCTION ShipRange(n AS INTEGER) AS INTEGER
+LOCAL FLOAT dx, dy, dz
+dx = sX(n) - sX(SLOT_STAR)
+dy = sY(n) - sY(SLOT_STAR)
+dz = sZ(n) - sZ(SLOT_STAR)
+ShipRange = SQR(dx*dx + dy*dy + dz*dz)
+END FUNCTION
 SUB SaveShot(f AS INTEGER)
 SAVE IMAGE "A:/fly" + STR$(f) + ".bmp"
 END SUB
@@ -2238,7 +2286,35 @@ IF sTyp(SLOT_STAR) = T_STATION THEN tgt = SLOT_STAR
 ENDIF
 IF sTyp(tgt) = 0 THEN EXIT SUB
 TurnToward n, tgt
-IF sAcc(n) = 0 THEN sAcc(n) = 1
+IF tgt = SLOT_STAR THEN
+DockNPC n
+ELSEIF sAcc(n) = 0 THEN
+sAcc(n) = 1
+ENDIF
+END SUB
+SUB DockNPC(n AS INTEGER)
+LOCAL FLOAT dx, dy, dz, d, nz
+IF sTyp(SLOT_STAR) <> T_STATION THEN EXIT SUB
+dx = sX(n) - sX(SLOT_STAR)
+dy = sY(n) - sY(SLOT_STAR)
+dz = sZ(n) - sZ(SLOT_STAR)
+d = SQR(dx*dx + dy*dy + dz*dz)
+IF d > DOCKRANGE THEN
+IF d < 2000 THEN
+IF sSpd(n) > 6 THEN sAcc(n) = -2
+ELSEIF sAcc(n) = 0 THEN
+sAcc(n) = 1
+ENDIF
+EXIT SUB
+ENDIF
+MATH SLICE sQ(), , SLOT_STAR, qA()
+MATH Q_VECTOR 0, 0, 1, qB() : MATH Q_ROTATE qA(), qB(), qV()
+IF d > 1 THEN
+nz = (qV(1) * dx + qV(2) * dy + qV(3) * dz) / d
+IF nz > -DOCKFACE THEN EXIT SUB
+ENDIF
+sNewb(n) = sNewb(n) OR NB_GONE
+KillShip n
 END SUB
 SUB TurnToward(n AS INTEGER, tgt AS INTEGER)
 LOCAL FLOAT rx, ry, rz, sx2, sy2, sz2, dr, ds, m, dx, dy, dz

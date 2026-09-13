@@ -33,7 +33,13 @@ IF DEMOFRAMES = 0 THEN
 
 ELSE
 
-  IF DEMOSCENE = 7 THEN
+  IF DEMOSCENE = 8 THEN
+    FRAMEBUFFER CLOSE
+    MODE 1
+    DockNPCScene
+    PRINT "npc dock done"
+    END
+  ELSEIF DEMOSCENE = 7 THEN
     ' Nothing here draws anything, and the console is easier to read when it
     ' is the console rather than the framebuffer.
     FRAMEBUFFER CLOSE

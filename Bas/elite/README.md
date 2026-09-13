@@ -282,6 +282,10 @@ Taken from it so far:
   passes 40 - which is what makes launching with a hold of slaves matter.
   Shooting an innocent bystander brings the station down on you where shooting
   a pirate does not, and only a pilot whose ship type carries a pod bails out.
+  A ship marked as docking flies itself in and goes inside, which is where bit
+  7 gets its second meaning - "scooped or docked" on a ship in the bubble, as
+  against "carries an escape pod" in the table of defaults. It leaves no
+  wreck, pays no bounty and counts as no kill: it docked, it did not die.
   The original keeps a separate Cobra Mk III and Python for the pirates -
   identical ships, different flags - and so do we.
 - **The two missions.** The whole of both of them is four bits in one byte -

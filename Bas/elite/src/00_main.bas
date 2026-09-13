@@ -44,7 +44,8 @@ CONST VPLANE = 256                 ' focal length in pixels, as the BBC
 CONST DEMOFRAMES = 0               ' >0 runs a scripted demo and exits; 0 plays
 CONST DEMOSCENE = 1                ' 1 flight and combat, 2 docking, 3 the docked
                                    ' screens, 4 the ship hangar, 5 the briefings,
-                                   ' 6 both missions end to end, 7 the NEWB flags
+                                   ' 6 both missions end to end, 7 the NEWB flags,
+                                   ' 8 a trader docking itself
 CONST PANY = VCY - (SCRH \ 2 - 1)  ' shifts Draw3D's centre up to VCY
 
 ' ------------------------------------------------------- universe size
@@ -124,6 +125,9 @@ DIM INTEGER sTgt(NSLOT-1)   ' a missile's quarry: a slot, or -2 for us
 ' bail out in is asked of the table, not of the ship.
 CONST NB_TRADER = 1, NB_HUNTER = 2, NB_HOSTILE = 4, NB_PIRATE = 8
 CONST NB_DOCKING = 16, NB_INNOCENT = 32, NB_COP = 64, NB_POD = 128
+' Bit 7 again, under the name it goes by on a ship rather than in the table:
+' this one has docked or been scooped and is on its way out of the bubble.
+CONST NB_GONE = 128
 DIM INTEGER sNewb(NSLOT-1)
 DIM INTEGER tNewb(NTYPE)
 ' Staged for the next ship created, which is how the original does it: the
