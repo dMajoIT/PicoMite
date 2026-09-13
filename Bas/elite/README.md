@@ -9,9 +9,11 @@ come from the published 6502 source, so Lave is the Lave you remember.
 You need a PicoMite HDMI build and a screen, and the firmware must be
 **version 6.03.02b4 or above**, or b5 for the automatic library install below.
 `PRINT MM.VER` at the prompt: it must report 6.030204 or more. Earlier firmware
-will not do - b3 and before had `MAX3D` set to 8, where the bubble wants 12 objects for the station and a full complement
-of ships, and the `DRAW3D` and `FRAMEBUFFER CLOSE` fixes this leans on all
-landed after b3 was released.
+will not do - b3 and before had `MAX3D` set to 8, where the bubble wants one
+object for the station and one for every ship that is close enough to be drawn
+as a mesh, and the `DRAW3D` and `FRAMEBUFFER CLOSE` fixes this leans on all
+landed after b3 was released. The port asks the firmware how many it may have
+rather than assuming, so it runs on whatever it is given.
 
 It was written and timed on a PC3 running PicoMiteHDMIWEB at 378 MHz, where it
 holds about 18 ms a frame; it will run slower on a slower clock. The program
@@ -56,9 +58,13 @@ The title screen waits for you.
 | `H` | the controls, on one page |
 | `Esc` | leave the program |
 
-Leave it alone for twenty seconds and the demo plays a whole game by itself - 
-trading at Lave, a fight on the way out, a hyperspace jump and a docking at the
-far end. Press any key during the demo and you get a game of your own.
+Leave it alone for twenty seconds and the demo plays a whole game by itself,
+in three legs: trading at Lave and outfitting the ship, a fight on the way out
+and a hyperspace jump; a pirate pack and a docking at the far end; then out
+again with a mining laser to break a rock up and scoop what comes off it. It
+drives the real game - every screen and every shot is the game's own code,
+with the demo standing in for the keyboard. Press any key during it and you
+get a game of your own.
 
 `Esc` in a game takes you back to the title.
 
@@ -105,8 +111,9 @@ threshold at about 32000 units, and kills you at about 22400.
 The ellipse is the scanner. Each contact is a dash with a stick down to the
 plane you are flying in, so the stick tells you how far above or below you it
 is, and its colour says what it is: **red** a rock, **blue** a canister or an
-escape pod, **green** the space station, **magenta** a Python, **yellow** a
-missile, **cyan** everything else. The dial to its right is the compass: it
+escape pod, **green** the space station, **magenta** one of the three fat
+traders - a Python, a Boa or an Anaconda - **yellow** a missile, **cyan**
+everything else. The dial to its right is the compass: it
 points at the station when you are near one and at the planet when you are not,
 yellow and two rows deep when the thing is ahead of you, green and one row deep
 when it is behind.
@@ -151,6 +158,24 @@ inside it, check `F7` for what is there, then launch.
 flying away from it for about half a minute at full speed. Press `H` when you
 are out.
 
+## The missions
+
+Two of them, and they find you rather than the other way round. Reach a combat
+rating of Competent with 256 kills behind you, in one of the first two
+galaxies, and the next time you dock the Navy has a message: a new Constrictor
+has been stolen, and they would like it back in pieces. It is hiding in the
+second galaxy, and nothing but a military laser will scratch it - the energy
+bomb will not touch it either. Five thousand credits for bringing it down.
+
+Do that, get most of the way from Dangerous to Deadly, and in the third galaxy
+Naval Intelligence wants the Thargoid defence plans carried from Ceerdi to
+Birera. The Thargoids come after you while you have them aboard. Deliver them
+and you are given the Navy's own energy unit, which recharges half as fast
+again as the one the shops sell.
+
+The briefings are the original's own words, and where they are is in **What
+the later BBC versions had** below.
+
 ## Docking
 
 The station turns all the time, and its docking slot is a letterbox. Getting in
@@ -159,6 +184,14 @@ the station nearly dead ahead, and your wings lined up with the long axis of
 the slot - which means rolling to match a station that will not stop turning.
 
 Below speed 5 a failed approach is a bump. Above it, it is the end of you.
+
+A system of technology level 11 or better has a dodecahedron rather than a
+Coriolis. It is a different shape with the same slot and the same five tests,
+so it makes no difference to the flying - but it is worth seeing.
+
+You are not the only one docking. A trader on its way in flies the approach for
+itself and goes inside, and leaves no wreck behind it because it did not
+crash.
 
 The docking computer (`C`) does the whole thing, including the rolling - and
 that is ours, not the original's. In the cassette version pressing `C` docks
@@ -172,13 +205,34 @@ and nothing else, so every docking is hand-flown until you can afford 1500 Cr.
 Slaves, narcotics and firearms are contraband, and slaves and narcotics count
 double. Leaving a station with any of it aboard goes straight onto your record,
 and out in space it is what you are **carrying** that calls the police out - 
-your record only makes things worse once a Viper is already watching you. Shoot
-one and you are a Fugitive on the spot. Arriving somewhere new halves whatever
-is on your record, because nobody that far away has heard the details.
+your record only makes things worse once a Viper is already watching you.
+
+What the police then *do* about it is a separate question. A Viper is a bounty
+hunter, and a bounty hunter leaves an honest commander alone: it only turns on
+you once your record passes 40, where 50 makes you a Fugitive. A hold full of
+slaves is worth exactly 40 by itself, which is why that particular cargo brings
+trouble and a hold of furs does not. Shoot a policeman and you are a Fugitive
+on the spot.
+
+Shooting an innocent bystander - a trader going about its business - brings the
+station down on you as well, and the station can call out more police than you
+want to meet. Pirates are nobody's concern but their own.
+
+Arriving somewhere new halves whatever is on your record, because nobody that
+far away has heard the details.
 
 Where you are matters as much as what you have done. An anarchy spawns roughly
 four times the pirates of a Corporate State, which is what the government
 column on the system data screen is telling you.
+
+## The traffic
+
+Not everything out there is coming for you. Traders fly the lane between the
+planet and the station and mostly ignore you - four passes in five they do
+nothing at all - and half of them are on their way in, so if you follow one it
+will fly itself into the slot and be gone. A station that nobody has annoyed
+sends out a Shuttle or a Transporter now and then. Rock hermits look like
+asteroids and are: shoot one and something comes out of it.
 
 ## How it is put together
 
@@ -190,8 +244,9 @@ constants and variables are in place before any code runs, and `RESTORE` finds
 a label in the library from the program because the two halves share one table
 of subroutine, function and label names.
 
-Measured on a PC3: the program is 80 K of the 144 K a program may have, and the
-library 19 K of its own 144 K. As one file, before the extra ships, it was 91 K.
+Measured on a PC3: the program is 106 K of the 144 K a program may have, and
+the library 30 K of its own 144 K. As one file it would not fit at all, which
+is what the split is for.
 
 The bubble holds eighteen ships and the firmware allows 32 Draw3D objects, so
 every ship in it can be a mesh. An object is asked for when a ship comes into
@@ -206,9 +261,9 @@ looks choppy rather than running fast.
 The library also carries `OPTION LOCAL VARIABLES 128`, which has to be the
 first thing executed anywhere and so can only go there. MMBasic splits a fixed
 pool of 736 variable slots between locals and globals, and the default leaves
-only 480 globals - Elite declares 374 of them, and a constant costs a slot just
+only 480 globals - Elite declares 472 of them, and a constant costs a slot just
 as a variable does. At 128 locals there are 608, and measured on the board
-there is room for 243 more.
+there is room for 136 more.
 
 Three rules come out of the split, and `build.py` now checks all of them
 rather than leaving them to be remembered.
@@ -359,35 +414,36 @@ much spare and a great deal more:
   to the card as `SCREEN1.BMP`, `SCREEN2.BMP` and so on - which is what CTRL-D
   does there.
 
-- **Its ships.** The cassette game has twelve designs; thirteen more are here,
+- **Its ships.** The cassette game has twelve designs; seventeen more are here,
   taken from the Second Processor source through the same generator: the Krait,
   Adder, Gecko, Cobra Mk I and Worm that fill out a pirate pack, the Asp Mk II
   and Fer-de-Lance a lone bounty hunter flies, the Boa and Anaconda that make a
-  fat trader worth stopping, and boulders, splinters and rock hermits among the
-  rubble. They arrive by the original's own rules: a pirate group is drawn with
-  the AND of two random numbers so the small fighters come up far more often
-  than the Cobra, and a rock hermit is about one asteroid in eighty. The
-  Shuttle and the Transporter joined them with the hangar, which is where the
-  fat end of that list is easiest to see.
+  fat trader worth stopping, boulders, splinters and rock hermits among the
+  rubble, the Cougar, the Shuttle and Transporter the station sends out, the
+  Dodo, and the Constrictor that mission one is about. They arrive by the
+  original's own rules: a pirate group is drawn with the AND of two random
+  numbers so the small fighters come up far more often than the Cobra, and a
+  rock hermit is about one asteroid in eighty.
 
 Still missing from it: the log tables and Bitstik support, both of which are
 meaningless here. The Moray is missing from
 the Second Processor version too - it picks a lone bounty hunter from types 24
 to 27 and the Moray is 28, so nothing in that game ever spawns one either.
 
-None of the rest is difficult in the way the cassette game was difficult: the
-blueprints for the Dodo and the rest are published, and the extended token
-table is only data. It is a question of program memory, which is the one thing
-here that is genuinely tight.
+What is left of that list is not difficult in the way the cassette game was
+difficult: the blueprints are published and the extended token table is only
+data. It is a question of program memory, which is the one thing here that is
+genuinely tight.
 
 ## How close is this to the real thing
 
-Almost everything the cassette version does, it now does. The galaxy, the
-market, the ship blueprints, the flight model, the tactics, the spawning, the
-legal model and all five docking tests are the original's own arithmetic.
-Ships are wireframe with the hidden faces removed, decided from the blueprint's
-own face normals, as the original decides it. The cassette version has no
-missions, and no mining or military lasers, so none of those are missing.
+Everything the cassette version does, it now does, and a good deal that it
+does not - the section above lists what has been taken from the later versions
+and where each piece came from. The galaxy, the market, the ship blueprints,
+the flight model, the tactics, the spawning, the legal model and all five
+docking tests are the original's own arithmetic. Ships are wireframe with the
+hidden faces removed, decided from the blueprint's own face normals, as the
+original decides it.
 
 Three things here are deliberately not the cassette version's. The colour is
 the first, and the section above says where it comes from: a cassette Elite is
@@ -431,3 +487,31 @@ the escape pod, the energy bomb, the in-system jump, the other seven galaxies,
 ships that fire missiles at you and jam yours with their own E.C.M., pilots
 who bail out of a dying ship, and equipment that has to be bought before it
 works.
+
+## Testing it
+
+The fixtures are how each phase was checked and they are kept working. Set
+`DEMOFRAMES` to a frame count and `DEMOSCENE` to one of these in
+`src/00_main.bas`, then run:
+
+| | |
+|---|---|
+| 1 | flight and combat, photographed every few frames |
+| 2 | the docking approach |
+| 3 | every docked screen, drawn once each |
+| 4 | the ship hangar, eight times over |
+| 5 | the four mission briefings, page by page |
+| 6 | both missions walked end to end |
+| 7 | what each kind of ship does, and why |
+| 8 | a trader flying itself into the station |
+
+Scene 6 also reports which systems the missions' coordinates land on, which is
+the check that our galaxy generator and the original agree: galaxy 2 (144, 33)
+must be Orarra, galaxy 3 (215, 84) Ceerdi and galaxy 3 (63, 72) Birera. Scene 5
+prints a system description for the same reason - the briefings and the
+descriptions share one set of case rules.
+
+`Bas/savetest/` and `Bas/libtest/` are firmware harnesses rather than game
+ones: the first characterises what `SaveProgramToFlash` does with CSUB and
+DefineFont blocks, the second proves a program plus a library really does get
+twice the code space.
