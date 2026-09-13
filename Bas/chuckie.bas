@@ -172,7 +172,7 @@ SUB Setup
     ON ERROR SKIP 1
     MODE 2
   ENDIF
-  IF MM.HRES <> 320 OR MM.VRES <> 240 THEN
+  IF MM.HRES <> 320 OR MM.VRES < 240 THEN
     ON ERROR CLEAR
     PRINT "Chuckie Egg needs a 320 x 240 screen (MODE 2)."
     PRINT "This display is"; MM.HRES; " x"; MM.VRES
@@ -188,6 +188,7 @@ SUB Setup
   pal(15) = RGB(WHITE)
   hexd$ = "0123456789ABCDEF"
 
+  ON ERROR SKIP 1
   SPRITE CLOSE ALL
   ON ERROR SKIP 1
   FRAMEBUFFER CREATE
