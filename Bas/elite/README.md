@@ -7,9 +7,9 @@ come from the published 6502 source, so Lave is the Lave you remember.
 ## Getting it running
 
 You need a PicoMite HDMI build and a screen, and the firmware must be
-**version 6.03.02b4 or above**. `PRINT MM.VER` at the prompt: it must report
-6.030204 or more. Earlier firmware will not do - b3 and before had `MAX3D` set
-to 8, where the bubble wants 12 objects for the station and a full complement
+**version 6.03.02b4 or above**, or b5 for the automatic library install below.
+`PRINT MM.VER` at the prompt: it must report 6.030204 or more. Earlier firmware
+will not do - b3 and before had `MAX3D` set to 8, where the bubble wants 12 objects for the station and a full complement
 of ships, and the `DRAW3D` and `FRAMEBUFFER CLOSE` fixes this leans on all
 landed after b3 was released.
 
@@ -17,23 +17,29 @@ It was written and timed on a PC3 running PicoMiteHDMIWEB at 378 MHz, where it
 holds about 18 ms a frame; it will run slower on a slower clock. The program
 sets `MODE 2` itself.
 
-Load the program over the console with the crunching form of AUTOSAVE, which
-strips the comments as it receives - the full source is more than program
-memory will hold, and plain `AUTOSAVE` stops with `Not enough memory` part way
-through:
+Elite comes in two files. `elite_lib.bas` holds the declarations - every
+constant, every variable and the ship blueprints - and is installed as the
+PicoMite's library; `elite.bas` is the code. One MMBasic program cannot be more
+than 144 KB and this is heading past it, so the declarations are kept in the
+library instead, where they cost the program nothing.
+
+Copy both to the drive:
 
 ```
-AUTOSAVE C
-    ... paste Bas/elite/elite.bas ...
-    ctrl-Z
+python Bas/elite_tools/pc3.py put Bas/elite/elite_lib.bas A:/elite_lib.bas
+python Bas/elite_tools/pc3.py put Bas/elite/elite.bas     A:/elite.bas
+LOAD "A:/elite.bas"
 RUN
 ```
 
-Or, from a PC with the development tools:
+The first `RUN` installs the library and starts again by itself - that takes a
+second or two. Every run after that finds the library already matches and goes
+straight into the game. Nothing else to do: the program's first line is
+`LIBRARY LOAD`, so it looks after its own library.
 
-```
-python Bas/elite_tools/pc3.py run Bas/elite/elite.bas
-```
+`LIBRARY LOAD` needs firmware **6.03.02b5 or above**. On b4 you can install the
+library by hand instead - `LOAD "A:/elite_lib.bas"` then `LIBRARY SAVE`, once -
+and then load and run `elite.bas` as normal.
 
 The title screen is a picture file. Copy `Bas/elite/data/title.jpg` to the
 drive as `A:/title.jpg` - `pc3.py put Bas/elite/data/title.jpg A:/title.jpg`
@@ -164,6 +170,34 @@ is on your record, because nobody that far away has heard the details.
 Where you are matters as much as what you have done. An anarchy spawns roughly
 four times the pirates of a Corporate State, which is what the government
 column on the system data screen is telling you.
+
+## How it is put together
+
+Two files, and the split is not arbitrary. `elite_lib.bas` is the declarations
+and the ship data - `src/00_main.bas` and `data/ships.bas`, which between them
+contain not one executable statement. `elite.bas` is everything else. A
+PicoMite library initialises itself before the program's first line, so the
+constants and variables are in place before any code runs, and `RESTORE` finds
+a label in the library from the program because the two halves share one table
+of subroutine, function and label names.
+
+Measured on a PC3: the program is 78 K of the 144 K a program may have, and the
+library 13 K of its own 144 K. As one file it was 91 K.
+
+The library also carries `OPTION LOCAL VARIABLES 128`, which has to be the
+first thing executed anywhere and so can only go there. MMBasic splits a fixed
+pool of 736 variable slots between locals and globals, and the default leaves
+only 480 globals - Elite declares 374 of them, and a constant costs a slot just
+as a variable does. At 128 locals there are 608, and measured on the board
+there is room for 243 more.
+
+Two things learned putting it together. A library runs its top level in front
+of *every* program, not just its own, so it must not contain anything
+program-specific: `OPTION CACHE SUB` names two of Elite's subroutines, and with
+it in the library no other program would start at all. `build.py` moves it, and
+every option that is not required to precede a `DIM`, into the program. And
+there must be no `END` in a library - the interpreter runs the whole of it at
+`RUN`, and an `END` would stop the run before the program began.
 
 ## What the later BBC versions had
 
