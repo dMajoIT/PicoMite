@@ -215,6 +215,21 @@ CONST EQ_MILITARY = 11, EQ_MINING = 12
 CONST LAS_PULSE = 15, LAS_BEAM = 143
 CONST LAS_MINING = 50                  ' Mlas in the original
 CONST LAS_MILITARY = 151               ' INT(128.5 + 1.5 * 15), as the original
+' The disc version's extended token table, its two-letter digrams and the
+' base token of each random group - all generated into data/tokens.bas.
+' 160 is the longest token that will fit; the four that will not are mission
+' briefings, and tokens.py says so when it drops them.
+DIM tk$(255) LENGTH 160
+DIM dg$(31) LENGTH 2
+DIM INTEGER rgBase(37)
+DIM INTEGER rndS(3)                ' the original's four byte random state
+DIM descBuf$ LENGTH 250
+DIM INTEGER dtLower, dtCapNext
+' The token expander's own stack.  Eleven deep is what a description
+' actually reaches; sixteen leaves room and costs nothing.
+CONST EXDEPTH = 15
+DIM INTEGER exTok(EXDEPTH), exPos(EXDEPTH)
+
 DIM eqName$(NEQUIP-1) LENGTH 24    ' "Extra Military Lasers" is 21 of them
 DIM INTEGER eqPrice(NEQUIP-1), eqTech(NEQUIP-1), eqOwned(NEQUIP-1)
 

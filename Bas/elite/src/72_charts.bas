@@ -138,6 +138,10 @@ SUB SysDataScreen
   DataLine y, "Population", STR$(sysPop / 10) + " Billion" : y = y + 12
   DataLine y, "Productivity", STR$(sysProd) + " M CR" : y = y + 12
   DataLine y, "Radius", STR$(sysRad) + " km" : y = y + 12
+  ' And what the disc version adds underneath: the system's description,
+  ' which is the same every time because the generator is seeded from the
+  ' system's own two seeds.
+  y = DrawDesc(y + 6, 36)
 END SUB
 
 SUB DataLine(y AS INTEGER, lb$, v$)

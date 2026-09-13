@@ -12,6 +12,7 @@ ProbeObjects
 SetupViews
 ShipColours
 EquipTable
+LoadTokens
 LoadSounds
 IF DEMOFRAMES = 0 THEN
 DO
@@ -1434,6 +1435,7 @@ DataLine y, "Tech Level", STR$(sysTech + 1) : y = y + 12
 DataLine y, "Population", STR$(sysPop / 10) + " Billion" : y = y + 12
 DataLine y, "Productivity", STR$(sysProd) + " M CR" : y = y + 12
 DataLine y, "Radius", STR$(sysRad) + " km" : y = y + 12
+y = DrawDesc(y + 6, 36)
 END SUB
 SUB DataLine(y AS INTEGER, lb$, v$)
 TEXT 20, y, lb$ + ":", "LT", 7, 1, cWhite
@@ -1547,6 +1549,183 @@ n = NewShip(T_STATION, px, py, pz, qA())
 IF n >= 0 THEN sRol(n) = 255 : sAI(n) = 1
 ENDIF
 END SUB
+SUB LoadTokens
+LOCAL INTEGER i
+RESTORE dat_tokens
+FOR i = 0 TO 255 : READ tk$(i) : NEXT i
+RESTORE dat_digrams
+FOR i = 0 TO 31 : READ dg$(i) : NEXT i
+RESTORE dat_rndgroups
+FOR i = 0 TO 37 : READ rgBase(i) : NEXT i
+END SUB
+FUNCTION Dornd() AS INTEGER
+LOCAL INTEGER a, x, c
+a = rndS(0) * 2
+c = (a >> 8) AND 1
+a = a AND 255
+x = a
+a = a + rndS(2) + c
+c = (a >> 8) AND 1
+rndS(0) = a AND 255
+rndS(2) = x
+a = rndS(1)
+x = a
+a = a + rndS(3) + c
+rndS(1) = a AND 255
+rndS(3) = x
+Dornd = rndS(1)
+END FUNCTION
+FUNCTION RndPick() AS INTEGER
+LOCAL INTEGER r, n
+r = Dornd()
+n = 0
+IF r >= 51 THEN n = n + 1
+IF r >= 102 THEN n = n + 1
+IF r >= 153 THEN n = n + 1
+IF r >= 204 THEN n = n + 1
+RndPick = n
+END FUNCTION
+SUB PutCh(c$)
+LOCAL ch$ LENGTH 1
+ch$ = c$
+IF ch$ = CHR$(96) THEN ch$ = CHR$(39)
+IF ch$ = " " THEN
+IF LEN(descBuf$) = 0 THEN EXIT SUB
+IF RIGHT$(descBuf$, 1) = " " THEN EXIT SUB
+ENDIF
+IF ch$ >= "A" AND ch$ <= "Z" THEN
+IF dtCapNext THEN
+dtCapNext = 0
+ELSEIF dtLower THEN
+ch$ = LCASE$(ch$)
+ENDIF
+ENDIF
+IF LEN(descBuf$) < 250 THEN descBuf$ = descBuf$ + ch$
+END SUB
+SUB PutName(s$)
+IF LEN(descBuf$) + LEN(s$) < 250 THEN descBuf$ = descBuf$ + s$
+dtCapNext = 0
+END SUB
+SUB PutStr(s$)
+LOCAL INTEGER i
+FOR i = 1 TO LEN(s$) : PutCh MID$(s$, i, 1) : NEXT i
+END SUB
+FUNCTION NameCap$()
+LOCAL nm$ LENGTH 10
+nm$ = SysName$()
+IF LEN(nm$) = 0 THEN NameCap$ = "" : EXIT FUNCTION
+NameCap$ = LEFT$(nm$, 1) + LCASE$(MID$(nm$, 2))
+END FUNCTION
+FUNCTION NameAdj$()
+LOCAL nm$ LENGTH 12
+LOCAL last$ LENGTH 1
+nm$ = NameCap$()
+IF LEN(nm$) = 0 THEN NameAdj$ = "" : EXIT FUNCTION
+last$ = UCASE$(RIGHT$(nm$, 1))
+IF INSTR("AEIOU", last$) > 0 THEN nm$ = LEFT$(nm$, LEN(nm$) - 1)
+NameAdj$ = nm$ + "ian"
+END FUNCTION
+SUB PutAlien
+LOCAL INTEGER n, i, k
+dtCapNext = 1
+n = Dornd() AND 3
+FOR i = 0 TO n
+k = (Dornd() AND 62) \ 2
+PutStr dg$(k)
+NEXT i
+END SUB
+SUB DoControl(n AS INTEGER)
+SELECT CASE n
+CASE 2  : dtLower = 1
+CASE 3  : PutName NameCap$()
+CASE 12 : PutCh " "                 ' a carriage return, which we wrap
+CASE 13 : dtLower = 1
+CASE 17 : PutName NameAdj$()
+CASE 18 : PutAlien
+CASE 19 : dtCapNext = 1
+CASE ELSE
+END SELECT
+END SUB
+SUB ExpandTok(start AS INTEGER)
+LOCAL INTEGER sp, v, j, isRnd, p
+LOCAL t$ LENGTH 160
+LOCAL c$ LENGTH 1
+LOCAL m$ LENGTH 8
+sp = 0
+exTok(0) = start
+exPos(0) = 1
+DO
+t$ = tk$(exTok(sp))
+p = exPos(sp)
+IF p > LEN(t$) THEN
+sp = sp - 1
+IF sp < 0 THEN EXIT DO
+ELSE
+c$ = MID$(t$, p, 1)
+IF c$ = "[" THEN
+j = INSTR(p, t$, "]")
+m$ = MID$(t$, p + 1, j - p - 1)
+isRnd = 0
+IF RIGHT$(m$, 1) = "?" THEN
+isRnd = 1
+m$ = LEFT$(m$, LEN(m$) - 1)
+ENDIF
+v = VAL(m$)
+exPos(sp) = j + 1
+IF isRnd THEN v = rgBase(v) + RndPick()
+IF sp < EXDEPTH AND v >= 0 AND v <= 255 THEN
+sp = sp + 1
+exTok(sp) = v
+exPos(sp) = 1
+ENDIF
+ELSEIF c$ = "{" THEN
+j = INSTR(p, t$, "}")
+DoControl VAL(MID$(t$, p + 1, j - p - 1))
+exPos(sp) = j + 1
+ELSE
+PutCh c$
+exPos(sp) = p + 1
+ENDIF
+ENDIF
+LOOP
+END SUB
+FUNCTION SysDesc$()
+rndS(0) = gs1 AND 255
+rndS(1) = (gs1 >> 8) AND 255
+rndS(2) = gs2 AND 255
+rndS(3) = (gs2 >> 8) AND 255
+descBuf$ = ""
+dtLower = 0
+dtCapNext = 0
+ExpandTok 5
+SysDesc$ = descBuf$
+END FUNCTION
+FUNCTION DrawDesc(y AS INTEGER, wide AS INTEGER) AS INTEGER
+LOCAL INTEGER i, yy
+LOCAL t$ LENGTH 255
+LOCAL ln$ LENGTH 50
+LOCAL w$ LENGTH 30
+t$ = SysDesc$() + " "
+ln$ = "" : w$ = "" : yy = y
+FOR i = 1 TO LEN(t$)
+IF MID$(t$, i, 1) = " " THEN
+IF LEN(ln$) + LEN(w$) + 1 > wide THEN
+TEXT 20, yy, ln$, "LT", 7, 1, cWhite
+yy = yy + 9
+ln$ = w$
+ELSEIF ln$ = "" THEN
+ln$ = w$
+ELSE
+ln$ = ln$ + " " + w$
+ENDIF
+w$ = ""
+ELSE
+IF LEN(w$) < 29 THEN w$ = w$ + MID$(t$, i, 1)
+ENDIF
+NEXT i
+IF ln$ <> "" THEN TEXT 20, yy, ln$, "LT", 7, 1, cWhite : yy = yy + 9
+DrawDesc = yy
+END FUNCTION
 SUB FireLaser
 LOCAL INTEGER n, best, bestz, dmg
 IF lasTimer > 0 THEN EXIT SUB

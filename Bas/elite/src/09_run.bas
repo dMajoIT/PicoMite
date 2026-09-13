@@ -11,6 +11,7 @@ ProbeObjects
 SetupViews
 ShipColours
 EquipTable
+LoadTokens
 LoadSounds
 
 IF DEMOFRAMES = 0 THEN
