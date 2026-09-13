@@ -236,17 +236,12 @@ things that are simply not in the cassette game and so are not here either.
 
 From the **disc version** (and the Master, which is built on it):
 
-- A second space station, the Dodo, at the safer end of a system.
-- Rock hermits: the ship is here, but not the trading post it turns out to be.
 - Kill credit for canisters, asteroids, escape pods and Thargons - which this
   port already gives, having been written to the simpler rule. The cassette
   game awards nothing for junk; this and the disc version award for everything.
 - A real docking computer that flies you in, which is where our flown approach
   comes from.
 - The two missions: the Constrictor, and the Thargoid documents run.
-- The ship hangar drawn when you dock, with your ship and anything else in it.
-- Kill credit for cargo canisters, asteroids, escape pods and Thargons, not
-  just for ships.
 - The energy bomb killing a Constrictor, a disc access menu and printer
   support.
 - Ships carrying the NEWB flags - the pirate, trader, hostile, cop and innocent
@@ -281,6 +276,23 @@ Taken from it so far:
   boulders, a boulder gives splinters, and a splinter scooped is minerals - or,
   one time in eight, gem-stones. Anything else you shoot a rock with simply
   destroys it, as before.
+- **The Dodo station.** A system of technology level 10 or above has a
+  dodecahedron rather than a Coriolis - which is to say a screen that reads
+  technology level 11 or better, because the data screen shows one more than
+  the number the game works in. It is not a second station and it needs no
+  code of its own: the original swaps the blueprint that the space station
+  ship type points at, and our five docking tests read the station orientation
+  vectors rather than its shape, so they work on either without being told
+  which one is in front of them.
+- **The ship hangar**, which is what you see for a moment when you dock. Half
+  the time it is one of the original's four groups - a Shuttle and a
+  Transporter, three cargo canisters, or a Viper and a Krait at one of two
+  spacings - and half the time a single Sidewinder, Mamba, Krait or Adder
+  somewhere random. Each is spun on the spot so it can face any way, and the
+  height each stands at comes from the square root of its targetable area, so
+  a big ship sits higher off the deck than a small one. The floor is the
+  original's eleven lines at 130/n below the centre for n from 2 to 12, and
+  the back wall its fifteen verticals up to the horizon.
 
 From the **6502 Second Processor version**, which had a whole second computer
 to spend - and which this port now follows, because a PicoComputer has that
@@ -303,6 +315,19 @@ much spare and a great deal more:
   you, because it was given no AI, which is the original's way of faking a
   cloaking device. Shoot at it and it wakes up with a beam laser, four
   missiles, an E.C.M. and an aggression of sixty out of sixty-three.
+- **Rock hermits that are not just rocks.** One asteroid in eighty is somebody's
+  house. It sits there ignoring you - the original gives it no AI at all - but
+  shoot at it, as shooting at anything turns its AI on, and from then on there
+  is about one chance in five, each time it is serviced, of a Mamba, Krait,
+  Adder or Gecko coming out of it with an E.C.M. and an aggression of 56 out of
+  63. It settles down again afterwards, so the next one costs another shot.
+  (The original's own comment says the pick includes a Sidewinder; its
+  arithmetic says otherwise, because the carry is set by the time it reaches
+  the addition.)
+- **The station's own traffic.** A Shuttle or a Transporter, about one pass in
+  128, and never a second while the first is still about - which is what the
+  two fat slow ships in the hangar are for. Neither carries a laser, so the
+  aggression the original hands them only means they come over for a look.
 - **A screenshot key.** Press `P` to pause, then `D`, and the frame is written
   to the card as `SCREEN1.BMP`, `SCREEN2.BMP` and so on - which is what CTRL-D
   does there.
@@ -314,12 +339,12 @@ much spare and a great deal more:
   fat trader worth stopping, and boulders, splinters and rock hermits among the
   rubble. They arrive by the original's own rules: a pirate group is drawn with
   the AND of two random numbers so the small fighters come up far more often
-  than the Cobra, and a rock hermit is about one asteroid in eighty.
+  than the Cobra, and a rock hermit is about one asteroid in eighty. The
+  Shuttle and the Transporter joined them with the hangar, which is where the
+  fat end of that list is easiest to see.
 
-Still missing from it: the Shuttle and the Transporter, which are station
-traffic and need the station to spawn them; the Constrictor and the Dodo, which
-belong to a mission and a second station we do not have; the log tables; and
-Bitstik support. The last two are meaningless here. The Moray is missing from
+Still missing from it: the Constrictor, which belongs to a mission we do not
+have; the log tables; and Bitstik support. The last two are meaningless here. The Moray is missing from
 the Second Processor version too - it picks a lone bounty hunter from types 24
 to 27 and the Moray is 28, so nothing in that game ever spawns one either.
 

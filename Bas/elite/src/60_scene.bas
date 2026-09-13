@@ -150,6 +150,7 @@ SUB DockScene
   curX = homeX : curY = homeY
 
   ClearSlots
+  StationBlueprint
   MATH Q_EULER RAD(35), RAD(40), 0, qA() : qA(4) = 1
   n = NewShip(T_CRATER, 0, -20000, 3 * UNIT, qA())
   IF n >= 0 THEN sRol(n) = 127

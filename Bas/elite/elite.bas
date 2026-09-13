@@ -28,7 +28,16 @@ RunGame
 ENDIF
 LOOP
 ELSE
-IF DEMOSCENE = 3 THEN
+IF DEMOSCENE = 4 THEN
+FOR frames = 1 TO 8
+HangarScreen
+SaveShot frames
+NEXT frames
+FRAMEBUFFER CLOSE
+MODE 1
+PRINT "hangar done"
+END
+ELSEIF DEMOSCENE = 3 THEN
 DockedScreens
 FRAMEBUFFER CLOSE
 MODE 1
@@ -115,6 +124,7 @@ tBp(T_KRAIT) = 13 : tBp(T_ADDER) = 14 : tBp(T_GECKO) = 15
 tBp(T_COBRA1) = 16 : tBp(T_WORM) = 17 : tBp(T_ASP) = 18
 tBp(T_FERDELANCE) = 19 : tBp(T_BOA) = 20 : tBp(T_ANACONDA) = 21
 tBp(T_BOULDER) = 22 : tBp(T_SPLINTER) = 23 : tBp(T_HERMIT) = 24
+tBp(T_SHUTTLE) = 25 : tBp(T_TRANSPORT) = 26
 END SUB
 SUB LoadMesh(b AS INTEGER)
 LOCAL INTEGER j, k
@@ -144,6 +154,9 @@ CASE 21 : RESTORE dat_anaconda
 CASE 22 : RESTORE dat_boulder
 CASE 23 : RESTORE dat_splinter
 CASE 24 : RESTORE dat_rock_hermit
+CASE 25 : RESTORE dat_shuttle
+CASE 26 : RESTORE dat_transporter
+CASE 27 : RESTORE dat_dodo
 END SELECT
 READ bName$(b), bNv(b), bNf(b), bNfv(b), bNf0(b), bNv0(b)
 READ bCan(b), bArea(b), bBty(b), bVis(b), bEne(b), bSpd(b)
@@ -155,7 +168,7 @@ FOR j = 0 TO bNf0(b) - 1 : READ mNrm(0, j), mNrm(1, j), mNrm(2, j) : NEXT j
 FOR j = 0 TO bNfv(b) - 1 : READ mF(j) : NEXT j
 FOR j = 0 TO bNf(b) - 1
 mEc(j) = 0
-IF b = BP_CORIOLIS THEN
+IF b = BP_CORIOLIS OR b = BP_DODO OR fillBlack THEN
 mFl(j) = C_FILL
 ELSE
 mFl(j) = 1 + (mHost(j) MOD 6)
@@ -254,8 +267,9 @@ LoadMesh b
 e = shpCol(sTyp(n))
 FOR j = 0 TO bNf(b) - 1 : mEc(j) = e : NEXT j
 faces = solidMode
+IF fillBlack THEN faces = 1
 IF STNSOLID THEN
-IF b = BP_CORIOLIS THEN faces = 1
+IF b = BP_CORIOLIS OR b = BP_DODO THEN faces = 1
 ENDIF
 IF faces THEN
 Draw3D CREATE o, bNv(b), bNf(b), 1, mV(), mFc(), mF(), col(), mEc(), mFl()
@@ -1166,6 +1180,7 @@ homeSys = n : selSys = n
 homeX = sysX : homeY = sysY * 2
 curX = homeX : curY = homeY
 ClearSlots
+StationBlueprint
 MATH Q_EULER RAD(35), RAD(40), 0, qA() : qA(4) = 1
 n = NewShip(T_CRATER, 0, -20000, 3 * UNIT, qA())
 IF n >= 0 THEN sRol(n) = 127
@@ -1470,6 +1485,7 @@ SUB ArriveInSystem
 LOCAL INTEGER n, pz, sz, sx, ptype
 ClearSlots
 SysData
+StationBlueprint
 legal = legal \ 2
 spawnEV = 0
 pz = (((gs0 >> 8) AND 7) + 6) \ 2
@@ -1491,6 +1507,7 @@ SUB LaunchState
 LOCAL INTEGER n, ptype
 ClearSlots
 SysData
+StationBlueprint
 ptype = T_PLANET
 IF (sysTech AND 2) <> 0 THEN ptype = T_CRATER
 MATH Q_EULER RAD(35), RAD(40), 0, qA() : qA(4) = 1
@@ -1555,6 +1572,13 @@ dSpeed = 0
 inSafe = 0
 mcnt = 0
 inWitch = 1
+END SUB
+SUB StationBlueprint
+IF sysTech >= 10 THEN
+tBp(T_STATION) = BP_DODO
+ELSE
+tBp(T_STATION) = BP_CORIOLIS
+ENDIF
 END SUB
 SUB StationCheck
 LOCAL INTEGER n, px, py, pz
@@ -1859,7 +1883,7 @@ SUB Tactics
 LOCAL INTEGER n, dmg
 LOCAL FLOAT d, cnt, nx, ny, nz
 FOR n = 2 TO nUsed - 1
-IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 THEN
+IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 AND sTyp(n) <> T_MISSILE THEN
 IF (sAI(n) AND 128) <> 0 THEN
 IF inSafe THEN
 IF sTyp(n) < T_COBRA3 THEN
@@ -1867,6 +1891,9 @@ IF sTyp(n) <> T_VIPER THEN sAI(n) = sAI(n) AND 129
 ENDIF
 ENDIF
 IF ((mcnt XOR n) AND 7) = 0 THEN
+IF sTyp(n) = T_HERMIT THEN
+IF INT(RND * 256) >= 200 THEN HermitLaunch n
+ELSE
 d = SQR(sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n))
 IF d > 1 THEN
 NoseVec n
@@ -1909,7 +1936,23 @@ ENDIF
 ENDIF
 ENDIF
 ENDIF
+ENDIF
 NEXT n
+END SUB
+SUB HermitLaunch(n AS INTEGER)
+LOCAL INTEGER m, t
+SELECT CASE INT(RND * 4)
+CASE 0    : t = T_MAMBA
+CASE 1    : t = T_KRAIT
+CASE 2    : t = T_ADDER
+CASE ELSE : t = T_GECKO
+END SELECT
+m = NewFacing(t, sX(n), sY(n), sZ(n), 0)
+IF m >= 0 THEN
+sAI(m) = 241
+sSpd(m) = bSpd(sBp(m))
+ENDIF
+sAI(n) = 0
 END SUB
 SUB TurnTowards(n AS INTEGER, cnt AS FLOAT)
 LOCAL FLOAT rx, ry, rz, sx2, sy2, sz2, dr, ds, m
@@ -2285,6 +2328,21 @@ sSpd(n) = bSpd(sBp(n))
 sAI(n) = 128 OR 56
 ENDIF
 END SUB
+SUB StationTraffic
+LOCAL INTEGER n, t
+IF sTyp(SLOT_STAR) <> T_STATION THEN EXIT SUB
+IF (sAI(SLOT_STAR) AND 128) <> 0 THEN EXIT SUB
+IF (mcnt AND 31) <> 0 THEN EXIT SUB
+IF CountType(T_TRANSPORT) > 0 OR CountType(T_SHUTTLE) > 0 THEN EXIT SUB
+IF INT(RND * 256) < 253 THEN EXIT SUB
+IF INT(RND * 2) = 0 THEN t = T_SHUTTLE ELSE t = T_TRANSPORT
+MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+n = NewShip(t, sX(SLOT_STAR), sY(SLOT_STAR), sZ(SLOT_STAR) - 400, qA())
+IF n >= 0 THEN
+sSpd(n) = bSpd(sBp(n))
+sAI(n) = 241
+ENDIF
+END SUB
 SUB AngerStation
 IF sTyp(SLOT_STAR) = T_STATION THEN sAI(SLOT_STAR) = sAI(SLOT_STAR) OR 128
 legal = legal + 64
@@ -2334,6 +2392,7 @@ t = T_ASTEROID
 ENDIF
 n = NewFacing(t, x, y, z, 180)
 IF n >= 0 THEN
+IF t = T_HERMIT THEN sAI(n) = T_HERMIT
 IF RND < 0.5 THEN
 sSpd(n) = 16 + INT(RND * 16)
 sRol(n) = INT(RND * 256) OR 111
@@ -2617,6 +2676,82 @@ Sfx SFX_HYPER
 HyperTunnel
 ArriveInSystem
 Message "GALACTIC HYPERSPACE"
+END SUB
+SUB HangarScreen
+LOCAL INTEGER t, hx, hz
+fillBlack = 1
+ClearSlots
+IF INT(RND * 2) = 0 THEN
+SELECT CASE INT(RND * 4)
+CASE 0
+HangarShip T_SHUTTLE, -84, 315
+HangarShip T_TRANSPORT, 130, 432
+CASE 1
+HangarShip T_CANISTER, -80, 273
+HangarShip T_CANISTER, 209, 552
+HangarShip T_CANISTER, 64, 262
+CASE 2
+HangarShip T_VIPER, 96, 400
+HangarShip T_KRAIT, -16, 465
+CASE ELSE
+HangarShip T_VIPER, 81, 760
+HangarShip T_KRAIT, -96, 373
+END SELECT
+ELSE
+SELECT CASE INT(RND * 4)
+CASE 0    : t = T_SIDEWINDER
+CASE 1    : t = T_MAMBA
+CASE 2    : t = T_KRAIT
+CASE ELSE : t = T_ADDER
+END SELECT
+hx = INT(RND * 64)
+IF RND < 0.5 THEN hx = -hx
+hz = 256 + INT(RND * 2) * 256 + INT(RND * 256)
+HangarShip t, hx, hz
+ENDIF
+CLS
+HangarFloor
+DrawShips
+LINE 0, 0, SCRW - 2, 0, 1, cWhite
+BOX 0, 0, 2, VIEWH, 0, cWhite, cWhite
+BOX SCRW - 2, 0, 2, VIEWH, 0, cWhite, cWhite
+FRAMEBUFFER COPY F, N
+HangarHold
+ClearSlots
+fillBlack = 0
+END SUB
+SUB HangarHold
+LOCAL INTEGER k
+LOCAL FLOAT t
+LOCAL kb$ LENGTH 2
+IF demoMode THEN
+k = DemoHold(HANGDEMO, 0)
+EXIT SUB
+ENDIF
+t = TIMER + HANGWAIT
+DO
+SoundService
+kb$ = INKEY$
+IF kb$ <> "" THEN EXIT SUB
+LOOP UNTIL TIMER > t
+END SUB
+SUB HangarShip(t AS INTEGER, x AS INTEGER, z AS INTEGER)
+LOCAL INTEGER n, h
+h = (100 - INT(SQR(bArea(tBp(t))))) \ 2
+IF h < 0 THEN h = 0
+n = NewFacing(t, x, -h, z, INT(RND * 360))
+IF n >= 0 THEN sSpd(n) = 0
+END SUB
+SUB HangarFloor
+LOCAL INTEGER q, y, x, horiz
+horiz = VCY + 130 \ 12
+FOR q = 2 TO 12
+y = VCY + 130 \ q
+LINE 2, y, SCRW - 3, y, 1, cRed
+NEXT q
+FOR x = 16 TO SCRW - 16 STEP 16
+LINE x, 1, x, horiz, 1, cRed
+NEXT x
 END SUB
 SUB EquipTable
 LOCAL INTEGER i
@@ -3103,6 +3238,7 @@ Altitude
 CabinTemp
 StationCheck
 StationPolice
+StationTraffic
 SpawnTraffic
 mcnt = (mcnt + 1) AND 255
 ENDIF
@@ -3115,6 +3251,7 @@ frames = frames + 1
 SoundService
 LOOP UNTIL dead OR docked
 tFlight = tFlight + TIMER - t0
+IF docked THEN HangarScreen
 END SUB
 SUB PauseGame
 LOCAL INTEGER k
@@ -3220,6 +3357,7 @@ LOCAL t$ LENGTH 20
 t$ = ""
 DO
 DrawDocked
+BOX 0, SCRH - 12, SCRW, 12, 0, cBlack, cBlack
 TEXT VCX, SCRH - 9, p$ + t$ + "_", "CT", 7, 1, cYellow
 FRAMEBUFFER COPY F, N
 k = DockKey()
@@ -3381,7 +3519,12 @@ demoTick = 0
 demoTgt = -1
 demoCap$ = ""
 NewCommander
-cashTenths = 25000
+cashTenths = 150000
+demoScrn = DEMOREAD
+demoPhase = 0
+demoRock = -999
+demoScoop = 0
+demoMined = 0
 eqOwned(EQ_DOCK) = 1
 ClearSlots
 docked = 1
@@ -3398,7 +3541,7 @@ END SUB
 FUNCTION DemoKey() AS INTEGER
 LOCAL INTEGER k
 IF docked = 0 THEN
-DemoKey = DemoHold(DEMOREAD, 13)
+DemoKey = DemoHold(demoScrn, 13)
 EXIT FUNCTION
 ENDIF
 IF demoStep >= dkCount THEN
@@ -3447,7 +3590,11 @@ kTarget = 0 : kMissile = 0 : kECM = 0 : kDock = 0
 kJump = 0 : kChart = 0 : kPause = 0
 kBomb = 0 : kHop = 0 : kGal = 0
 demoTick = demoTick + 1
-IF demoLeg <= 1 THEN DemoLeg1 ELSE DemoLeg2
+SELECT CASE demoLeg
+CASE 0, 1 : DemoLeg1
+CASE 2    : DemoLeg2
+CASE ELSE : DemoLeg3
+END SELECT
 END SUB
 SUB DemoLeg1
 SELECT CASE demoTick
@@ -3455,40 +3602,40 @@ CASE 1 TO 55    : kFaster = 1
 CASE 90 TO 145  : kRollR = 1
 CASE 185 TO 240 : kRollL = 1
 CASE 300        : vw = 1 : demoCap$ = "REAR VIEW: LAVE STATION BEHIND US"
-CASE 660        : vw = 2 : demoCap$ = "LEFT VIEW"
-CASE 1020       : vw = 3 : demoCap$ = "RIGHT VIEW"
-CASE 1380       : vw = 0 : demoCap$ = ""
-CASE 1430       : demoTgt = DemoSpawn(T_COBRA3, 0, 200, 1800, 14, 0, 0)
-demoCap$ = "A COBRA MK III ON THE SPACE LANE"
-CASE 1530       : demoCap$ = "IN THE SIGHTS"
-CASE 1780       : demoCap$ = ""
-CASE 1810       : demoTgt = DemoSpawn(T_VIPER, -700, 200, 2200, 20, 128 OR 48, 180)
+CASE 620        : vw = 2 : demoCap$ = "LEFT VIEW"
+CASE 940        : vw = 3 : demoCap$ = "RIGHT VIEW"
+CASE 1260       : vw = 0 : demoCap$ = ""
+CASE 1310       : demoTgt = DemoSpawn(T_ANACONDA, 250, 120, 3000, 16, 0, 0)
+demoCap$ = "AN ANACONDA: THE BIGGEST TRADER"
+CASE 1560       : demoCap$ = ""
+CASE 1600       : demoTgt = DemoSpawn(T_VIPER, -700, 200, 2200, 20, 128 OR 48, 180)
 demoCap$ = "POLICE: THEY HAVE SEEN THE SLAVES"
-CASE 2330       : demoCap$ = "AN ASTEROID"
-demoTgt = DemoSpawn(T_ASTEROID, 150, -100, 1500, 0, 0, 180)
+CASE 2120       : demoCap$ = "AN ASTEROID"
+demoTgt = DemoSpawn(T_ASTEROID, 150, -100, 2600, 0, 0, 180)
 IF demoTgt >= 0 THEN sPit(demoTgt) = 127
-CASE 2530       : demoCap$ = "MISSILE LOCKED"
-CASE 2600       : kMissile = 1 : demoCap$ = "MISSILE AWAY"
-CASE 2750       : demoCap$ = ""
-CASE 2790       : DemoIncoming
+CASE 2150       : demoCap$ = "MISSILE LOCKED"
+CASE 2200       : kMissile = 1 : demoCap$ = "MISSILE AWAY"
+CASE 2330       : demoCap$ = ""
+CASE 2580       : DemoIncoming
 demoCap$ = "INCOMING MISSILE"
-CASE 2900       : kECM = 1 : demoCap$ = "E.C.M."
-CASE 2990       : demoCap$ = ""
-CASE 3020       : kChart = 4
-CASE 3050       : kChart = 1
-CASE 3080       : kChart = 3
-CASE 3120       : DemoPickTarget
+CASE 2690       : kECM = 1 : demoCap$ = "E.C.M."
+CASE 2780       : demoCap$ = ""
+CASE 2810       : kChart = 4
+CASE 2840       : kChart = 1
+CASE 2870       : demoScrn = 8000 : kChart = 3
+CASE 2871       : demoScrn = DEMOREAD
+CASE 2910       : DemoPickTarget
 inSafe = 0
 demoCap$ = "CLEAR OF THE SAFE ZONE"
-CASE 3170       : kJump = 1 : demoCap$ = "HYPERSPACE"
-CASE 3200       : demoLeg = 2 : demoTick = 0 : demoCap$ = ""
+CASE 2960       : kJump = 1 : demoCap$ = "HYPERSPACE"
+CASE 2990       : demoLeg = 2 : demoTick = 0 : demoCap$ = ""
 END SELECT
-IF demoTick > 1450 AND demoTick < 1780 THEN DemoAim demoTgt, 1
-IF demoTick > 1830 AND demoTick < 2310 THEN DemoAim DemoNearestFoe(), 1
-IF demoTick > 2340 AND demoTick < 2599 THEN DemoAim demoTgt, 0
-IF demoTick > 2530 AND demoTick < 2599 THEN kTarget = 1
-IF demoTick > 2605 AND demoTick < 2740 THEN DemoAim demoTgt, 0
-IF demoTick > 3900 THEN kQuit = 1
+IF demoTick > 1330 AND demoTick < 1550 THEN DemoAim demoTgt, 0
+IF demoTick > 1620 AND demoTick < 2100 THEN DemoAim DemoNearestFoe(), 1
+IF demoTick > 2130 AND demoTick < 2199 THEN DemoAim demoTgt, 0
+IF demoTick > 2150 AND demoTick < 2199 THEN kTarget = 1
+IF demoTick > 2205 AND demoTick < 2320 THEN DemoAim demoTgt, 0
+IF demoTick > 3700 THEN kQuit = 1
 END SUB
 SUB DemoLeg2
 SELECT CASE demoTick
@@ -3496,9 +3643,10 @@ CASE 1          : demoCap$ = "ARRIVED AT " + SysName$()
 CASE 2 TO 55    : kFaster = 1
 CASE 90         : vw = 1 : demoCap$ = "THE SUN, BEHIND US"
 CASE 190        : vw = 0 : demoCap$ = ""
-CASE 240        : demoTgt = DemoSpawn(T_MAMBA, 500, -150, 2200, 24, 128 OR 56, 180)
-demoCap$ = "PIRATES"
-CASE 250        : demoTgt = DemoSpawn(T_SIDEWINDER, -600, 150, 2600, 22, 128 OR 56, 180)
+CASE 240        : DemoPack 2
+demoCap$ = "PIRATES, DRAWN FROM THE PACK OF EIGHT"
+CASE 620        : DemoPack 2
+demoCap$ = "AND TWO MORE"
 CASE 900        : demoCap$ = ""
 CASE 940        : DemoCloseOnStation
 demoCap$ = "THE STATION IS IN RANGE"
@@ -3507,6 +3655,77 @@ CASE 1150       : demoCap$ = ""
 END SELECT
 IF demoTick > 260 AND demoTick < 900 THEN DemoAim DemoNearestFoe(), 1
 IF demoTick > 5200 THEN kQuit = 1
+END SUB
+SUB DemoLeg3
+LOCAL INTEGER mined
+SELECT CASE demoTick
+CASE 1          : demoCap$ = "A MINING LASER ON THE FORE MOUNT"
+demoPhase = 0
+demoRock = -999
+demoScoop = 0
+demoMined = cargo(12) + cargo(15)
+CASE 2 TO 45    : kFaster = 1
+CASE 150        : demoCap$ = ""
+END SELECT
+IF demoTick < 160 THEN EXIT SUB
+mined = 0
+IF cargo(12) + cargo(15) > demoMined THEN mined = 1
+IF demoPhase = 0 THEN
+IF mined OR demoTick > 2400 THEN
+demoPhase = 1
+demoTgt = demoTick
+DemoCloseOnStation
+IF mined THEN demoCap$ = "ORE ABOARD" ELSE demoCap$ = ""
+ELSE
+DemoWorkRock
+ENDIF
+EXIT SUB
+ENDIF
+IF demoTick = demoTgt + 10 THEN kDock = 1
+IF demoTick = demoTgt + 160 THEN demoCap$ = "DOCKING COMPUTER ENGAGED"
+IF demoTick = demoTgt + 360 THEN demoCap$ = ""
+IF demoTick > 5200 THEN kQuit = 1
+END SUB
+SUB DemoWorkRock
+LOCAL INTEGER n, i
+n = DemoNearestOf(T_ASTEROID)
+IF n >= 0 THEN
+demoCap$ = "AN ASTEROID, AND THE LASER THAT MINES IT"
+DemoAim n, 1
+EXIT SUB
+ENDIF
+n = DemoNearestOf(T_BOULDER)
+IF n >= 0 THEN
+demoCap$ = "BOULDERS: BREAK THEM AGAIN"
+DemoAim n, 1
+EXIT SUB
+ENDIF
+n = DemoNearestOf(T_SPLINTER)
+IF n >= 0 THEN
+IF demoScoop = 0 THEN
+demoScoop = demoTick
+demoCap$ = "SPLINTERS: MINERALS OR GEM-STONES"
+i = 0
+FOR n = 2 TO nUsed - 1
+IF sTyp(n) = T_SPLINTER THEN
+sX(n) = i * 70 - 70
+sY(n) = -120
+sZ(n) = 1400 + i * 500
+sSpd(n) = 0
+i = i + 1
+ENDIF
+NEXT n
+EXIT SUB
+ENDIF
+DemoScoopAim DemoNearestOf(T_SPLINTER)
+EXIT SUB
+ENDIF
+IF demoTick > demoRock + 90 THEN
+demoRock = demoTick
+demoScoop = 0
+n = DemoSpawn(T_ASTEROID, 100, -60, 2800, 0, 0, 180)
+IF n >= 0 THEN sPit(n) = 127
+ENDIF
 END SUB
 SUB DemoAim(n AS INTEGER, fire AS INTEGER)
 LOCAL FLOAT d, ux, uy, uz
@@ -3541,12 +3760,49 @@ IF fire THEN
 IF uz > 0 AND sX(n)*sX(n) + sY(n)*sY(n) < bArea(sBp(n)) THEN kFire = 1
 ENDIF
 END SUB
+SUB DemoScoopAim(n AS INTEGER)
+LOCAL FLOAT d, ux, uy, uz
+IF n < 0 OR n >= nUsed THEN EXIT SUB
+IF sTyp(n) = 0 OR sExp(n) > 0 THEN EXIT SUB
+d = SQR(sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n))
+IF d < 1 THEN EXIT SUB
+ux = sX(n) / d : uy = sY(n) / d : uz = sZ(n) / d
+IF ux > 0.02 THEN
+kRollR = 1
+ELSEIF ux < -0.02 THEN
+kRollL = 1
+ENDIF
+IF uy < -0.10 THEN
+kUp = 1
+ELSEIF uy > -0.04 THEN
+kDn = 1
+ENDIF
+IF uz < 0 AND ABS(uy) < 0.05 THEN kUp = 1
+IF d > 900 THEN
+IF dSpeed < 22 THEN kFaster = 1
+ELSE
+IF dSpeed > 10 THEN kSlower = 1
+IF dSpeed < 8 THEN kFaster = 1
+ENDIF
+END SUB
+FUNCTION DemoNearestOf(t AS INTEGER) AS INTEGER
+LOCAL INTEGER n, best
+LOCAL FLOAT d, bd
+best = -1 : bd = 1e12
+FOR n = 2 TO nUsed - 1
+IF sTyp(n) = t AND sExp(n) = 0 THEN
+d = sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n)
+IF d < bd THEN bd = d : best = n
+ENDIF
+NEXT n
+DemoNearestOf = best
+END FUNCTION
 FUNCTION DemoNearestFoe() AS INTEGER
 LOCAL INTEGER n, best
 LOCAL FLOAT d, bd
 best = -1 : bd = 1e12
 FOR n = 2 TO nUsed - 1
-IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 THEN
+IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 AND (sAI(n) AND 128) <> 0 THEN
 IF sTyp(n) <> T_MISSILE AND sTyp(n) <> T_CANISTER AND sTyp(n) <> T_ESCAPE THEN
 d = sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n)
 IF d < bd THEN bd = d : best = n
@@ -3562,6 +3818,12 @@ n = NewShip(t, x, y, z, qA())
 IF n >= 0 THEN sSpd(n) = spd : sAI(n) = ai
 DemoSpawn = n
 END FUNCTION
+SUB DemoPack(cnt AS INTEGER)
+LOCAL INTEGER i, n
+FOR i = 0 TO cnt - 1
+n = DemoSpawn(PackShip(), (i - 1) * 550, 150 - (i AND 1) * 300, 2400 + i * 400, 22, 128 OR 56, 180)
+NEXT i
+END SUB
 SUB DemoIncoming
 LOCAL INTEGER n
 MATH Q_EULER RAD(180), 0, 0, qA() : qA(4) = 1
@@ -3623,19 +3885,14 @@ END SUB
 dat_demo:
 DATA 152,3500
 DATA 146,3000
-DATA 32,400
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,600
+DATA 13,1200
+DATA 49,400
+DATA 50,400
+DATA 13,1600
 DATA 129,400
 DATA 129,300
 DATA 129,400
 DATA 32,400
-DATA 32,300
 DATA 32,300
 DATA 32,300
 DATA 32,300
@@ -3650,26 +3907,34 @@ DATA 129,700
 DATA 129,700
 DATA 32,700
 DATA 145,1500
+DATA 129,700
+DATA 32,1500
 DATA 149,3000
 DATA 131,400
 DATA 131,400
-DATA 131,400
-DATA 131,400
-DATA 129,700
-DATA 151,3000
+DATA 129,600
+DATA 162,500
+DATA 164,500
+DATA 163,500
+DATA 161,900
+DATA 70,1200
+DATA 90,300
+DATA 65,250
+DATA 79,250
+DATA 78,250
+DATA 67,250
+DATA 69,600
+DATA 13,2000
+DATA 151,6500
 DATA 150,3000
 DATA 154,3000
 DATA 153,3000
 DATA 145,3500
 DATA 147,4500
-DATA 32,400
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,600
+DATA 13,1200
+DATA 49,400
+DATA 50,400
+DATA 13,1600
 DATA 129,400
 DATA 129,300
 DATA 129,400
@@ -3677,8 +3942,28 @@ DATA 32,400
 DATA 32,300
 DATA 32,300
 DATA 32,300
-DATA 32,300
 DATA 32,900
-DATA 154,3500
+DATA 148,2500
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,400
+DATA 129,900
+DATA 32,1500
+DATA 145,1800
+DATA 128,1000
+DATA 32,1500
+DATA 146,1800
+DATA 145,3500
+DATA 154,4000
 DATA 153,5000
 DATA -1,0

@@ -125,6 +125,22 @@ def declared_names(text):
     return out
 
 
+STRLEN = re.compile(r"\b([A-Za-z_][A-Za-z0-9_.]*\$)\s*(?:\([^)]*\))?\s+LENGTH\s+(\d+)", re.I)
+# name$ = "..." where the literal is the whole of the right hand side
+STRASSIGN = re.compile(r"([A-Za-z_][A-Za-z0-9_.]*\$)\s*(?:\([^)]*\))?\s*=\s*\"([^\"]*)\"\s*(?=:|$)", re.I)
+
+
+def code_of(ln):
+    """The line with any trailing comment removed, minding quoted strings."""
+    q = False
+    for i, ch in enumerate(ln):
+        if ch == chr(34):
+            q = not q
+        elif ch == chr(39) and not q:
+            return ln[:i]
+    return ln
+
+
 def check(text):
     problems = []
     lines = text.splitlines()
@@ -237,6 +253,23 @@ def check(text):
     for k, v in depth.items():
         if v:
             problems.append("unclosed %s block(s): %d" % (k, v))
+
+    # string literals that will not fit the variable they are assigned to.
+    # MMBasic range-checks the assignment whatever LENGTH does about the
+    # allocation, so an over-long caption is a run-time "String too long"
+    # from wherever it happens to be reached - which in a demo can be
+    # minutes in.  Only whole-literal assignments are checked, because
+    # anything with a concatenation in it cannot be measured from here.
+    sized = {}
+    for i, ln in enumerate(lines, 1):
+        for m in STRLEN.finditer(code_of(ln)):
+            sized[m.group(1).lower()] = int(m.group(2))
+    for i, ln in enumerate(lines, 1):
+        for m in STRASSIGN.finditer(code_of(ln)):
+            n = sized.get(m.group(1).lower())
+            if n is not None and len(m.group(2)) > n:
+                problems.append("line %d: %s is LENGTH %d but is given %d characters: \"%s\""
+                                % (i, m.group(1), n, len(m.group(2)), m.group(2)))
 
     # lines longer than the console/editor is happy with
     for i, ln in enumerate(lines, 1):

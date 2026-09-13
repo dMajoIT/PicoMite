@@ -17,12 +17,18 @@
 '  actually is and rolls and pitches towards it, so the demo hits what it
 '  aims at however the fight goes.
 '
-'  Three things are compressed, because they take real minutes to happen:
-'  the demo's commander starts with 2500 credits rather than 100 so the
+'  There are three legs: out of Lave and into hyperspace, into Zaonce and
+'  down onto its station, and out again with a mining laser to break a rock
+'  up and scoop what comes off it.
+'
+'  Four things are compressed, because they take real minutes to happen:
+'  the demo's commander starts with 15000 credits rather than 100 so the
 '  shop is worth visiting, the safe zone is declared behind us rather than
-'  flown out of, and the planet is moved to where the station's orbit
-'  brings it into range instead of the ship crossing the distance.  Each
-'  is marked where it happens.  Everything else is played.
+'  flown out of, the planet is moved to where the station's orbit brings it
+'  into range instead of the ship crossing the distance, and the splinters
+'  a mined boulder leaves are strung out in front of the nose rather than
+'  chased across the sky.  Each is marked where it happens.  Everything
+'  else is played.
 '
 '  Any key hands the game over to whoever pressed it; escape stops.
 ' =====================================================================
@@ -39,8 +45,15 @@ SUB RunDemo
     demoTgt = -1
     demoCap$ = ""
     NewCommander
-    ' A demo commander with something to spend and room to fill.
-    cashTenths = 25000
+    ' A demo commander with something to spend and room to fill.  A military
+    ' laser alone is six thousand credits, and the point of visiting a rich
+    ' industrial world is being able to afford what it sells.
+    cashTenths = 150000
+    demoScrn = DEMOREAD
+    demoPhase = 0
+    demoRock = -999
+    demoScoop = 0
+    demoMined = 0
     ' And a docking computer, which Lave's technology level cannot sell:
     ' without it the demo could not show the approach at all.
     eqOwned(EQ_DOCK) = 1
@@ -66,7 +79,7 @@ FUNCTION DemoKey() AS INTEGER
   ' An information screen opened from the cockpit: there is no script for
   ' those, so hold it and close it again.
   IF docked = 0 THEN
-    DemoKey = DemoHold(DEMOREAD, 13)
+    DemoKey = DemoHold(demoScrn, 13)
     EXIT FUNCTION
   ENDIF
   IF demoStep >= dkCount THEN
@@ -127,7 +140,11 @@ SUB DemoFly
   kJump = 0 : kChart = 0 : kPause = 0
   kBomb = 0 : kHop = 0 : kGal = 0
   demoTick = demoTick + 1
-  IF demoLeg <= 1 THEN DemoLeg1 ELSE DemoLeg2
+  SELECT CASE demoLeg
+    CASE 0, 1 : DemoLeg1
+    CASE 2    : DemoLeg2
+    CASE ELSE : DemoLeg3
+  END SELECT
 END SUB
 
 ' --- leg one: out of Lave, and what is on the space lane
@@ -138,44 +155,50 @@ SUB DemoLeg1
     CASE 185 TO 240 : kRollL = 1
     ' Each view is held long enough for the dust to be seen moving through it.
     CASE 300        : vw = 1 : demoCap$ = "REAR VIEW: LAVE STATION BEHIND US"
-    CASE 660        : vw = 2 : demoCap$ = "LEFT VIEW"
-    CASE 1020       : vw = 3 : demoCap$ = "RIGHT VIEW"
-    CASE 1380       : vw = 0 : demoCap$ = ""
-    CASE 1430       : demoTgt = DemoSpawn(T_COBRA3, 0, 200, 1800, 14, 0, 0)
-                      demoCap$ = "A COBRA MK III ON THE SPACE LANE"
-    CASE 1530       : demoCap$ = "IN THE SIGHTS"
-    CASE 1780       : demoCap$ = ""
-    CASE 1810       : demoTgt = DemoSpawn(T_VIPER, -700, 200, 2200, 20, 128 OR 48, 180)
+    CASE 620        : vw = 2 : demoCap$ = "LEFT VIEW"
+    CASE 940        : vw = 3 : demoCap$ = "RIGHT VIEW"
+    CASE 1260       : vw = 0 : demoCap$ = ""
+    ' The Second Processor version put two more traders on the lane, and the
+    ' Anaconda is the largest thing in the game that is not a station.  We
+    ' only fly alongside it: shooting a trader is how a good record ends.
+    CASE 1310       : demoTgt = DemoSpawn(T_ANACONDA, 250, 120, 3000, 16, 0, 0)
+                      demoCap$ = "AN ANACONDA: THE BIGGEST TRADER"
+    CASE 1560       : demoCap$ = ""
+    CASE 1600       : demoTgt = DemoSpawn(T_VIPER, -700, 200, 2200, 20, 128 OR 48, 180)
                       demoCap$ = "POLICE: THEY HAVE SEEN THE SLAVES"
-    CASE 2330       : demoCap$ = "AN ASTEROID"
-                      demoTgt = DemoSpawn(T_ASTEROID, 150, -100, 1500, 0, 0, 180)
+    CASE 2120       : demoCap$ = "AN ASTEROID"
+                      demoTgt = DemoSpawn(T_ASTEROID, 150, -100, 2600, 0, 0, 180)
                       IF demoTgt >= 0 THEN sPit(demoTgt) = 127
-    CASE 2530       : demoCap$ = "MISSILE LOCKED"
-    CASE 2600       : kMissile = 1 : demoCap$ = "MISSILE AWAY"
-    CASE 2750       : demoCap$ = ""
-    CASE 2790       : DemoIncoming
+    CASE 2150       : demoCap$ = "MISSILE LOCKED"
+    CASE 2200       : kMissile = 1 : demoCap$ = "MISSILE AWAY"
+    CASE 2330       : demoCap$ = ""
+    CASE 2580       : DemoIncoming
                       demoCap$ = "INCOMING MISSILE"
-    CASE 2900       : kECM = 1 : demoCap$ = "E.C.M."
-    CASE 2990       : demoCap$ = ""
-    CASE 3020       : kChart = 4          ' market prices, from the cockpit
-    CASE 3050       : kChart = 1          ' the galactic chart
-    CASE 3080       : kChart = 3          ' and what is known about the target
-    CASE 3120       : DemoPickTarget
+    CASE 2690       : kECM = 1 : demoCap$ = "E.C.M."
+    CASE 2780       : demoCap$ = ""
+    CASE 2810       : kChart = 4          ' market prices, from the cockpit
+    CASE 2840       : kChart = 1          ' the galactic chart
+    ' The system data screen carries the disc version's description now, so
+    ' it is given long enough to be read rather than glanced at.
+    CASE 2870       : demoScrn = 8000 : kChart = 3
+    CASE 2871       : demoScrn = DEMOREAD
+    CASE 2910       : DemoPickTarget
                       ' Compressed: an hour of cruising out of the safe zone.
                       inSafe = 0
                       demoCap$ = "CLEAR OF THE SAFE ZONE"
-    CASE 3170       : kJump = 1 : demoCap$ = "HYPERSPACE"
-    CASE 3200       : demoLeg = 2 : demoTick = 0 : demoCap$ = ""
+    CASE 2960       : kJump = 1 : demoCap$ = "HYPERSPACE"
+    CASE 2990       : demoLeg = 2 : demoTick = 0 : demoCap$ = ""
   END SELECT
-  IF demoTick > 1450 AND demoTick < 1780 THEN DemoAim demoTgt, 1
-  IF demoTick > 1830 AND demoTick < 2310 THEN DemoAim DemoNearestFoe(), 1
+  ' Closing on the Anaconda to look at it, with the laser off.
+  IF demoTick > 1330 AND demoTick < 1550 THEN DemoAim demoTgt, 0
+  IF demoTick > 1620 AND demoTick < 2100 THEN DemoAim DemoNearestFoe(), 1
   ' Lining up for the missile: the laser is held off so it does not do the
   ' job first, and the lock is asked for over a stretch rather than on one
   ' tick, because it only takes when the target is inside the sights.
-  IF demoTick > 2340 AND demoTick < 2599 THEN DemoAim demoTgt, 0
-  IF demoTick > 2530 AND demoTick < 2599 THEN kTarget = 1
-  IF demoTick > 2605 AND demoTick < 2740 THEN DemoAim demoTgt, 0
-  IF demoTick > 3900 THEN kQuit = 1
+  IF demoTick > 2130 AND demoTick < 2199 THEN DemoAim demoTgt, 0
+  IF demoTick > 2150 AND demoTick < 2199 THEN kTarget = 1
+  IF demoTick > 2205 AND demoTick < 2320 THEN DemoAim demoTgt, 0
+  IF demoTick > 3700 THEN kQuit = 1
 END SUB
 
 ' --- leg two: the new system, a fight, and the way in
@@ -185,9 +208,13 @@ SUB DemoLeg2
     CASE 2 TO 55    : kFaster = 1
     CASE 90         : vw = 1 : demoCap$ = "THE SUN, BEHIND US"
     CASE 190        : vw = 0 : demoCap$ = ""
-    CASE 240        : demoTgt = DemoSpawn(T_MAMBA, 500, -150, 2200, 24, 128 OR 56, 180)
-                      demoCap$ = "PIRATES"
-    CASE 250        : demoTgt = DemoSpawn(T_SIDEWINDER, -600, 150, 2600, 22, 128 OR 56, 180)
+    ' A pack rather than two named ships: the Second Processor version draws
+    ' them from eight, so no two packs are quite the same and most of what
+    ' turns up is something the cassette game never had.
+    CASE 240        : DemoPack 2
+                      demoCap$ = "PIRATES, DRAWN FROM THE PACK OF EIGHT"
+    CASE 620        : DemoPack 2
+                      demoCap$ = "AND TWO MORE"
     CASE 900        : demoCap$ = ""
     CASE 940        : DemoCloseOnStation
                       demoCap$ = "THE STATION IS IN RANGE"
@@ -204,6 +231,92 @@ SUB DemoLeg2
   ' The approach takes the best part of a minute at the original's pace, so
   ' the watchdog has to be patient enough to let it finish.
   IF demoTick > 5200 THEN kQuit = 1
+END SUB
+
+' --- leg three: out of Zaonce with a mining laser, and back with the ore
+'
+' Past the first few seconds this leg is not on a clock.  The original's
+' Mine gives nought to three pieces, and nought is a real answer: shoot a
+' rock and there may be nothing at all to show for it.  So the demo reads
+' the universe instead - asteroid, boulder, splinter, nothing - and does
+' whatever the thing in front of it calls for.
+SUB DemoLeg3
+  LOCAL INTEGER mined
+  SELECT CASE demoTick
+    CASE 1          : demoCap$ = "A MINING LASER ON THE FORE MOUNT"
+                      demoPhase = 0
+                      demoRock = -999
+                      demoScoop = 0
+                      demoMined = cargo(12) + cargo(15)
+    CASE 2 TO 45    : kFaster = 1
+    CASE 150        : demoCap$ = ""
+  END SELECT
+  IF demoTick < 160 THEN EXIT SUB
+  mined = 0
+  IF cargo(12) + cargo(15) > demoMined THEN mined = 1
+  IF demoPhase = 0 THEN
+    IF mined OR demoTick > 2400 THEN
+      demoPhase = 1
+      demoTgt = demoTick
+      DemoCloseOnStation
+      IF mined THEN demoCap$ = "ORE ABOARD" ELSE demoCap$ = ""
+    ELSE
+      DemoWorkRock
+    ENDIF
+    EXIT SUB
+  ENDIF
+  IF demoTick = demoTgt + 10 THEN kDock = 1
+  IF demoTick = demoTgt + 160 THEN demoCap$ = "DOCKING COMPUTER ENGAGED"
+  IF demoTick = demoTgt + 360 THEN demoCap$ = ""
+  IF demoTick > 5200 THEN kQuit = 1
+END SUB
+
+' Break whatever rock is out there, and scoop what comes off it.
+SUB DemoWorkRock
+  LOCAL INTEGER n, i
+  n = DemoNearestOf(T_ASTEROID)
+  IF n >= 0 THEN
+    demoCap$ = "AN ASTEROID, AND THE LASER THAT MINES IT"
+    DemoAim n, 1
+    EXIT SUB
+  ENDIF
+  n = DemoNearestOf(T_BOULDER)
+  IF n >= 0 THEN
+    demoCap$ = "BOULDERS: BREAK THEM AGAIN"
+    DemoAim n, 1
+    EXIT SUB
+  ENDIF
+  n = DemoNearestOf(T_SPLINTER)
+  IF n >= 0 THEN
+    IF demoScoop = 0 THEN
+      demoScoop = demoTick
+      demoCap$ = "SPLINTERS: MINERALS OR GEM-STONES"
+      ' Compressed: the pieces are strung out in front of the nose, a little
+      ' under it, so the run at them starts from a fair position instead of
+      ' three tumbling specks being chased across the sky.  The scooping
+      ' itself is the game's own Contact, which takes whatever passes below.
+      i = 0
+      FOR n = 2 TO nUsed - 1
+        IF sTyp(n) = T_SPLINTER THEN
+          sX(n) = i * 70 - 70
+          sY(n) = -120
+          sZ(n) = 1400 + i * 500
+          sSpd(n) = 0
+          i = i + 1
+        ENDIF
+      NEXT n
+      EXIT SUB
+    ENDIF
+    DemoScoopAim DemoNearestOf(T_SPLINTER)
+    EXIT SUB
+  ENDIF
+  ' Nothing left to work on, so put another rock up - but not on every frame.
+  IF demoTick > demoRock + 90 THEN
+    demoRock = demoTick
+    demoScoop = 0
+    n = DemoSpawn(T_ASTEROID, 100, -60, 2800, 0, 0, 180)
+    IF n >= 0 THEN sPit(n) = 127
+  ENDIF
 END SUB
 
 ' --- flying at something
@@ -256,12 +369,63 @@ SUB DemoAim(n AS INTEGER, fire AS INTEGER)
   ENDIF
 END SUB
 
+' Flying onto a splinter rather than at it.  Scooping is a collision with
+' something that passes a little under the nose - the game's own Contact
+' does the rest - so this holds the target just below the sights instead of
+' in them, and closes slowly enough not to go straight through.
+SUB DemoScoopAim(n AS INTEGER)
+  LOCAL FLOAT d, ux, uy, uz
+  IF n < 0 OR n >= nUsed THEN EXIT SUB
+  IF sTyp(n) = 0 OR sExp(n) > 0 THEN EXIT SUB
+  d = SQR(sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n))
+  IF d < 1 THEN EXIT SUB
+  ux = sX(n) / d : uy = sY(n) / d : uz = sZ(n) / d
+  IF ux > 0.02 THEN
+    kRollR = 1
+  ELSEIF ux < -0.02 THEN
+    kRollL = 1
+  ENDIF
+  ' Wanted a little low: the scoops only take what goes under the ship.
+  IF uy < -0.10 THEN
+    kUp = 1
+  ELSEIF uy > -0.04 THEN
+    kDn = 1
+  ENDIF
+  IF uz < 0 AND ABS(uy) < 0.05 THEN kUp = 1
+  IF d > 900 THEN
+    IF dSpeed < 22 THEN kFaster = 1
+  ELSE
+    IF dSpeed > 10 THEN kSlower = 1
+    IF dSpeed < 8 THEN kFaster = 1
+  ENDIF
+END SUB
+
+' The nearest thing of one particular kind, which is how leg three tells a
+' boulder it still has to break from a splinter it can already scoop.
+FUNCTION DemoNearestOf(t AS INTEGER) AS INTEGER
+  LOCAL INTEGER n, best
+  LOCAL FLOAT d, bd
+  best = -1 : bd = 1e12
+  FOR n = 2 TO nUsed - 1
+    IF sTyp(n) = t AND sExp(n) = 0 THEN
+      d = sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n)
+      IF d < bd THEN bd = d : best = n
+    ENDIF
+  NEXT n
+  DemoNearestOf = best
+END FUNCTION
+
+' The nearest thing that is actually looking for a fight.  Without the test
+' on the AI flag this returns whatever happens to be closest, which on the
+' space lane is the trader we were sent out to look at, or a rock - and the
+' demo would spend the fight shooting the wrong thing and lose its record
+' doing it.
 FUNCTION DemoNearestFoe() AS INTEGER
   LOCAL INTEGER n, best
   LOCAL FLOAT d, bd
   best = -1 : bd = 1e12
   FOR n = 2 TO nUsed - 1
-    IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 THEN
+    IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 AND (sAI(n) AND 128) <> 0 THEN
      IF sTyp(n) <> T_MISSILE AND sTyp(n) <> T_CANISTER AND sTyp(n) <> T_ESCAPE THEN
       d = sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n)
       IF d < bd THEN bd = d : best = n
@@ -280,6 +444,17 @@ FUNCTION DemoSpawn(t AS INTEGER, x AS FLOAT, y AS FLOAT, z AS FLOAT, spd AS INTE
   IF n >= 0 THEN sSpd(n) = spd : sAI(n) = ai
   DemoSpawn = n
 END FUNCTION
+
+' A pack of pirates, made the way the game makes one: each ship is drawn
+' from the Second Processor version's eight with the AND of two random
+' numbers, so the small fighters come up far more often than the Cobra and
+' no two packs are quite the same.
+SUB DemoPack(cnt AS INTEGER)
+  LOCAL INTEGER i, n
+  FOR i = 0 TO cnt - 1
+    n = DemoSpawn(PackShip(), (i - 1) * 550, 150 - (i AND 1) * 300, 2400 + i * 400, 22, 128 OR 56, 180)
+  NEXT i
+END SUB
 
 ' Nothing in the game fires a missile at the player yet, so the demo puts
 ' one in the air itself to have something for the E.C.M. to answer.
@@ -366,20 +541,15 @@ dat_demo:
 ' --- at Lave: look around, trade, outfit the ship
 DATA 152,3500          ' hold the status screen, then market prices
 DATA 146,3000          ' F2, buying
-DATA 32,400            ' food, eight tonnes of it
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,600
+DATA 13,1200           ' RETURN asks how many, which the disc version added
+DATA 49,400            ' 1
+DATA 50,400            ' 2
+DATA 13,1600           ' twelve tonnes of food, in one go rather than twelve
 DATA 129,400           ' down to the slaves, which is asking for trouble
 DATA 129,300
 DATA 129,400
-DATA 32,400
-DATA 32,300
-DATA 32,300
+DATA 32,400            ' and these one at a time, because a rich agricultural
+DATA 32,300            ' world has only so many to sell
 DATA 32,300
 DATA 32,300
 DATA 32,900
@@ -393,27 +563,35 @@ DATA 129,700           ' past the pulse lasers
 DATA 129,700           ' to the beam lasers
 DATA 32,700
 DATA 145,1500          ' F1: on the fore mount
+DATA 129,700           ' and fuel scoops, without which nothing can be mined
+DATA 32,1500
 DATA 149,3000          ' F5, the galactic chart
-DATA 131,400           ' walk the cursor across it
+DATA 131,400           ' walk the cursor across it, a light year at a time
 DATA 131,400
-DATA 131,400
-DATA 131,400
-DATA 129,700
-DATA 151,3000          ' F7, what is known about the system it picked
+DATA 129,600
+DATA 162,500           ' shift with an arrow covers eight times the ground
+DATA 164,500
+DATA 163,500
+DATA 161,900
+DATA 70,1200           ' F: find a system by typing its name
+DATA 90,300            ' Z
+DATA 65,250            ' A
+DATA 79,250            ' O
+DATA 78,250            ' N
+DATA 67,250            ' C
+DATA 69,600            ' E
+DATA 13,2000           ' and the cursor goes there: 5.6 light years, tech 12
+DATA 151,6500          ' F7, what is known about it - description and all
 DATA 150,3000          ' F6, the short range chart
 DATA 154,3000          ' F10, what is in the hold
 DATA 153,3000          ' F9, the commander
 DATA 145,3500          ' F1, launch
-' --- and after the jump, docked again: sell the cargo at the far end
+' --- at Zaonce: sell the cargo, and buy what only a rich world stocks
 DATA 147,4500          ' hold the status screen, then F3, selling
-DATA 32,400
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,300
-DATA 32,600
+DATA 13,1200           ' RETURN, and the whole twelve tonnes at once
+DATA 49,400            ' 1
+DATA 50,400            ' 2
+DATA 13,1600
 DATA 129,400           ' down to the slaves
 DATA 129,300
 DATA 129,400
@@ -421,8 +599,29 @@ DATA 32,400
 DATA 32,300
 DATA 32,300
 DATA 32,300
-DATA 32,300
 DATA 32,900
-DATA 154,3500          ' F10, an empty hold
-DATA 153,5000          ' F9, the commander again: richer, and rated
+DATA 148,2500          ' F4, the equipment shop of a technology 12 world
+DATA 129,200           ' walk to the bottom of a list Lave could not show:
+DATA 129,200           ' the last two rows are the Second Processor version's
+DATA 129,200           ' lasers, and no amount of money buys them at home
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,200
+DATA 129,400
+DATA 129,900           ' one more than there are rows, so this lands on the last
+DATA 32,1500           ' extra mining lasers
+DATA 145,1800          ' F1: on the fore mount, in place of the beam
+DATA 128,1000          ' up one, to the military lasers
+DATA 32,1500
+DATA 146,1800          ' F2: on the aft mount
+DATA 145,3500          ' F1, launch
+' --- and back at Zaonce with what the mining laser paid for
+DATA 154,4000          ' F10, minerals in the hold
+DATA 153,5000          ' F9, the commander: richer, and rated
 DATA -1,0

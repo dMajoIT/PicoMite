@@ -33,7 +33,18 @@ IF DEMOFRAMES = 0 THEN
 
 ELSE
 
-  IF DEMOSCENE = 3 THEN
+  IF DEMOSCENE = 4 THEN
+    ' The hangar, eight times over, which is enough passes to see each of
+    ' the four groups and a solo ship or two.
+    FOR frames = 1 TO 8
+      HangarScreen
+      SaveShot frames
+    NEXT frames
+    FRAMEBUFFER CLOSE
+    MODE 1
+    PRINT "hangar done"
+    END
+  ELSEIF DEMOSCENE = 3 THEN
     DockedScreens
     FRAMEBUFFER CLOSE
     MODE 1

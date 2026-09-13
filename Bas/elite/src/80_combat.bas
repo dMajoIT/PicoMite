@@ -166,7 +166,11 @@ SUB Tactics
   LOCAL INTEGER n, dmg
   LOCAL FLOAT d, cnt, nx, ny, nz
   FOR n = 2 TO nUsed - 1
-    IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 THEN
+    ' A missile has tactics of its own and none of these: the original jumps
+    ' it straight out of this routine, and ours has Missiles for it.  Left to
+    ' fall through here it would draw a beam at us and make a hit noise for
+    ' no damage, because a missile's blueprint laser power is nought.
+    IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 AND sTyp(n) <> T_MISSILE THEN
       IF (sAI(n) AND 128) <> 0 THEN
         ' Even a pirate will not start something inside the station's
         ' no-fire zone, so its aggression is taken away while it is in
@@ -179,6 +183,14 @@ SUB Tactics
           ENDIF
         ENDIF
         IF ((mcnt XOR n) AND 7) = 0 THEN
+         IF sTyp(n) = T_HERMIT THEN
+          ' A rock hermit is a rock with somebody living in it, and none of
+          ' the rest of this applies to it.  It sits there with its AI off
+          ' until something shoots at it - which turns the AI on, as being
+          ' shot at does for anything - and from then on there is about one
+          ' chance in five, each time it is serviced, of a fighter coming out.
+          IF INT(RND * 256) >= 200 THEN HermitLaunch n
+         ELSE
           d = SQR(sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n))
           IF d > 1 THEN
             ' How squarely is it facing us?  Its nose against the
@@ -240,10 +252,36 @@ SUB Tactics
               sAcc(n) = -1
             ENDIF
           ENDIF
+         ENDIF
         ENDIF
       ENDIF
     ENDIF
   NEXT n
+END SUB
+
+' What comes out of a rock hermit: a Mamba, a Krait, an Adder or a Gecko,
+' with an E.C.M. and an aggression of 56 out of 63, launched from the rock
+' itself.  The hermit settles down again afterwards, so the next one costs
+' another shot.
+'
+' The original's comment says the pick includes a Sidewinder; its arithmetic
+' says otherwise.  The carry is set by the time it reaches the addition, so
+' the range is the four types above the Sidewinder rather than four starting
+' at it.
+SUB HermitLaunch(n AS INTEGER)
+  LOCAL INTEGER m, t
+  SELECT CASE INT(RND * 4)
+    CASE 0    : t = T_MAMBA
+    CASE 1    : t = T_KRAIT
+    CASE 2    : t = T_ADDER
+    CASE ELSE : t = T_GECKO
+  END SELECT
+  m = NewFacing(t, sX(n), sY(n), sZ(n), 0)
+  IF m >= 0 THEN
+    sAI(m) = 241
+    sSpd(m) = bSpd(sBp(m))
+  ENDIF
+  sAI(n) = 0
 END SUB
 
 ' Set the roll and pitch counters so the ship swings towards us.  The

@@ -42,7 +42,8 @@ CONST VCX = 160, VCY = 88          ' space view centre
 CONST DASHY = 176                  ' first dashboard row
 CONST VPLANE = 256                 ' focal length in pixels, as the BBC
 CONST DEMOFRAMES = 0               ' >0 runs a scripted demo and exits; 0 plays
-CONST DEMOSCENE = 1                ' 1 flight and combat, 2 docking, 3 the docked screens
+CONST DEMOSCENE = 1                ' 1 flight and combat, 2 docking, 3 the docked
+                                   ' screens, 4 the ship hangar
 CONST PANY = VCY - (SCRH \ 2 - 1)  ' shifts Draw3D's centre up to VCY
 
 ' ------------------------------------------------------- universe size
@@ -51,7 +52,7 @@ CONST PANY = VCY - (SCRH \ 2 - 1)  ' shifts Draw3D's centre up to VCY
 ' computer to spend, allows eighteen and seven.  Only maxObj of them can hold
 ' a mesh at once - the rest are drawn as the original's distant dashes.
 CONST NSLOT = 20
-CONST NBP = 25                     ' twelve from the cassette, thirteen more from
+CONST NBP = 28                     ' twelve from the cassette, sixteen more from
                                    ' the 6502 Second Processor version
 CONST SLOT_PLANET = 0              ' FRIN slot 0 is always the planet
 CONST SLOT_STAR = 1                ' slot 1 is the sun or the station
@@ -74,7 +75,10 @@ CONST T_KRAIT = 15, T_ADDER = 16, T_GECKO = 17, T_COBRA1 = 18, T_WORM = 19
 CONST T_ASP = 20, T_FERDELANCE = 21
 CONST T_BOA = 22, T_ANACONDA = 23
 CONST T_BOULDER = 24, T_SPLINTER = 25, T_HERMIT = 26
-CONST NTYPE = 26                   ' highest ship type number
+' Station traffic: the two the station sends out, and the two the hangar
+' shows you standing on the deck when you dock.
+CONST T_SHUTTLE = 27, T_TRANSPORT = 28
+CONST NTYPE = 28                   ' highest ship type number
 
 ' ============================================================ globals
 ' Player.  pRoll and pPitch are the original's JSTX and JSTY: 1..255
@@ -109,7 +113,7 @@ DIM INTEGER tBp(NTYPE)             ' ship type 1..NTYPE -> blueprint index
 
 ' Scratch mesh buffers, big enough for the largest blueprint (Missile:
 ' 33 vertices, 25 polygons, 80 face-vertex entries).
-DIM FLOAT mV(2, 39), mNrm(2, 15)
+DIM FLOAT mV(2, 47), mNrm(2, 15)
 DIM INTEGER mFc(31), mHost(31), mF(159), mEc(31), mFl(31)
 DIM INTEGER col(7)
 ' The 6502 Second Processor version's two colour tables, shpcol and scacol,
@@ -244,6 +248,14 @@ DIM INTEGER solidMode, showDot, shotNo
 ' The station is the one mesh given faces as well as edges, so that it
 ' blots out the planet behind it instead of showing its lines through.
 CONST BP_CORIOLIS = 6, C_FILL = 7, STNSOLID = 1
+' The other station.  A system of technology level 10 or above has a Dodo
+' instead of a Coriolis, and the original arranges it by swapping the
+' blueprint the space station ship type points at - so this is a blueprint
+' number and not a ship type, and nothing outside StationBlueprint names it.
+CONST BP_DODO = 27
+' Set while the ship hangar is on the screen, when everything in it is given
+' faces so that the floor and the back wall stop at the hull.
+DIM INTEGER fillBlack
 DIM FLOAT tx, ty, tz
 
 ' ------------------------ constants belonging to the other modules
@@ -365,12 +377,24 @@ CONST DEMOPLAY = 1                 ' 1 lets an idle title screen start the demo
 CONST TITLEPIC = "A:/title.jpg"    ' drawn by elite_tools/titlescreen.py
 CONST TITLEWAIT = 20000            ' idle this long on the title and the demo runs
 CONST DEMOLOOP = 1                 ' and the demo starts over when it ends
+CONST HANGWAIT = 900             ' the hangar, 44/50 of a second as the BBC
+CONST HANGDEMO = 4000            ' and longer while the demo is showing it off
 CONST DEMOREAD = 3000              ' how long an information screen is held
 CONST DEMOHELP = 9000              ' and how long the controls page is shown
 DIM INTEGER demoMode, demoStop, demoStep, demoLeg, demoTick, demoTgt, demoTakeover
 ' Set while the equipment shop is asking which laser mount, so the demo's F1
 ' answer is not mistaken for a launch.
 DIM INTEGER demoAsk
-DIM INTEGER dkKey(127), dkWait(127), dkCount
+' How long the next information screen opened from the cockpit is held.  The
+' system data screen carries a paragraph of description now, so the demo gives
+' that one longer than the rest.
+DIM INTEGER demoScrn
+' Leg three mines a rock.  demoMined is what was in the hold before it
+' started, so the demo can tell when it has what it came for; demoPhase is
+' nought while there is still rock to break and one on the way home; demoRock
+' and demoScoop are the ticks the last rock was put up and the run at the
+' splinters began.
+DIM INTEGER demoMined, demoPhase, demoRock, demoScoop
+DIM INTEGER dkKey(191), dkWait(191), dkCount
 DIM demoCap$ LENGTH 40
 

@@ -17,6 +17,7 @@ SUB LoadStats
   tBp(T_COBRA1) = 16 : tBp(T_WORM) = 17 : tBp(T_ASP) = 18
   tBp(T_FERDELANCE) = 19 : tBp(T_BOA) = 20 : tBp(T_ANACONDA) = 21
   tBp(T_BOULDER) = 22 : tBp(T_SPLINTER) = 23 : tBp(T_HERMIT) = 24
+  tBp(T_SHUTTLE) = 25 : tBp(T_TRANSPORT) = 26
 END SUB
 
 ' Load blueprint b into the scratch mesh buffers and fill in its stats.
@@ -53,6 +54,9 @@ SUB LoadMesh(b AS INTEGER)
     CASE 22 : RESTORE dat_boulder
     CASE 23 : RESTORE dat_splinter
     CASE 24 : RESTORE dat_rock_hermit
+    CASE 25 : RESTORE dat_shuttle
+    CASE 26 : RESTORE dat_transporter
+    CASE 27 : RESTORE dat_dodo
   END SELECT
   READ bName$(b), bNv(b), bNf(b), bNfv(b), bNf0(b), bNv0(b)
   READ bCan(b), bArea(b), bBty(b), bVis(b), bEne(b), bSpd(b)
@@ -67,7 +71,9 @@ SUB LoadMesh(b AS INTEGER)
   ' else only under the solid renderer.
   FOR j = 0 TO bNf(b) - 1
     mEc(j) = 0
-    IF b = BP_CORIOLIS THEN
+    ' The hangar wants its ships filled as well, so the floor and the back
+    ' wall stop at the hull instead of showing through it.
+    IF b = BP_CORIOLIS OR b = BP_DODO OR fillBlack THEN
       mFl(j) = C_FILL
     ELSE
       mFl(j) = 1 + (mHost(j) MOD 6)
@@ -200,8 +206,9 @@ SUB GetObject(n AS INTEGER)
       e = shpCol(sTyp(n))
       FOR j = 0 TO bNf(b) - 1 : mEc(j) = e : NEXT j
       faces = solidMode
+      IF fillBlack THEN faces = 1
       IF STNSOLID THEN
-        IF b = BP_CORIOLIS THEN faces = 1
+        IF b = BP_CORIOLIS OR b = BP_DODO THEN faces = 1
       ENDIF
       IF faces THEN
         Draw3D CREATE o, bNv(b), bNf(b), 1, mV(), mFc(), mF(), col(), mEc(), mFl()

@@ -19,6 +19,7 @@ SUB ArriveInSystem
   LOCAL INTEGER n, pz, sz, sx, ptype
   ClearSlots
   SysData
+  StationBlueprint
   ' Arriving somewhere new halves what is on our record: nobody this far
   ' away has heard the details, and the original is as forgiving as that.
   legal = legal \ 2
@@ -51,6 +52,7 @@ SUB LaunchState
   LOCAL INTEGER n, ptype
   ClearSlots
   SysData
+  StationBlueprint
   ptype = T_PLANET
   IF (sysTech AND 2) <> 0 THEN ptype = T_CRATER
   MATH Q_EULER RAD(35), RAD(40), 0, qA() : qA(4) = 1
@@ -132,6 +134,26 @@ SUB Witchspace
 END SUB
 
 ' The station appears once we are close enough to where it orbits, on the
+' Which station this system has.  The disc version gives anything of
+' technology level 10 or above a Dodo rather than a Coriolis, and it does it
+' by swapping the blueprint that the space station ship type points at, so
+' nothing else in the game knows the difference: the five docking tests read
+' the station's own orientation vectors rather than its shape, and work on
+' either without being told which one they are looking at.
+'
+' sysTech has to be this system's, which is why this is called where the
+' bubble is built rather than where the station appears - the chart screens
+' leave sysTech pointing at whatever the cursor last touched.  The level
+' here is the original's own raw one, which the data screen shows as one
+' more, so a Dodo is a screen that says technology level 11 or better.
+SUB StationBlueprint
+  IF sysTech >= 10 THEN
+    tBp(T_STATION) = BP_DODO
+  ELSE
+    tBp(T_STATION) = BP_CORIOLIS
+  ENDIF
+END SUB
+
 ' same schedule the original uses - one check every 32 frames.
 SUB StationCheck
   LOCAL INTEGER n, px, py, pz

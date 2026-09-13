@@ -85,6 +85,10 @@ FUNCTION SpawnBenign() AS INTEGER
   ENDIF
   n = NewFacing(t, x, y, z, 180)
   IF n >= 0 THEN
+    ' A rock hermit arrives with the original's own byte #32, which it sets
+    ' to the hermit's own type number and so happens to mean an E.C.M. and an
+    ' aggression of seven - with bit 7 clear, so no tactics until it is shot.
+    IF t = T_HERMIT THEN sAI(n) = T_HERMIT
     ' Tumbling: half of them roll and travel, half pitch on the spot, and
     ' half of each turn for ever rather than winding down.
     IF RND < 0.5 THEN

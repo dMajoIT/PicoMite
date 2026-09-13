@@ -206,6 +206,27 @@ SUB StationPolice
   ENDIF
 END SUB
 
+' What the station sends out when nobody has upset it: a Shuttle or a
+' Transporter, about one pass in 128, and never a second one while the first
+' is still about.  Neither carries a laser, so an aggression of 56 out of 63
+' only means it comes over to have a look - which is the original's own
+' arrangement, oddity and all.
+SUB StationTraffic
+  LOCAL INTEGER n, t
+  IF sTyp(SLOT_STAR) <> T_STATION THEN EXIT SUB
+  IF (sAI(SLOT_STAR) AND 128) <> 0 THEN EXIT SUB
+  IF (mcnt AND 31) <> 0 THEN EXIT SUB
+  IF CountType(T_TRANSPORT) > 0 OR CountType(T_SHUTTLE) > 0 THEN EXIT SUB
+  IF INT(RND * 256) < 253 THEN EXIT SUB
+  IF INT(RND * 2) = 0 THEN t = T_SHUTTLE ELSE t = T_TRANSPORT
+  MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+  n = NewShip(t, sX(SLOT_STAR), sY(SLOT_STAR), sZ(SLOT_STAR) - 400, qA())
+  IF n >= 0 THEN
+    sSpd(n) = bSpd(sBp(n))
+    sAI(n) = 241
+  ENDIF
+END SUB
+
 ' Attacking the station turns it, and everything it can call on, against
 ' you.  Nothing can shoot the station down, so this is the only
 ' consequence it has.

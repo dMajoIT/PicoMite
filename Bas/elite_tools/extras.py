@@ -10,10 +10,7 @@ polygon builder do all of the work; this picks the ones we want out of the
 
 Left out on purpose, and why:
 
-  Shuttle, Transporter   station traffic - they are spawned by the station,
-                         which is a separate piece of behaviour
   Constrictor            the target of mission 1, which we do not have
-  Dodo                   the second space station, likewise
   Elite logo             not a ship
   Moray                  famously unreachable: the 6502SP picks a lone bounty
                          hunter from types 24 to 27 and the Moray is 28, so no
@@ -43,10 +40,17 @@ EXTRAS = [
     ("BOULDER", "Boulder"),
     ("SPLINTER", "Splinter"),
     ("ROCK_HERMIT", "Rock hermit"),
+    ("SHUTTLE", "Shuttle"),
+    ("TRANSPORTER", "Transporter"),
+    ("DODO", "Dodo"),
 ]
 
 # Everything the scratch mesh buffers in 00_main.bas have to hold.
-LIMITS = {"vertices": 50, "polygons": 32, "normals": 16, "face vertices": 160}
+# These are the scratch mesh buffers in 00_main.bas - mV, mNrm, mFc and mF.
+# Keep them in step: the check below is the only thing standing between a
+# blueprint that is one vertex too big and an "Index out of bounds" on the
+# board, halfway through a DATA statement.
+LIMITS = {"vertices": 48, "polygons": 32, "normals": 16, "face vertices": 160}
 
 
 def emit(sh, disp):

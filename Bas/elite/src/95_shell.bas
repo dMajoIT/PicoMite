@@ -103,6 +103,7 @@ SUB RunFlight
       CabinTemp
       StationCheck
       StationPolice
+      StationTraffic
       SpawnTraffic
       mcnt = (mcnt + 1) AND 255
     ENDIF
@@ -115,6 +116,10 @@ SUB RunFlight
     SoundService
   LOOP UNTIL dead OR docked
   tFlight = tFlight + TIMER - t0
+  ' Inside at last.  The hangar goes here rather than in DoDock because one
+  ' more frame of the space view is drawn after docked goes up, and it would
+  ' paint straight over it.
+  IF docked THEN HangarScreen
 END SUB
 
 ' Stop the world.  The frame that is already on the screen stays there, so
@@ -249,6 +254,9 @@ FUNCTION AskText$(p$, most AS INTEGER)
   t$ = ""
   DO
     DrawDocked
+    ' The prompt sits where the footer does, so the footer is painted out
+    ' first rather than typed over.
+    BOX 0, SCRH - 12, SCRW, 12, 0, cBlack, cBlack
     TEXT VCX, SCRH - 9, p$ + t$ + "_", "CT", 7, 1, cYellow
     FRAMEBUFFER COPY F, N
     k = DockKey()
