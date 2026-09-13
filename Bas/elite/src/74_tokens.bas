@@ -24,14 +24,41 @@
 ' =====================================================================
 
 SUB LoadTokens
-  LOCAL INTEGER i
+  LOCAL INTEGER i, j, k
   RESTORE dat_tokens
   FOR i = 0 TO 255 : READ tk$(i) : NEXT i
   RESTORE dat_digrams
   FOR i = 0 TO 31 : READ dg$(i) : NEXT i
   RESTORE dat_rndgroups
   FOR i = 0 TO 37 : READ rgBase(i) : NEXT i
+  ' The four that would not fit in one string, in parts.
+  RESTORE dat_longtok
+  k = 0
+  FOR i = 0 TO NLONG - 1
+    READ ltNo(i), ltCnt(i)
+    ltFirst(i) = k
+    FOR j = 1 TO ltCnt(i)
+      READ ltPart$(k)
+      k = k + 1
+    NEXT j
+  NEXT i
+  RESTORE dat_stdtok
+  FOR i = 0 TO NSTD - 1 : READ stdNo(i), stdTx$(i) : NEXT i
 END SUB
+
+' One part of a token.  Every token is one part except the four briefings,
+' which are held in the long table and walked part after part; asking for a
+' part past the end returns nothing, which is how the expander knows to stop.
+FUNCTION TokPart$(tok AS INTEGER, part AS INTEGER)
+  LOCAL INTEGER i
+  FOR i = 0 TO NLONG - 1
+    IF ltNo(i) = tok THEN
+      IF part < ltCnt(i) THEN TokPart$ = ltPart$(ltFirst(i) + part) ELSE TokPart$ = ""
+      EXIT FUNCTION
+    ENDIF
+  NEXT i
+  IF part = 0 THEN TokPart$ = tk$(tok) ELSE TokPart$ = ""
+END FUNCTION
 
 ' The original's random number generator: a four byte state, a feeder
 ' sequence and a main one, and the byte it returns is the second.  Seeded
@@ -76,19 +103,37 @@ SUB PutCh(c$)
   ch$ = c$
   ' The original's character set has no apostrophe and uses a backtick for one.
   IF ch$ = CHR$(96) THEN ch$ = CHR$(39)
+  ' The original's own rule, out of DTS.  Anything below "A" - a space, a
+  ' comma, a full stop - goes out untouched and never affects the case; a
+  ' letter is lowered unless it is the first of a word and we are in sentence
+  ' case, and the single cap only bites at the start of a word or in lower
+  ' case.  This is what makes {sentence case} read as Sentence Case rather
+  ' than as one long lower case sentence.
+  IF ch$ >= "A" AND ch$ <= "Z" THEN
+    IF dtCase = DT_LOWER THEN
+      ch$ = LCASE$(ch$)
+      IF dtCapNext THEN ch$ = UCASE$(ch$)
+    ELSEIF dtInWord THEN
+      IF dtCase = DT_SENT THEN ch$ = LCASE$(ch$)
+    ELSE
+      IF dtCapNext THEN ch$ = UCASE$(ch$)
+    ENDIF
+    dtCapNext = 0
+    dtInWord = 1
+  ELSEIF ch$ = " " THEN
+    dtInWord = 0
+  ENDIF
+  ' A page holds each word back until it is placed, so a run of spaces there
+  ' costs nothing and the test below would be looking at the wrong thing: it
+  ' reads descBuf$, which a page never writes to, so every space in a
+  ' briefing looked like the first one and was dropped.
+  IF dtSink THEN BriefPut ch$ : EXIT SUB
   ' Two spaces in a row happen where one token ends with one and the next
   ' begins with one.  The original is in justified mode here and absorbs it
   ' while spreading the line; we are not, so drop it.
   IF ch$ = " " THEN
     IF LEN(descBuf$) = 0 THEN EXIT SUB
     IF RIGHT$(descBuf$, 1) = " " THEN EXIT SUB
-  ENDIF
-  IF ch$ >= "A" AND ch$ <= "Z" THEN
-    IF dtCapNext THEN
-      dtCapNext = 0
-    ELSEIF dtLower THEN
-      ch$ = LCASE$(ch$)
-    ENDIF
   ENDIF
   IF LEN(descBuf$) < 250 THEN descBuf$ = descBuf$ + ch$
 END SUB
@@ -97,6 +142,12 @@ END SUB
 ' print one, which comes to the same thing: a capital and then small
 ' letters, whatever case the rest of the sentence is being set in.
 SUB PutName(s$)
+  LOCAL INTEGER i
+  IF dtSink THEN
+    FOR i = 1 TO LEN(s$) : BriefPut MID$(s$, i, 1) : NEXT i
+    dtCapNext = 0
+    EXIT SUB
+  ENDIF
   IF LEN(descBuf$) + LEN(s$) < 250 THEN descBuf$ = descBuf$ + s$
   dtCapNext = 0
 END SUB
@@ -139,18 +190,42 @@ SUB PutAlien
   NEXT i
 END SUB
 
-SUB DoControl(n AS INTEGER)
+' A control code.  Most of them set a flag or put something in the text, but
+' two of them - the mission captain's name and the location hint - are really
+' another token, and those are returned for the expander to walk, because it
+' is the expander that owns the stack.  Anything else returns -1.
+'
+' The codes are the original's own JMTB table.  The ones that lay text out on
+' a page only mean anything while a briefing is being set; a description is
+' one sentence and takes none of them.
+FUNCTION DoControl(n AS INTEGER) AS INTEGER
+  DoControl = -1
   SELECT CASE n
-    CASE 2  : dtLower = 1              ' sentence case
+    CASE 1  : dtCase = DT_CAPS         ' all caps
+    CASE 2  : dtCase = DT_SENT         ' sentence case
     CASE 3  : PutName NameCap$()       ' the system's name
-    CASE 12 : PutCh " "                 ' a carriage return, which we wrap
-    CASE 13 : dtLower = 1              ' lower case
+    CASE 4  : PutName CMDRNAME$        ' the commander's name
+    CASE 5  : dtStd = 0                ' back to the extended tokens
+    CASE 6  : dtStd = 1 : dtCase = DT_SENT   ' the standard ones, sentence case
+    CASE 8  : IF dtSink THEN BriefTab 6
+    CASE 9  : IF dtSink THEN BriefPage
+    CASE 12 : IF dtSink THEN BriefBreak ELSE PutCh " "
+    CASE 13 : dtCase = DT_LOWER        ' lower case
     CASE 17 : PutName NameAdj$()       ' the name as an adjective
     CASE 18 : PutAlien                 ' a made up word
     CASE 19 : dtCapNext = 1            ' capitalise the next letter only
+    CASE 22 : IF dtSink THEN BriefShip
+    CASE 23 : IF dtSink THEN BriefRow 10
+              dtCase = DT_LOWER
+    CASE 24 : IF dtSink THEN BriefWait
+    CASE 25 : IF dtSink THEN BriefIncoming
+    CASE 27 : DoControl = 217 + gGal - 1   ' the mission captain's name
+    CASE 28 : DoControl = 220 + gGal - 1   ' where the Constrictor went
+    CASE 29 : IF dtSink THEN BriefTab 6
+              dtCase = DT_LOWER
     CASE ELSE                          ' 14 justify, 15 left align: no matter here
   END SELECT
-END SUB
+END FUNCTION
 
 ' Walk a token and everything it names.  This is done with a stack of its
 ' own rather than by recursion, and the reason is MMBasic's: a DO loop is
@@ -160,19 +235,27 @@ END SUB
 ' points at the real trouble.  One loop, one explicit stack, no limit worth
 ' worrying about.
 SUB ExpandTok(start AS INTEGER)
-  LOCAL INTEGER sp, v, j, isRnd, p
+  LOCAL INTEGER sp, v, j, isRnd, p, k
   LOCAL t$ LENGTH 160
   LOCAL c$ LENGTH 1
   LOCAL m$ LENGTH 8
   sp = 0
   exTok(0) = start
   exPos(0) = 1
+  exPart(0) = 0
   DO
-    t$ = tk$(exTok(sp))
+    t$ = TokPart$(exTok(sp), exPart(sp))
     p = exPos(sp)
     IF p > LEN(t$) THEN
-      sp = sp - 1                        ' this token is finished
-      IF sp < 0 THEN EXIT DO
+      ' A briefing is held in parts; step to the next one if there is one,
+      ' and only then is the token finished.
+      IF TokPart$(exTok(sp), exPart(sp) + 1) <> "" THEN
+        exPart(sp) = exPart(sp) + 1
+        exPos(sp) = 1
+      ELSE
+        sp = sp - 1
+        IF sp < 0 THEN EXIT DO
+      ENDIF
     ELSE
       c$ = MID$(t$, p, 1)
       IF c$ = "[" THEN
@@ -186,15 +269,30 @@ SUB ExpandTok(start AS INTEGER)
         v = VAL(m$)
         exPos(sp) = j + 1                ' step the parent past the marker
         IF isRnd THEN v = rgBase(v) + RndPick()
-        IF sp < EXDEPTH AND v >= 0 AND v <= 255 THEN
+        IF dtStd THEN
+          ' Inside a {6}..{5} region the number names a standard token, which
+          ' is a different table: the few the briefings borrow are carried as
+          ' plain text and go straight in.
+          FOR k = 0 TO NSTD - 1
+            IF stdNo(k) = v THEN PutStr stdTx$(k)
+          NEXT k
+        ELSEIF sp < EXDEPTH AND v >= 0 AND v <= 255 THEN
           sp = sp + 1
           exTok(sp) = v
           exPos(sp) = 1
+          exPart(sp) = 0
         ENDIF
       ELSEIF c$ = "{" THEN
         j = INSTR(p, t$, "}")
-        DoControl VAL(MID$(t$, p + 1, j - p - 1))
+        v = DoControl(VAL(MID$(t$, p + 1, j - p - 1)))
         exPos(sp) = j + 1
+        ' Two of the control codes are really a token of their own.
+        IF v >= 0 AND sp < EXDEPTH THEN
+          sp = sp + 1
+          exTok(sp) = v
+          exPos(sp) = 1
+          exPart(sp) = 0
+        ENDIF
       ELSE
         PutCh c$
         exPos(sp) = p + 1
@@ -210,8 +308,11 @@ FUNCTION SysDesc$()
   rndS(2) = gs2 AND 255
   rndS(3) = (gs2 >> 8) AND 255
   descBuf$ = ""
-  dtLower = 0
+  dtCase = DT_CAPS
   dtCapNext = 0
+  dtInWord = 0
+  dtSink = 0
+  dtStd = 0
   ExpandTok 5
   SysDesc$ = descBuf$
 END FUNCTION

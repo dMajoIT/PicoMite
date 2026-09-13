@@ -43,7 +43,7 @@ CONST DASHY = 176                  ' first dashboard row
 CONST VPLANE = 256                 ' focal length in pixels, as the BBC
 CONST DEMOFRAMES = 0               ' >0 runs a scripted demo and exits; 0 plays
 CONST DEMOSCENE = 1                ' 1 flight and combat, 2 docking, 3 the docked
-                                   ' screens, 4 the ship hangar
+                                   ' screens, 4 the ship hangar, 5 the briefings
 CONST PANY = VCY - (SCRH \ 2 - 1)  ' shifts Draw3D's centre up to VCY
 
 ' ------------------------------------------------------- universe size
@@ -221,18 +221,48 @@ CONST LAS_MINING = 50                  ' Mlas in the original
 CONST LAS_MILITARY = 151               ' INT(128.5 + 1.5 * 15), as the original
 ' The disc version's extended token table, its two-letter digrams and the
 ' base token of each random group - all generated into data/tokens.bas.
-' 160 is the longest token that will fit; the four that will not are mission
-' briefings, and tokens.py says so when it drops them.
 DIM tk$(255) LENGTH 160
 DIM dg$(31) LENGTH 2
 DIM INTEGER rgBase(37)
 DIM INTEGER rndS(3)                ' the original's four byte random state
+' Four tokens are longer than a string can hold, and all four are mission
+' briefings.  Each is generated in parts that join back up into the whole
+' token, and the expander walks them one after another.  tokens.py prints the
+' two figures these have to cover every time it runs.
+CONST NLONG = 4, NLPART = 16
+DIM INTEGER ltNo(NLONG-1), ltFirst(NLONG-1), ltCnt(NLONG-1)
+DIM ltPart$(NLPART-1) LENGTH 160
+' A briefing borrows a few phrases from the standard token table, which is a
+' different table with a different encoding.  Carrying all 147 of them for
+' three phrases is not worth it, so tokens.py expands those three.
+CONST NSTD = 3
+DIM INTEGER stdNo(NSTD-1)
+DIM stdTx$(NSTD-1) LENGTH 20
+' Control code 4 prints the commander's name, which the status screen has
+' always had hard coded.
+CONST CMDRNAME$ = "JAMESON"
+' Setting a briefing: the line being built, the word not yet placed on it,
+' the row it goes on and the column it starts at.
+CONST BRWIDE = 36, BRLEFT = 20, BRTOP = 24, BRROW = 9
+DIM brLine$ LENGTH 60
+DIM brWord$ LENGTH 32
+DIM INTEGER brY, brCol, brShip
 DIM descBuf$ LENGTH 250
-DIM INTEGER dtLower, dtCapNext
+' How the token table's letters are cased on the way out.  The original keeps
+' three flags and this is the same three: DTW1/DTW6 become dtCase, DTW2 becomes
+' dtInWord and DTW8 becomes dtCapNext.
+'   dtCase 0  all caps - print the letters as the table stores them
+'          1  sentence case - lower, except the first letter of each word
+'          2  lower case - lower, with no exceptions
+CONST DT_CAPS = 0, DT_SENT = 1, DT_LOWER = 2
+DIM INTEGER dtCase, dtInWord, dtCapNext
+' Where expanded text goes: 0 builds up descBuf$ for the data screen, 1 sets
+' it straight onto a briefing page, which is far longer than a string.
+DIM INTEGER dtSink, dtStd
 ' The token expander's own stack.  Eleven deep is what a description
 ' actually reaches; sixteen leaves room and costs nothing.
 CONST EXDEPTH = 15
-DIM INTEGER exTok(EXDEPTH), exPos(EXDEPTH)
+DIM INTEGER exTok(EXDEPTH), exPos(EXDEPTH), exPart(EXDEPTH)
 
 DIM eqName$(NEQUIP-1) LENGTH 24    ' "Extra Military Lasers" is 21 of them
 DIM INTEGER eqPrice(NEQUIP-1), eqTech(NEQUIP-1), eqOwned(NEQUIP-1)

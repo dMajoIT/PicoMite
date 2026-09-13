@@ -28,7 +28,20 @@ RunGame
 ENDIF
 LOOP
 ELSE
-IF DEMOSCENE = 4 THEN
+IF DEMOSCENE = 5 THEN
+NewCommander
+MissionBrief 10, 0
+MissionBrief 11, 0
+MissionBrief 222, 0
+MissionBrief 223, 0
+FRAMEBUFFER CLOSE
+MODE 1
+PRINT "briefings done,"; shotNo; " pages"
+GotoSystem gGal, homeSys
+SysData
+PRINT SysName$(); ": "; SysDesc$()
+END
+ELSEIF DEMOSCENE = 4 THEN
 FOR frames = 1 TO 8
 HangarScreen
 SaveShot frames
@@ -1601,14 +1614,36 @@ IF n >= 0 THEN sRol(n) = 255 : sAI(n) = 1
 ENDIF
 END SUB
 SUB LoadTokens
-LOCAL INTEGER i
+LOCAL INTEGER i, j, k
 RESTORE dat_tokens
 FOR i = 0 TO 255 : READ tk$(i) : NEXT i
 RESTORE dat_digrams
 FOR i = 0 TO 31 : READ dg$(i) : NEXT i
 RESTORE dat_rndgroups
 FOR i = 0 TO 37 : READ rgBase(i) : NEXT i
+RESTORE dat_longtok
+k = 0
+FOR i = 0 TO NLONG - 1
+READ ltNo(i), ltCnt(i)
+ltFirst(i) = k
+FOR j = 1 TO ltCnt(i)
+READ ltPart$(k)
+k = k + 1
+NEXT j
+NEXT i
+RESTORE dat_stdtok
+FOR i = 0 TO NSTD - 1 : READ stdNo(i), stdTx$(i) : NEXT i
 END SUB
+FUNCTION TokPart$(tok AS INTEGER, part AS INTEGER)
+LOCAL INTEGER i
+FOR i = 0 TO NLONG - 1
+IF ltNo(i) = tok THEN
+IF part < ltCnt(i) THEN TokPart$ = ltPart$(ltFirst(i) + part) ELSE TokPart$ = ""
+EXIT FUNCTION
+ENDIF
+NEXT i
+IF part = 0 THEN TokPart$ = tk$(tok) ELSE TokPart$ = ""
+END FUNCTION
 FUNCTION Dornd() AS INTEGER
 LOCAL INTEGER a, x, c
 a = rndS(0) * 2
@@ -1640,20 +1675,34 @@ SUB PutCh(c$)
 LOCAL ch$ LENGTH 1
 ch$ = c$
 IF ch$ = CHR$(96) THEN ch$ = CHR$(39)
+IF ch$ >= "A" AND ch$ <= "Z" THEN
+IF dtCase = DT_LOWER THEN
+ch$ = LCASE$(ch$)
+IF dtCapNext THEN ch$ = UCASE$(ch$)
+ELSEIF dtInWord THEN
+IF dtCase = DT_SENT THEN ch$ = LCASE$(ch$)
+ELSE
+IF dtCapNext THEN ch$ = UCASE$(ch$)
+ENDIF
+dtCapNext = 0
+dtInWord = 1
+ELSEIF ch$ = " " THEN
+dtInWord = 0
+ENDIF
+IF dtSink THEN BriefPut ch$ : EXIT SUB
 IF ch$ = " " THEN
 IF LEN(descBuf$) = 0 THEN EXIT SUB
 IF RIGHT$(descBuf$, 1) = " " THEN EXIT SUB
 ENDIF
-IF ch$ >= "A" AND ch$ <= "Z" THEN
-IF dtCapNext THEN
-dtCapNext = 0
-ELSEIF dtLower THEN
-ch$ = LCASE$(ch$)
-ENDIF
-ENDIF
 IF LEN(descBuf$) < 250 THEN descBuf$ = descBuf$ + ch$
 END SUB
 SUB PutName(s$)
+LOCAL INTEGER i
+IF dtSink THEN
+FOR i = 1 TO LEN(s$) : BriefPut MID$(s$, i, 1) : NEXT i
+dtCapNext = 0
+EXIT SUB
+ENDIF
 IF LEN(descBuf$) + LEN(s$) < 250 THEN descBuf$ = descBuf$ + s$
 dtCapNext = 0
 END SUB
@@ -1685,32 +1734,54 @@ k = (Dornd() AND 62) \ 2
 PutStr dg$(k)
 NEXT i
 END SUB
-SUB DoControl(n AS INTEGER)
+FUNCTION DoControl(n AS INTEGER) AS INTEGER
+DoControl = -1
 SELECT CASE n
-CASE 2  : dtLower = 1
+CASE 1  : dtCase = DT_CAPS
+CASE 2  : dtCase = DT_SENT
 CASE 3  : PutName NameCap$()
-CASE 12 : PutCh " "                 ' a carriage return, which we wrap
-CASE 13 : dtLower = 1
+CASE 4  : PutName CMDRNAME$
+CASE 5  : dtStd = 0
+CASE 6  : dtStd = 1 : dtCase = DT_SENT
+CASE 8  : IF dtSink THEN BriefTab 6
+CASE 9  : IF dtSink THEN BriefPage
+CASE 12 : IF dtSink THEN BriefBreak ELSE PutCh " "
+CASE 13 : dtCase = DT_LOWER
 CASE 17 : PutName NameAdj$()
 CASE 18 : PutAlien
 CASE 19 : dtCapNext = 1
+CASE 22 : IF dtSink THEN BriefShip
+CASE 23 : IF dtSink THEN BriefRow 10
+dtCase = DT_LOWER
+CASE 24 : IF dtSink THEN BriefWait
+CASE 25 : IF dtSink THEN BriefIncoming
+CASE 27 : DoControl = 217 + gGal - 1
+CASE 28 : DoControl = 220 + gGal - 1
+CASE 29 : IF dtSink THEN BriefTab 6
+dtCase = DT_LOWER
 CASE ELSE
 END SELECT
-END SUB
+END FUNCTION
 SUB ExpandTok(start AS INTEGER)
-LOCAL INTEGER sp, v, j, isRnd, p
+LOCAL INTEGER sp, v, j, isRnd, p, k
 LOCAL t$ LENGTH 160
 LOCAL c$ LENGTH 1
 LOCAL m$ LENGTH 8
 sp = 0
 exTok(0) = start
 exPos(0) = 1
+exPart(0) = 0
 DO
-t$ = tk$(exTok(sp))
+t$ = TokPart$(exTok(sp), exPart(sp))
 p = exPos(sp)
 IF p > LEN(t$) THEN
+IF TokPart$(exTok(sp), exPart(sp) + 1) <> "" THEN
+exPart(sp) = exPart(sp) + 1
+exPos(sp) = 1
+ELSE
 sp = sp - 1
 IF sp < 0 THEN EXIT DO
+ENDIF
 ELSE
 c$ = MID$(t$, p, 1)
 IF c$ = "[" THEN
@@ -1724,15 +1795,26 @@ ENDIF
 v = VAL(m$)
 exPos(sp) = j + 1
 IF isRnd THEN v = rgBase(v) + RndPick()
-IF sp < EXDEPTH AND v >= 0 AND v <= 255 THEN
+IF dtStd THEN
+FOR k = 0 TO NSTD - 1
+IF stdNo(k) = v THEN PutStr stdTx$(k)
+NEXT k
+ELSEIF sp < EXDEPTH AND v >= 0 AND v <= 255 THEN
 sp = sp + 1
 exTok(sp) = v
 exPos(sp) = 1
+exPart(sp) = 0
 ENDIF
 ELSEIF c$ = "{" THEN
 j = INSTR(p, t$, "}")
-DoControl VAL(MID$(t$, p + 1, j - p - 1))
+v = DoControl(VAL(MID$(t$, p + 1, j - p - 1)))
 exPos(sp) = j + 1
+IF v >= 0 AND sp < EXDEPTH THEN
+sp = sp + 1
+exTok(sp) = v
+exPos(sp) = 1
+exPart(sp) = 0
+ENDIF
 ELSE
 PutCh c$
 exPos(sp) = p + 1
@@ -1746,8 +1828,11 @@ rndS(1) = (gs1 >> 8) AND 255
 rndS(2) = gs2 AND 255
 rndS(3) = (gs2 >> 8) AND 255
 descBuf$ = ""
-dtLower = 0
+dtCase = DT_CAPS
 dtCapNext = 0
+dtInWord = 0
+dtSink = 0
+dtStd = 0
 ExpandTok 5
 SysDesc$ = descBuf$
 END FUNCTION
@@ -2754,6 +2839,124 @@ NEXT q
 FOR x = 16 TO SCRW - 16 STEP 16
 LINE x, 1, x, horiz, 1, cRed
 NEXT x
+END SUB
+SUB BriefPage
+CLS
+brLine$ = ""
+brWord$ = ""
+brY = BRTOP
+brCol = 0
+IF brShip >= 0 THEN DrawShips
+FRAMEBUFFER COPY F, N
+END SUB
+SUB BriefRow(r AS INTEGER)
+BriefBreak
+brY = r * 8
+END SUB
+SUB BriefTab(c AS INTEGER)
+BriefBreak
+brCol = c
+END SUB
+SUB BriefPut(ch$)
+IF ch$ = " " THEN
+BriefWord
+ELSE
+IF LEN(brWord$) < 30 THEN brWord$ = brWord$ + ch$
+ENDIF
+END SUB
+SUB BriefWord
+IF brWord$ = "" THEN EXIT SUB
+IF brLine$ = "" THEN
+brLine$ = brWord$
+ELSEIF LEN(brLine$) + 1 + LEN(brWord$) > BRWIDE - brCol THEN
+BriefFlush
+brLine$ = brWord$
+ELSE
+brLine$ = brLine$ + " " + brWord$
+ENDIF
+brWord$ = ""
+END SUB
+SUB BriefBreak
+BriefWord
+BriefFlush
+END SUB
+SUB BriefFlush
+IF brLine$ = "" THEN EXIT SUB
+TEXT BRLEFT + brCol * 6, brY, brLine$, "LT", 7, 1, cWhite
+brY = brY + BRROW
+brLine$ = ""
+FRAMEBUFFER COPY F, N
+END SUB
+SUB BriefIncoming
+CLS
+TEXT VCX, 80, "INCOMING MESSAGE", "CT", 7, 1, cWhite
+FRAMEBUFFER COPY F, N
+HoldFor 2000
+BriefPage
+END SUB
+SUB BriefShip
+LOCAL INTEGER k
+BriefBreak
+IF brShip < 0 THEN BriefWait : EXIT SUB
+IF DEMOFRAMES > 0 THEN
+FOR k = 1 TO 40 : BriefSpin : NEXT k
+BriefShot
+EXIT SUB
+ENDIF
+DO
+BriefSpin
+k = INKEY$ <> ""
+LOOP UNTIL k
+END SUB
+SUB BriefSpin
+IF brShip < 0 THEN EXIT SUB
+sRol(brShip) = 127
+sPit(brShip) = 127
+MoveShips
+DrawShips
+FRAMEBUFFER COPY F, N
+END SUB
+SUB BriefWait
+IF DEMOFRAMES > 0 THEN BriefShot : EXIT SUB
+DO WHILE INKEY$ <> "" : LOOP
+DO WHILE INKEY$ = "" : LOOP
+END SUB
+SUB BriefShot
+shotNo = shotNo + 1
+SAVE IMAGE "A:/brief" + STR$(shotNo) + ".bmp"
+HoldFor 400
+END SUB
+SUB MissionBrief(tok AS INTEGER, t AS INTEGER)
+LOCAL INTEGER i
+ClearSlots
+brShip = -1
+dtSink = 1
+dtStd = 0
+dtCase = DT_CAPS
+dtCapNext = 0
+dtInWord = 0
+BriefIncoming
+IF t > 0 THEN
+MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+brShip = NewShip(t, 0, 80, 384, qA())
+IF brShip >= 0 THEN
+sSpd(brShip) = 0
+sAI(brShip) = 0
+FOR i = 1 TO 64
+BriefSpin
+NEXT i
+ENDIF
+ENDIF
+brY = BRTOP
+brCol = 0
+brLine$ = ""
+brWord$ = ""
+ExpandTok tok
+BriefBreak
+BriefWait
+dtSink = 0
+brShip = -1
+ClearSlots
 END SUB
 SUB EquipTable
 LOCAL INTEGER i

@@ -33,7 +33,24 @@ IF DEMOFRAMES = 0 THEN
 
 ELSE
 
-  IF DEMOSCENE = 4 THEN
+  IF DEMOSCENE = 5 THEN
+    ' The four mission briefings, which are the whole of the long end of the
+    ' token table and the only tokens that need the page layout.
+    NewCommander
+    MissionBrief 10, 0
+    MissionBrief 11, 0
+    MissionBrief 222, 0
+    MissionBrief 223, 0
+    FRAMEBUFFER CLOSE
+    MODE 1
+    PRINT "briefings done,"; shotNo; " pages"
+    ' The briefings and the system descriptions share one set of case rules,
+    ' so this fixture is also where a change to them shows up.
+    GotoSystem gGal, homeSys
+    SysData
+    PRINT SysName$(); ": "; SysDesc$()
+    END
+  ELSEIF DEMOSCENE = 4 THEN
     ' The hangar, eight times over, which is enough passes to see each of
     ' the four groups and a solo ship or two.
     FOR frames = 1 TO 8
