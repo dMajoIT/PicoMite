@@ -33,6 +33,7 @@ import io, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASM = os.path.join(HERE, "cache", "6502sp-source.asm")
 OUT = os.path.normpath(os.path.join(HERE, "..", "elite", "data", "tokens.bas"))
+TOKLEN = 160   # must match the LENGTH of tk$() in 00_main.bas
 BS = chr(92)
 
 
@@ -87,6 +88,22 @@ def groups(path):
     return out
 
 
+def digrams(path, n=32):
+    """The two-letter tokens control code 18 makes its alien words out of.
+
+    It reads from TKN2 + 2, which skips the newline pair at the start, and the
+    offset it picks is an even number 0 to 62 - so only the first 32 pairs can
+    ever come up, and the QQ16 table the source mentions is never reached."""
+    src = io.open(path, encoding="latin-1").read().splitlines()
+    i = next(k for k, l in enumerate(src) if l.strip() == ".TKN2")
+    out = []
+    for l in src[i + 1:i + 120]:
+        out += re.findall("EQUS " + chr(34) + "(..)" + chr(34), l)
+        if len(out) >= n:
+            break
+    return out[:n]
+
+
 def basic_quote(t):
     """MMBasic has no escape for a quote inside a string literal, so a token
     containing one is split and rejoined with CHR$(34)."""
@@ -113,8 +130,26 @@ def main():
            "'   " + tokens[5],
            "",
            "dat_tokens:"]
+    # An MMBasic string is at most 255 characters and a string array element is
+    # whatever LENGTH says, so the four longest tokens cannot be stored.  All
+    # four are mission briefings, for missions this port does not have, and
+    # nothing reachable from a system description comes near the limit - the
+    # longest of those is 30 characters.
+    dropped = []
     for i, t in enumerate(tokens):
+        if len(t) > TOKLEN:
+            dropped.append((i, len(t)))
+            t = ""
         out.append("DATA " + basic_quote(t))
+    if dropped:
+        print("  dropped (too long to hold in a string): " +
+              ", ".join("%d at %d chars" % d for d in dropped))
+    out.append("")
+    out.append("' The two-letter tokens control code 18 builds alien words from.")
+    out.append("dat_digrams:")
+    dg = digrams(ASM)
+    for k in range(0, len(dg), 16):
+        out.append("DATA " + ",".join(chr(34) + d + chr(34) for d in dg[k:k + 16]))
     out.append("")
     out.append("' MTIN: the base token each random group chooses its five from.")
     out.append("dat_rndgroups:")
@@ -124,6 +159,8 @@ def main():
     text = chr(10).join(out)
     open(OUT, "w", newline=chr(10), encoding="ascii").write(text)
     print("wrote %s, %d bytes" % (OUT, len(text)))
+    print("longest token kept: %d characters (tk$() needs LENGTH %d)"
+          % (max(len(t) for t in tokens if len(t) <= TOKLEN), TOKLEN))
 
 
 if __name__ == "__main__":
