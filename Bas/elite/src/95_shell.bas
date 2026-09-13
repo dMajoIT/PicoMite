@@ -186,10 +186,18 @@ SUB RunDocked
       CASE 152 : dscreen = SCR_MARKET : dbuy = 1 : dsel = 0
       CASE 153 : dscreen = SCR_STATUS
       CASE 154 : dscreen = SCR_INVENT
-      CASE 128 : DockUp
-      CASE 129 : DockDown
-      CASE 130 : DockLeft
-      CASE 131 : DockRight
+      CASE 128 : chartStep = 1 : DockUp
+      CASE 129 : chartStep = 1 : DockDown
+      CASE 130 : chartStep = 1 : DockLeft
+      CASE 131 : chartStep = 1 : DockRight
+      ' Shift with an arrow moves the chart cursor a long way at once, as
+      ' the disc version does.  The four codes are UPSEL, DOWNSEL, LEFTSEL
+      ' and RIGHTSEL - and the firmware only reported two of them until
+      ' this port went looking for the other two.
+      CASE 164 : chartStep = CHARTFAST : DockUp
+      CASE 161 : chartStep = CHARTFAST : DockDown
+      CASE 162 : chartStep = CHARTFAST : DockLeft
+      CASE 163 : chartStep = CHARTFAST : DockRight
       CASE 32                                  ' space: one of whatever it is
         DockAct
       CASE 13                                  ' return: ask how many
@@ -275,10 +283,10 @@ SUB DrawDocked
       DockFooter "up/down choose   SPACE buy   F fill the tank"
     CASE SCR_LONG
       ChartLong
-      DockFooter "arrows move the cursor   F7 data   F1 launch"
+      DockFooter "arrows move  shift+arrow faster  F find  F7 data"
     CASE SCR_SHORT
       ChartShort
-      DockFooter "arrows move the cursor   F7 data   F1 launch"
+      DockFooter "arrows move  shift+arrow faster  F find  F7 data"
     CASE SCR_DATA
       SysDataScreen
       DockFooter "F5 galactic   F6 short range   F7 data   F1 launch"
@@ -302,7 +310,7 @@ SUB DockUp
     dsel = dsel - 1
     IF dsel < 0 THEN dsel = 0
   ELSE
-    curY = curY - 4 : ChartMoved
+    curY = curY - 4 * chartStep : ChartMoved
   ENDIF
 END SUB
 
@@ -313,7 +321,7 @@ SUB DockDown
   ELSEIF dscreen = SCR_EQUIP THEN
     nrows = ShopCount() - 1
   ELSE
-    curY = curY + 4 : ChartMoved
+    curY = curY + 4 * chartStep : ChartMoved
     EXIT SUB
   ENDIF
   dsel = dsel + 1
@@ -323,13 +331,13 @@ END SUB
 
 SUB DockLeft
   IF dscreen <> SCR_MARKET AND dscreen <> SCR_EQUIP THEN
-    curX = curX - 2 : ChartMoved
+    curX = curX - 2 * chartStep : ChartMoved
   ENDIF
 END SUB
 
 SUB DockRight
   IF dscreen <> SCR_MARKET AND dscreen <> SCR_EQUIP THEN
-    curX = curX + 2 : ChartMoved
+    curX = curX + 2 * chartStep : ChartMoved
   ENDIF
 END SUB
 

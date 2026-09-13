@@ -353,6 +353,9 @@ CONST SCR_STATUS = 0, SCR_INVENT = 1, SCR_MARKET = 2, SCR_EQUIP = 3
 CONST SCR_LONG = 4, SCR_SHORT = 5, SCR_DATA = 6
 CONST CMDRFILE = "A:/cmdr.txt"
 DIM INTEGER quitGame, dscreen, dsel, dbuy, titleKey
+' How far one press moves the chart cursor: one notch, or eight with shift.
+CONST CHARTFAST = 8
+DIM INTEGER chartStep
 
 ' ------------------------------------------------------ the attract demo
 ' A game that plays itself, for showing the thing off.  It stands in for

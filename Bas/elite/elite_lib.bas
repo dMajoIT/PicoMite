@@ -172,6 +172,8 @@ CONST SCR_STATUS = 0, SCR_INVENT = 1, SCR_MARKET = 2, SCR_EQUIP = 3
 CONST SCR_LONG = 4, SCR_SHORT = 5, SCR_DATA = 6
 CONST CMDRFILE = "A:/cmdr.txt"
 DIM INTEGER quitGame, dscreen, dsel, dbuy, titleKey
+CONST CHARTFAST = 8
+DIM INTEGER chartStep
 CONST DEMOPLAY = 1
 CONST TITLEPIC = "A:/title.jpg"    ' drawn by elite_tools/titlescreen.py
 CONST TITLEWAIT = 20000

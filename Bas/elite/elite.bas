@@ -3170,10 +3170,14 @@ CASE 151 : dscreen = SCR_DATA
 CASE 152 : dscreen = SCR_MARKET : dbuy = 1 : dsel = 0
 CASE 153 : dscreen = SCR_STATUS
 CASE 154 : dscreen = SCR_INVENT
-CASE 128 : DockUp
-CASE 129 : DockDown
-CASE 130 : DockLeft
-CASE 131 : DockRight
+CASE 128 : chartStep = 1 : DockUp
+CASE 129 : chartStep = 1 : DockDown
+CASE 130 : chartStep = 1 : DockLeft
+CASE 131 : chartStep = 1 : DockRight
+CASE 164 : chartStep = CHARTFAST : DockUp
+CASE 161 : chartStep = CHARTFAST : DockDown
+CASE 162 : chartStep = CHARTFAST : DockLeft
+CASE 163 : chartStep = CHARTFAST : DockRight
 CASE 32
 DockAct
 CASE 13
@@ -3249,10 +3253,10 @@ EquipScreen dsel
 DockFooter "up/down choose   SPACE buy   F fill the tank"
 CASE SCR_LONG
 ChartLong
-DockFooter "arrows move the cursor   F7 data   F1 launch"
+DockFooter "arrows move  shift+arrow faster  F find  F7 data"
 CASE SCR_SHORT
 ChartShort
-DockFooter "arrows move the cursor   F7 data   F1 launch"
+DockFooter "arrows move  shift+arrow faster  F find  F7 data"
 CASE SCR_DATA
 SysDataScreen
 DockFooter "F5 galactic   F6 short range   F7 data   F1 launch"
@@ -3270,7 +3274,7 @@ IF dscreen = SCR_MARKET OR dscreen = SCR_EQUIP THEN
 dsel = dsel - 1
 IF dsel < 0 THEN dsel = 0
 ELSE
-curY = curY - 4 : ChartMoved
+curY = curY - 4 * chartStep : ChartMoved
 ENDIF
 END SUB
 SUB DockDown
@@ -3280,7 +3284,7 @@ nrows = NGOODS - 1
 ELSEIF dscreen = SCR_EQUIP THEN
 nrows = ShopCount() - 1
 ELSE
-curY = curY + 4 : ChartMoved
+curY = curY + 4 * chartStep : ChartMoved
 EXIT SUB
 ENDIF
 dsel = dsel + 1
@@ -3289,12 +3293,12 @@ IF dsel < 0 THEN dsel = 0
 END SUB
 SUB DockLeft
 IF dscreen <> SCR_MARKET AND dscreen <> SCR_EQUIP THEN
-curX = curX - 2 : ChartMoved
+curX = curX - 2 * chartStep : ChartMoved
 ENDIF
 END SUB
 SUB DockRight
 IF dscreen <> SCR_MARKET AND dscreen <> SCR_EQUIP THEN
-curX = curX + 2 : ChartMoved
+curX = curX + 2 * chartStep : ChartMoved
 ENDIF
 END SUB
 SUB ChartMoved

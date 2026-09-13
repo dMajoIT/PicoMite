@@ -81,7 +81,8 @@ far end. Press any key during the demo and you get a game of your own.
 | `P` | pause; `D` while paused writes the screen to the card |
 | `F1` `F2` `F3` `F4` | fore, aft, left, right views |
 
-On either chart, `F` asks for a system name and moves the cursor to it.
+On either chart, `F` asks for a system name and moves the cursor to it, and
+holding `Shift` with an arrow moves the cursor eight notches instead of one.
 
 `F5` to `F10` reach the same six screens whether you are flying or docked:
 galactic chart, short range chart, system data, market prices, status,
@@ -243,9 +244,6 @@ From the **disc version** (and the Master, which is built on it):
 - A real docking computer that flies you in, which is where our flown approach
   comes from.
 - The two missions: the Constrictor, and the Thargoid documents run.
-- Moving the chart cursor a long way with SHIFT. The USB keyboard map reports
-  a distinct code for shift with the right and down arrows but not with left
-  and up, so this waits on a firmware decision rather than being half done.
 - The ship hangar drawn when you dock, with your ship and anything else in it.
 - Kill credit for cargo canisters, asteroids, escape pods and Thargons, not
   just for ships.
@@ -270,6 +268,11 @@ Taken from it so far:
   generator is seeded from the system's two seeds before it starts choosing.
   Lave really is most famous for its vast rain forests and the Lavian tree
   grub.
+- **Moving the chart cursor a long way with SHIFT**, eight notches at a time.
+  This one needed the firmware: it reported shift with the down and right
+  arrows as DOWNSEL and RIGHTSEL but gave shift with left and up no code of
+  their own, so only half the feature was reachable. They are now LEFTSEL
+  (&HA2) and UPSEL (&HA4).
 - **Finding a system by typing its name.** `F` on either chart asks for a
   name and moves the cursor to it. The cassette game has no such thing - you
   hunt for the dot yourself, and with 256 systems to a galaxy that is a chore.

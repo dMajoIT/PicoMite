@@ -4108,6 +4108,8 @@ void MIPS16 CheckPicoCalcKeyboard(int noerror, int read)
     //   Note: (SHIFT_UP_ARROW) sends Page Up (PUP) on PicoCalc
     // RIGHTSEL (SHIFT_RIGHT_ARROW) sends nothing on PicoCalc
     //   Note: (SHIFT_LEFT_ARROW) sends nothing on PicoCalc
+    // A USB keyboard now reports all four as UPSEL/DOWNSEL/LEFTSEL/RIGHTSEL
+    // (0xA4/0xA1/0xA2/0xA3); the PicoCalc keyboard still cannot send them.
     // Note: PicoCalc cannot send shifted Fn keys!
     // --- Appendix H ends
     case 0xb1:
