@@ -94,7 +94,7 @@ END SUB
 ' ship's centre with the same growth curve, which reads the same at these
 ' sizes and costs a fraction of the vertex work.
 SUB Explosions
-  LOCAL INTEGER n, i, px, py, sz, cnt
+  LOCAL INTEGER n, i, px, py, sz, cnt, tinted
   n = 2
   DO WHILE n < nUsed
     IF sTyp(n) <> 0 AND sExp(n) > 0 THEN
@@ -117,6 +117,11 @@ SUB Explosions
               spy(i) = py + (RND * 2 - 1) * sz
             NEXT i
             FOR i = cnt + 1 TO 4 * NSTAR - 1 : spx(i) = -1 : NEXT i
+            ' A cloud is drawn in the ship's own colour, because the original
+            ' sets the colour once for the whole ship and the explosion is
+            ' just what it draws instead of the wireframe.
+            ARRAY SET col(shpCol(sTyp(n))), spc()
+            tinted = 1
             PIXEL spx(), spy(), spc()
           ENDIF
         ENDIF
@@ -126,6 +131,8 @@ SUB Explosions
       n = n + 1
     ENDIF
   LOOP
+  ' The stardust shares this array, so put it back.
+  IF tinted THEN ARRAY SET cWhite, spc()
 END SUB
 
 ' --- what the other ships do
@@ -162,6 +169,10 @@ SUB Tactics
             ' straight at us.  A near miss still flashes and makes a noise.
             IF d < 8192 AND cnt > 0.917 AND (sAI(n) AND 126) <> 0 THEN
               dmg = bLas(sBp(n)) * 2
+              ' Bit 1 says "firing this frame", which is the original's bit 6
+              ' of byte #31: the drawing pass turns it into a beam and clears
+              ' it again, so a near miss is still seen as well as heard.
+              sFlg(n) = sFlg(n) OR 2
               IF cnt > 0.972 THEN
                 HitPlayer dmg
               ENDIF

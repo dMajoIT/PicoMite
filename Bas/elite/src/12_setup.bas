@@ -10,11 +10,14 @@ SUB SetupScreen
   Draw3D CAMERA 1, VPLANE, 0, 0, 0, PANY
   ' Every one of these has to be one of the sixteen the screen actually has,
   ' or it is rounded to the nearest and rarely to the one you meant: GRAY,
-  ' which was here, is not in the palette at all.  In practice the ships are
-  ' drawn entirely in col(0), because every blueprint edge is colour 0.
-  col(0) = RGB(WHITE) : col(1) = RGB(MIDGREEN) : col(2) = RGB(BLUE)
-  col(3) = RGB(GREEN) : col(4) = RGB(RED) : col(5) = RGB(MAGENTA)
-  col(6) = RGB(CYAN) : col(C_FILL) = RGB(BLACK)
+  ' which was here, is not in the palette at all.  A mesh's edges are drawn
+  ' in col() entries chosen when the mesh is created, so these four are the
+  ' whole of the 6502 Second Processor version's space view palette, plus
+  ' black for the station's faces.
+  col(C_WHITE) = RGB(WHITE) : col(C_CYAN) = RGB(CYAN)
+  col(C_YELLOW) = RGB(YELLOW) : col(C_RED) = RGB(RED)
+  col(4) = RGB(GREEN) : col(5) = RGB(MAGENTA) : col(6) = RGB(BLUE)
+  col(C_FILL) = RGB(BLACK)
   ' Pre-resolved so the drawing loops assign a variable rather than call
   ' RGB(), which the trace cache cannot compile.
   cGreen = RGB(GREEN) : cYellow = RGB(YELLOW) : cWhite = RGB(WHITE)
@@ -26,7 +29,7 @@ SUB SetupScreen
   ' The band behind the chosen row.  RGB(32, 32, 64) was rounded to black,
   ' so the selection could not be seen at all.
   cSel = RGB(BLUE)
-  cRed = RGB(RED)
+  cRed = RGB(RED) : cMagenta = RGB(MAGENTA) : cBlue = RGB(BLUE)
   ' One turn of the unit circle, for the planet's surface ellipses.
   LOCAL INTEGER k
   FOR k = 0 TO NSEG - 1
@@ -44,6 +47,33 @@ SUB SetupScreen
   LLAB$(3) = "CT" : LLAB$(4) = "LT" : LLAB$(5) = "AL"
   RLAB$(0) = "SP" : RLAB$(1) = "RL" : RLAB$(2) = "DC"
   RLAB$(3) = "1" : RLAB$(4) = "2" : RLAB$(5) = "3" : RLAB$(6) = "4"
+END SUB
+
+' The 6502 Second Processor version's two colour tables.
+'
+' Its space view runs in mode 1, which has four colours - black, yellow, red
+' and cyan - so shpcol has only those to work with: ships are cyan, a missile
+' is yellow, rocks are red, and a Thargoid is the cyan/red stripe its source
+' calls WHITE.  The planet and the sun get the cyan/yellow stripe it calls
+' GREEN.  With sixteen colours to hand the stripes are drawn as the colour
+' they were standing in for.
+'
+' The scanner is mode 2 and has eight, so scacol is the richer of the two: it
+' is what lets you tell a rock from a trader without flying over to look.
+SUB ShipColours
+  LOCAL INTEGER t
+  FOR t = 0 TO NTYPE
+    shpCol(t) = C_CYAN
+    scaCol(t) = cCyan
+  NEXT t
+  shpCol(T_MISSILE) = C_YELLOW  : scaCol(T_MISSILE) = cYellow
+  shpCol(T_ASTEROID) = C_RED    : scaCol(T_ASTEROID) = cRed
+  shpCol(T_THARGOID) = C_WHITE  : scaCol(T_THARGOID) = cWhite
+  shpCol(T_THARGON) = C_WHITE
+  scaCol(T_STATION) = cGreen
+  scaCol(T_PYTHON) = cMagenta
+  scaCol(T_CANISTER) = cBlue
+  scaCol(T_ESCAPE) = cBlue
 END SUB
 
 ' The four views are rotations of the whole universe about the vertical

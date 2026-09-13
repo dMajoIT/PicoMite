@@ -72,7 +72,7 @@ far end. Press any key during the demo and you get a game of your own.
 | `G` | galactic hyperdrive, if one is fitted |
 | `Tab` | energy bomb |
 | `Esc` | escape pod if one is fitted, otherwise back to the title |
-| `P` | pause |
+| `P` | pause; `D` while paused writes the screen to the card |
 | `F1` `F2` `F3` `F4` | fore, aft, left, right views |
 
 `F5` to `F10` reach the same six screens whether you are flying or docked:
@@ -95,10 +95,16 @@ threshold at about 32000 units, and kills you at about 22400.
 
 The ellipse is the scanner. Each contact is a dash with a stick down to the
 plane you are flying in, so the stick tells you how far above or below you it
-is. Yellow is a missile. The dial to its right is the compass: it points at the
-station when you are near one and at the planet when you are not, yellow and
-two rows deep when the thing is ahead of you, green and one row deep when it is
-behind.
+is, and its colour says what it is: **red** a rock, **blue** a canister or an
+escape pod, **green** the space station, **magenta** a Python, **yellow** a
+missile, **cyan** everything else. The dial to its right is the compass: it
+points at the station when you are near one and at the planet when you are not,
+yellow and two rows deep when the thing is ahead of you, green and one row deep
+when it is behind.
+
+Out of the window, ships are cyan, rocks red, a missile yellow, a Thargoid
+white, and the planet and the sun green. A red beam across the view means
+somebody is shooting at you.
 
 ## Docked
 
@@ -189,20 +195,38 @@ From the **disc version** (and the Master, which is built on it):
   cassette version's own spawning rules instead.
 
 From the **6502 Second Processor version**, which had a whole second computer
-to spend:
+to spend - and which this port now follows, because a PicoComputer has that
+much spare and a great deal more:
 
-- The Cougar, a ship that appears nowhere else.
-- Colour in space - four colours rather than two - eight on the dashboard
-  rather than four, and six colours on the scanner telling you what each blip
-  is. We already draw more colour than the cassette version did, but not on
-  that scheme.
-- Sixteen hyperspace rings instead of eight, and a screenshot key.
-- Logarithm tables for the multiplies, and support for the Bitstik.
+- **Colour in space.** The cassette game's space view is black and white. The
+  Second Processor's has four colours, and its two tables say what gets which:
+  ships are cyan, a missile yellow, rocks red, a Thargoid white, and the planet
+  and the sun green. Both tables are the original's, read out of its source.
+- **Six colours on the scanner**, which is the best of the lot: a rock is red,
+  a canister or an escape pod blue, the station green, a big fat Python
+  magenta, a missile yellow, everything else cyan. You can read the bubble at a
+  glance now instead of flying over to look.
+- **Lasers in red** - both ours and theirs. Being shot at also *looks* like
+  something at last: a ship that fires draws a red beam across the screen, as
+  every version from the cassette on has, and which this port did not.
+- **A bigger bubble.** Ten ships and four police become eighteen and seven.
+- **The Cougar**, which appears in no earlier version and is the rarest thing
+  in Elite - about one spawning in nine thousand. It sits still and ignores
+  you, because it was given no AI, which is the original's way of faking a
+  cloaking device. Shoot at it and it wakes up with a beam laser, four
+  missiles, an E.C.M. and an aggression of sixty out of sixty-three.
+- **A screenshot key.** Press `P` to pause, then `D`, and the frame is written
+  to the card as `SCREEN1.BMP`, `SCREEN2.BMP` and so on - which is what CTRL-D
+  does there.
 
-None of this is difficult in the way the cassette game was difficult: the
-blueprints for the Dodo, the Cougar and the rest are published, and the
-extended token table is only data. It is a question of program memory, which
-is the one thing here that is genuinely tight.
+Still missing from it: the ship types it has and the cassette game does not
+(the Asp, the Krait, the Fer-de-lance, the Boa and the rest), the log tables,
+and Bitstik support. The last two are meaningless here.
+
+None of the rest is difficult in the way the cassette game was difficult: the
+blueprints for the Dodo and the rest are published, and the extended token
+table is only data. It is a question of program memory, which is the one thing
+here that is genuinely tight.
 
 ## How close is this to the real thing
 
@@ -213,15 +237,18 @@ Ships are wireframe with the hidden faces removed, decided from the blueprint's
 own face normals, as the original decides it. The cassette version has no
 missions, and no mining or military lasers, so none of those are missing.
 
-Two things here are deliberately not the original's. One is the flown docking
-approach described above. The other is the space station, which is given black
-faces behind its white edges so that it blots out the planet, the sun and the
-stardust instead of showing their lines straight through itself - on a BBC the
-station is hollow like everything else, and a planet's great circles run across
-its face. Every other ship is left hollow, as it should be. Switch the station
-back with `STNSOLID = 0` in `00_main.bas`; filling it costs about eight tenths
-of a millisecond a frame at docking range and does not move the frame rate,
-which is paced by the display rather than by the drawing.
+Three things here are deliberately not the cassette version's. The colour is
+the first, and the section above says where it comes from: a cassette Elite is
+black and white out of the window and one colour on the scanner. The second is
+the flown docking approach described above. The third is the space station,
+which is given black faces behind its edges so that it blots out the planet,
+the sun and the stardust instead of showing their lines straight through
+itself - on a BBC the station is hollow like everything else, and a planet's
+great circles run across its face. Every other ship is left hollow, as it
+should be. Switch the station back with `STNSOLID = 0` in `00_main.bas`;
+filling it costs about eight tenths of a millisecond a frame at docking range
+and does not move the frame rate, which is paced by the display rather than by
+the drawing.
 
 The sound is the original's ten effects, converted from the SFX table in its
 source. Five of the ten are its exact numbers; the other five ask for sound

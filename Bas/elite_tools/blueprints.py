@@ -162,8 +162,22 @@ def chain_loops(edge_list):
 
 
 def orient(P, loop, normal):
-    """Rotate the loop so its first three vertices are non-collinear, then flip if needed."""
+    """Rotate the loop so its first three vertices are non-collinear, then flip if needed.
+
+    Draw3D takes a polygon's facing from its first three vertices alone, so for a
+    self-crossing loop - Elite draws a couple of details as bowties - which three
+    those are decides whether the polygon is culled with its host face or against
+    it.  Every rotation and both directions are tried, and one that agrees with the
+    blueprint's own normal is preferred; only if none does do we fall back to the
+    first non-degenerate one, and say so.
+    """
     n = len(loop)
+    for k in range(n):
+        cand = loop[k:] + loop[:k]
+        for c in (cand, [cand[0]] + cand[1:][::-1]):
+            N = draw3d_normal(P, c)
+            if dot(N, N) > 0 and dot(N, normal) > 0:
+                return c, "ok"
     for k in range(n):
         cand = loop[k:] + loop[:k]
         N = draw3d_normal(P, cand)

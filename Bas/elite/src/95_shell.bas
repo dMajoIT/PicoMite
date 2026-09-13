@@ -121,9 +121,21 @@ END SUB
 ' this is also how to look at something for longer than it lasts.
 SUB PauseGame
   LOCAL INTEGER k
-  TEXT VCX, VIEWH - 12, "PAUSED", "CT", 7, 1, cWhite
-  FRAMEBUFFER COPY F, N
-  k = WaitKey(0)
+  DO
+    TEXT VCX, VIEWH - 12, "PAUSED", "CT", 7, 1, cWhite
+    FRAMEBUFFER COPY F, N
+    k = WaitKey(0)
+    IF k <> 68 AND k <> 100 THEN EXIT DO
+    ' D saves the screen, as CTRL-D does in the Second Processor version, and
+    ' numbers the files SCREEN1, SCREEN2 and so on as it does.  The frame is
+    ' drawn again first, with the clock stopped so nothing moves, to take the
+    ' word PAUSED back off it - a screenshot should be of the game.
+    tick = 0
+    DrawFrame
+    FRAMEBUFFER COPY F, N
+    shotNo = shotNo + 1
+    SAVE IMAGE "A:/SCREEN" + STR$(shotNo) + ".BMP"
+  LOOP
   ResetTick
 END SUB
 

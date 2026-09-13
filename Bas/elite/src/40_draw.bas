@@ -37,20 +37,21 @@ END SUB
 ' the blueprint's visibility byte picks mesh or dot, except below z_hi 16
 ' where the mesh always wins.
 SUB DrawShips
-  LOCAL INTEGER n, px, py, zb
+  LOCAL INTEGER n, px, py, zb, c
   FOR n = 0 TO nUsed - 1
     IF sTyp(n) <> 0 AND sBp(n) >= 0 THEN
       ViewXform n
       IF tz > NEARZ THEN
         zb = tz \ ZHI
         IF zb < VISCUT AND ABS(tx) < tz AND ABS(ty) < tz THEN
+          px = VCX + SGN(tx) * ((VPLANE * ABS(tx)) \ tz)
+          py = VCY - SGN(ty) * ((VPLANE * ABS(ty)) \ tz)
           IF zb >= VISFLOOR AND zb > bVis(sBp(n)) THEN
             ' Too far for a mesh.  The original's distant ship is not a
             ' single pixel but a short dash two rows deep, sitting one
             ' pixel right of the projected point.
-            px = VCX + SGN(tx) * ((VPLANE * ABS(tx)) \ tz)
-            py = VCY - SGN(ty) * ((VPLANE * ABS(ty)) \ tz)
-            IF py > 0 AND py < VIEWH - 2 THEN BOX px + 1, py, 3, 2, 0, cWhite, cWhite
+            c = col(shpCol(sTyp(n)))
+            IF py > 0 AND py < VIEWH - 2 THEN BOX px + 1, py, 3, 2, 0, c, c
           ELSE
             IF sObj(n) > 0 AND ABS(tx) < FARXY AND ABS(ty) < FARXY THEN
               ViewOrient n
@@ -58,10 +59,27 @@ SUB DrawShips
               Draw3D WRITE sObj(n), tx, ty, tz, 0, solidMode
             ENDIF
           ENDIF
+          IF (sFlg(n) AND 2) <> 0 THEN EnemyBeam n, px, py
         ENDIF
       ENDIF
+      sFlg(n) = sFlg(n) AND 253
     ENDIF
   NEXT n
+END SUB
+
+' Somebody is shooting at us.  The original does not aim the beam at the
+' ship's gun: it runs it from the gun vertex clear across to the far edge
+' of the screen, and puts the far end at a height taken from the low byte
+' of the ship's z - which is to say it wanders about as the ship moves,
+' because a beam that came straight at the camera would be a dot.  Ours
+' starts at the ship's centre instead of its gun, which is the one thing
+' Draw3D does not hand back.  Red, as the Second Processor version draws
+' it; every earlier version drew it white.
+SUB EnemyBeam(n AS INTEGER, px AS INTEGER, py AS INTEGER)
+  LOCAL INTEGER ex, ey
+  IF tx > 0 THEN ex = 0 ELSE ex = SCRW - 1
+  ey = (sZ(n) AND 255) * VIEWH / 256
+  LINE px, py, ex, ey, 1, cRed
 END SUB
 
 ' The original frames the space view with a two pixel border, and puts
@@ -70,8 +88,8 @@ SUB SpaceFurniture
   ' The laser is drawn as two lines converging on the crosshairs from the
   ' bottom corners of the view, for the couple of frames after a shot.
   IF lasFlash > 0 THEN
-    LINE 40, VIEWH - 2, VCX - 4 + RND * 8, VCY, 1, cWhite
-    LINE SCRW - 40, VIEWH - 2, VCX - 4 + RND * 8, VCY, 1, cWhite
+    LINE 40, VIEWH - 2, VCX - 4 + RND * 8, VCY, 1, cRed
+    LINE SCRW - 40, VIEWH - 2, VCX - 4 + RND * 8, VCY, 1, cRed
   ENDIF
   LINE 0, 0, SCRW - 2, 0, 1, cWhite
   BOX 0, 0, 2, VIEWH, 0, cWhite, cWhite
@@ -113,9 +131,9 @@ SUB DrawPlanetSun
         IF r >= 256 THEN r = 248
         IF cx + r > 0 AND cx - r < SCRW AND cy + r > 0 AND cy - r < VIEWH THEN
           IF sTyp(n) = T_SUN THEN
-            CIRCLE cx, cy, r, 1, 1, cWhite, cWhite
+            CIRCLE cx, cy, r, 1, 1, cGreen, cGreen
           ELSE
-            CIRCLE cx, cy, r, 1, 1, cWhite, -1
+            CIRCLE cx, cy, r, 1, 1, cGreen, -1
             IF r >= 6 THEN Surface n, cx, cy, r
           ENDIF
         ENDIF
@@ -150,7 +168,7 @@ SUB Surface(n AS INTEGER, cx AS INTEGER, cy AS INTEGER, r AS INTEGER)
       pgx(k) = ox + ax * ctab(k) + bx * stab(k)
       pgy(k) = oy - (ay * ctab(k) + by * stab(k))
     NEXT k
-    POLYGON NSEG, pgx(), pgy(), cWhite
+    POLYGON NSEG, pgx(), pgy(), cGreen
   ELSE
     ' An equator and one meridian.  Only the half of each great circle
     ' that faces us is drawn - a closed ellipse would show the far side
@@ -174,7 +192,7 @@ SUB HalfCircle(cx AS INTEGER, cy AS INTEGER, r AS INTEGER, ax AS FLOAT, ay AS FL
     IF pz <= 0 THEN
       px = cx + r * (ax * c + bx * sn)
       py = cy - r * (ay * c + by * sn)
-      IF have THEN LINE lx, ly, px, py, 1, cWhite
+      IF have THEN LINE lx, ly, px, py, 1, cGreen
       lx = px : ly = py : have = 1
     ELSE
       have = 0

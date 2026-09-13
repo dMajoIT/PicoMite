@@ -14,8 +14,8 @@ CONST VPLANE = 256
 CONST DEMOFRAMES = 0
 CONST DEMOSCENE = 1
 CONST PANY = VCY - (SCRH \ 2 - 1)
-CONST NSLOT = 12
-CONST NBP = 12
+CONST NSLOT = 20
+CONST NBP = 13
 CONST SLOT_PLANET = 0
 CONST SLOT_STAR = 1
 CONST PRADIUS = 24576
@@ -25,7 +25,8 @@ CONST T_PLANET = 128, T_SUN = 129, T_CRATER = 130
 CONST T_SIDEWINDER = 1, T_VIPER = 2, T_MAMBA = 3, T_PYTHON = 4
 CONST T_COBRA3 = 5, T_THARGOID = 6, T_TRADER = 7, T_STATION = 8
 CONST T_MISSILE = 9, T_ASTEROID = 10, T_CANISTER = 11, T_THARGON = 12
-CONST T_ESCAPE = 13
+CONST T_ESCAPE = 13, T_COUGAR = 14
+CONST NTYPE = 14
 DIM INTEGER pRoll, pPitch, alp1, alp2, bet1, bet2, dSpeed
 DIM FLOAT alpha, beta
 DIM INTEGER pEnergy, pFsh, pAsh, pFuel, pCabT, pLasT, pAltit, pMissl
@@ -45,11 +46,14 @@ DIM INTEGER bNv(NBP-1), bNf(NBP-1), bNfv(NBP-1), bNf0(NBP-1), bNv0(NBP-1)
 DIM INTEGER bCan(NBP-1), bArea(NBP-1), bBty(NBP-1), bVis(NBP-1)
 DIM INTEGER bEne(NBP-1), bSpd(NBP-1), bLas(NBP-1), bMis(NBP-1)
 DIM INTEGER bGun(NBP-1), bExp(NBP-1), bSize(NBP-1)
-DIM INTEGER tBp(13)
+DIM INTEGER tBp(NTYPE)
 DIM FLOAT mV(2, 39), mNrm(2, 15)
 DIM INTEGER mFc(31), mHost(31), mF(159), mEc(31), mFl(31)
 DIM INTEGER col(7)
+DIM INTEGER shpCol(NTYPE), scaCol(NTYPE)
+CONST C_WHITE = 0, C_CYAN = 1, C_YELLOW = 2, C_RED = 3
 DIM INTEGER cGreen, cYellow, cWhite, cBlack, cCyan, cDim, cRed, cSel
+DIM INTEGER cMagenta, cBlue
 DIM INTEGER maxObj, objOwn(15)
 DIM FLOAT qA(4), qB(4), qC(4), qV(4), qP(4), vwQ(4, 3)
 DIM INTEGER kRollL, kRollR, kUp, kDn, kFaster, kSlower, kFire, kQuit
@@ -97,7 +101,7 @@ DIM mkName$(NGOODS-1) LENGTH 14, mkUnit$(NGOODS-1) LENGTH 2
 DIM INTEGER mkBase(NGOODS-1), mkFact(NGOODS-1), mkQty(NGOODS-1), mkMask(NGOODS-1)
 DIM INTEGER mkPrice(NGOODS-1), mkStock(NGOODS-1), mkByte
 DIM INTEGER cargo(NGOODS-1), holdSize, cashTenths
-DIM INTEGER solidMode, showDot
+DIM INTEGER solidMode, showDot, shotNo
 CONST BP_CORIOLIS = 6, C_FILL = 7, STNSOLID = 1
 DIM FLOAT tx, ty, tz
 CONST JCENTRE = 128
@@ -172,6 +176,7 @@ SetupScreen
 LoadStats
 ProbeObjects
 SetupViews
+ShipColours
 EquipTable
 LoadSounds
 IF DEMOFRAMES = 0 THEN
@@ -270,7 +275,7 @@ LoadMesh b
 NEXT b
 tBp(1) = 0 : tBp(2) = 1 : tBp(3) = 2 : tBp(4) = 3 : tBp(5) = 4
 tBp(6) = 5 : tBp(7) = 4 : tBp(8) = 6 : tBp(9) = 7 : tBp(10) = 8
-tBp(11) = 9 : tBp(12) = 10 : tBp(13) = 11
+tBp(11) = 9 : tBp(12) = 10 : tBp(13) = 11 : tBp(T_COUGAR) = 12
 END SUB
 SUB LoadMesh(b AS INTEGER)
 LOCAL INTEGER j, k
@@ -287,6 +292,7 @@ CASE 8  : RESTORE dat_asteroid
 CASE 9  : RESTORE dat_canister
 CASE 10 : RESTORE dat_thargon
 CASE 11 : RESTORE dat_escape_pod
+CASE 12 : RESTORE dat_cougar
 END SELECT
 READ bName$(b), bNv(b), bNf(b), bNfv(b), bNf0(b), bNv0(b)
 READ bCan(b), bArea(b), bBty(b), bVis(b), bEne(b), bSpd(b)
@@ -389,12 +395,14 @@ sTyp(s) = 0 : sObj(s) = 0
 sExp(s) = 0 : sTgt(s) = -1
 END SUB
 SUB GetObject(n AS INTEGER)
-LOCAL INTEGER o, b, faces
+LOCAL INTEGER o, b, faces, j, e
 IF sObj(n) > 0 THEN EXIT SUB
 FOR o = 1 TO maxObj
 IF objOwn(o) < 0 THEN
 b = sBp(n)
 LoadMesh b
+e = shpCol(sTyp(n))
+FOR j = 0 TO bNf(b) - 1 : mEc(j) = e : NEXT j
 faces = solidMode
 IF STNSOLID THEN
 IF b = BP_CORIOLIS THEN faces = 1
@@ -439,14 +447,15 @@ MODE 2
 FRAMEBUFFER CREATE
 FRAMEBUFFER WRITE F
 Draw3D CAMERA 1, VPLANE, 0, 0, 0, PANY
-col(0) = RGB(WHITE) : col(1) = RGB(MIDGREEN) : col(2) = RGB(BLUE)
-col(3) = RGB(GREEN) : col(4) = RGB(RED) : col(5) = RGB(MAGENTA)
-col(6) = RGB(CYAN) : col(C_FILL) = RGB(BLACK)
+col(C_WHITE) = RGB(WHITE) : col(C_CYAN) = RGB(CYAN)
+col(C_YELLOW) = RGB(YELLOW) : col(C_RED) = RGB(RED)
+col(4) = RGB(GREEN) : col(5) = RGB(MAGENTA) : col(6) = RGB(BLUE)
+col(C_FILL) = RGB(BLACK)
 cGreen = RGB(GREEN) : cYellow = RGB(YELLOW) : cWhite = RGB(WHITE)
 cBlack = RGB(BLACK) : cCyan = RGB(CYAN)
 cDim = RGB(MIDGREEN)
 cSel = RGB(BLUE)
-cRed = RGB(RED)
+cRed = RGB(RED) : cMagenta = RGB(MAGENTA) : cBlue = RGB(BLUE)
 LOCAL INTEGER k
 FOR k = 0 TO NSEG - 1
 ctab(k) = COS(2 * PI * k / NSEG)
@@ -460,6 +469,21 @@ LLAB$(0) = "FS" : LLAB$(1) = "AS" : LLAB$(2) = "FU"
 LLAB$(3) = "CT" : LLAB$(4) = "LT" : LLAB$(5) = "AL"
 RLAB$(0) = "SP" : RLAB$(1) = "RL" : RLAB$(2) = "DC"
 RLAB$(3) = "1" : RLAB$(4) = "2" : RLAB$(5) = "3" : RLAB$(6) = "4"
+END SUB
+SUB ShipColours
+LOCAL INTEGER t
+FOR t = 0 TO NTYPE
+shpCol(t) = C_CYAN
+scaCol(t) = cCyan
+NEXT t
+shpCol(T_MISSILE) = C_YELLOW  : scaCol(T_MISSILE) = cYellow
+shpCol(T_ASTEROID) = C_RED    : scaCol(T_ASTEROID) = cRed
+shpCol(T_THARGOID) = C_WHITE  : scaCol(T_THARGOID) = cWhite
+shpCol(T_THARGON) = C_WHITE
+scaCol(T_STATION) = cGreen
+scaCol(T_PYTHON) = cMagenta
+scaCol(T_CANISTER) = cBlue
+scaCol(T_ESCAPE) = cBlue
 END SUB
 SUB SetupViews
 LOCAL INTEGER i
@@ -704,17 +728,18 @@ DrawMessage
 ENDIF
 END SUB
 SUB DrawShips
-LOCAL INTEGER n, px, py, zb
+LOCAL INTEGER n, px, py, zb, c
 FOR n = 0 TO nUsed - 1
 IF sTyp(n) <> 0 AND sBp(n) >= 0 THEN
 ViewXform n
 IF tz > NEARZ THEN
 zb = tz \ ZHI
 IF zb < VISCUT AND ABS(tx) < tz AND ABS(ty) < tz THEN
-IF zb >= VISFLOOR AND zb > bVis(sBp(n)) THEN
 px = VCX + SGN(tx) * ((VPLANE * ABS(tx)) \ tz)
 py = VCY - SGN(ty) * ((VPLANE * ABS(ty)) \ tz)
-IF py > 0 AND py < VIEWH - 2 THEN BOX px + 1, py, 3, 2, 0, cWhite, cWhite
+IF zb >= VISFLOOR AND zb > bVis(sBp(n)) THEN
+c = col(shpCol(sTyp(n)))
+IF py > 0 AND py < VIEWH - 2 THEN BOX px + 1, py, 3, 2, 0, c, c
 ELSE
 IF sObj(n) > 0 AND ABS(tx) < FARXY AND ABS(ty) < FARXY THEN
 ViewOrient n
@@ -722,15 +747,23 @@ Draw3D ROTATE qC(), sObj(n)
 Draw3D WRITE sObj(n), tx, ty, tz, 0, solidMode
 ENDIF
 ENDIF
+IF (sFlg(n) AND 2) <> 0 THEN EnemyBeam n, px, py
 ENDIF
 ENDIF
+sFlg(n) = sFlg(n) AND 253
 ENDIF
 NEXT n
 END SUB
+SUB EnemyBeam(n AS INTEGER, px AS INTEGER, py AS INTEGER)
+LOCAL INTEGER ex, ey
+IF tx > 0 THEN ex = 0 ELSE ex = SCRW - 1
+ey = (sZ(n) AND 255) * VIEWH / 256
+LINE px, py, ex, ey, 1, cRed
+END SUB
 SUB SpaceFurniture
 IF lasFlash > 0 THEN
-LINE 40, VIEWH - 2, VCX - 4 + RND * 8, VCY, 1, cWhite
-LINE SCRW - 40, VIEWH - 2, VCX - 4 + RND * 8, VCY, 1, cWhite
+LINE 40, VIEWH - 2, VCX - 4 + RND * 8, VCY, 1, cRed
+LINE SCRW - 40, VIEWH - 2, VCX - 4 + RND * 8, VCY, 1, cRed
 ENDIF
 LINE 0, 0, SCRW - 2, 0, 1, cWhite
 BOX 0, 0, 2, VIEWH, 0, cWhite, cWhite
@@ -754,9 +787,9 @@ r = 6291456 / tz
 IF r >= 256 THEN r = 248
 IF cx + r > 0 AND cx - r < SCRW AND cy + r > 0 AND cy - r < VIEWH THEN
 IF sTyp(n) = T_SUN THEN
-CIRCLE cx, cy, r, 1, 1, cWhite, cWhite
+CIRCLE cx, cy, r, 1, 1, cGreen, cGreen
 ELSE
-CIRCLE cx, cy, r, 1, 1, cWhite, -1
+CIRCLE cx, cy, r, 1, 1, cGreen, -1
 IF r >= 6 THEN Surface n, cx, cy, r
 ENDIF
 ENDIF
@@ -784,7 +817,7 @@ FOR k = 0 TO NSEG - 1
 pgx(k) = ox + ax * ctab(k) + bx * stab(k)
 pgy(k) = oy - (ay * ctab(k) + by * stab(k))
 NEXT k
-POLYGON NSEG, pgx(), pgy(), cWhite
+POLYGON NSEG, pgx(), pgy(), cGreen
 ELSE
 HalfCircle cx, cy, r, vnx, vny, vnz, vrx, vry, vrz
 HalfCircle cx, cy, r, vsx, vsy, vsz, vrx, vry, vrz
@@ -801,7 +834,7 @@ pz = az * c + bz * sn
 IF pz <= 0 THEN
 px = cx + r * (ax * c + bx * sn)
 py = cy - r * (ay * c + by * sn)
-IF have THEN LINE lx, ly, px, py, 1, cWhite
+IF have THEN LINE lx, ly, px, py, 1, cGreen
 lx = px : ly = py : have = 1
 ELSE
 have = 0
@@ -1127,8 +1160,7 @@ py = base - sY(n) / SCYDIV
 IF py < SCTOP THEN py = SCTOP
 IF py > SCBOT THEN py = SCBOT
 IF px > SCX - SCA AND px < SCX + SCA THEN
-c = cGreen
-IF sTyp(n) = T_MISSILE THEN c = cYellow
+c = scaCol(sTyp(n))
 LINE px, base, px, py, 1, c
 BOX px, py - 1, 5, 2, 0, c, c
 ENDIF
@@ -1703,7 +1735,7 @@ EjectCargo n
 DropObject n
 END SUB
 SUB Explosions
-LOCAL INTEGER n, i, px, py, sz, cnt
+LOCAL INTEGER n, i, px, py, sz, cnt, tinted
 n = 2
 DO WHILE n < nUsed
 IF sTyp(n) <> 0 AND sExp(n) > 0 THEN
@@ -1725,6 +1757,8 @@ spx(i) = px + (RND * 2 - 1) * sz
 spy(i) = py + (RND * 2 - 1) * sz
 NEXT i
 FOR i = cnt + 1 TO 4 * NSTAR - 1 : spx(i) = -1 : NEXT i
+ARRAY SET col(shpCol(sTyp(n))), spc()
+tinted = 1
 PIXEL spx(), spy(), spc()
 ENDIF
 ENDIF
@@ -1734,6 +1768,7 @@ ELSE
 n = n + 1
 ENDIF
 LOOP
+IF tinted THEN ARRAY SET cWhite, spc()
 END SUB
 SUB Tactics
 LOCAL INTEGER n, dmg
@@ -1754,6 +1789,7 @@ nx = qV(1) * qV(4) : ny = qV(2) * qV(4) : nz = qV(3) * qV(4)
 cnt = (-sX(n) * nx - sY(n) * ny - sZ(n) * nz) / d
 IF d < 8192 AND cnt > 0.917 AND (sAI(n) AND 126) <> 0 THEN
 dmg = bLas(sBp(n)) * 2
+sFlg(n) = sFlg(n) OR 2
 IF cnt > 0.972 THEN
 HitPlayer dmg
 ENDIF
@@ -2248,7 +2284,12 @@ ai = 192
 IF INT(RND * 256) >= 200 THEN ai = ai OR 1
 IF t = T_THARGOID THEN
 IF INT(RND * 256) >= 200 THEN
+IF (INT(ABS(sZ(SLOT_PLANET))) AND 62) = 0 THEN
+n = Aggressor(T_COUGAR, 121)
+IF n >= 0 THEN sSpd(n) = 18
+ELSE
 IF Aggressor(T_THARGOID, ai) >= 0 THEN n = Aggressor(T_THARGON, 129)
+ENDIF
 ENDIF
 EXIT SUB
 ENDIF
@@ -2896,9 +2937,17 @@ tFlight = tFlight + TIMER - t0
 END SUB
 SUB PauseGame
 LOCAL INTEGER k
+DO
 TEXT VCX, VIEWH - 12, "PAUSED", "CT", 7, 1, cWhite
 FRAMEBUFFER COPY F, N
 k = WaitKey(0)
+IF k <> 68 AND k <> 100 THEN EXIT DO
+tick = 0
+DrawFrame
+FRAMEBUFFER COPY F, N
+shotNo = shotNo + 1
+SAVE IMAGE "A:/SCREEN" + STR$(shotNo) + ".BMP"
+LOOP
 ResetTick
 END SUB
 SUB JumpAway
@@ -3679,3 +3728,23 @@ DATA 2,3,1
 DATA 2,0,3
 DATA 0,1,3
 DATA 0,2,1
+dat_cougar:
+DATA "Cougar", 23, 11, 46, 6, 19, 3, 4900, 0, 34, 252, 40, 6, 4, 0, 42
+DATA 0,5,67, -20,0,40, -40,0,-40, 0,14,-40, 0,-14,-40, 20,0,40
+DATA 40,0,-40, -36,0,56, -60,0,-20, 36,0,56, 60,0,-20, 0,7,35
+DATA 0,8,25, -12,2,45, 12,2,45, -10,6,-40, -10,-6,-40, 10,-6,-40
+DATA 10,6,-40, -12.401,1.884,44.725, 0.299,7.07,35.394, 11.701,2.07,45.394, 0.401,7.884,24.725
+DATA 6,3,3,5,4,5,6,3,3,4,4
+DATA 0,0,0,1,2,3,4,4,4,5,5
+DATA -16,46,4, -16,-46,4, 0,-27,5, 16,-46,4, 16,46,4, 0,0,-160
+DATA 0,1,7,8,2,3
+DATA 12,19,13
+DATA 13,20,11
+DATA 2,4,1,7,8
+DATA 0,1,4,5
+DATA 9,5,4,6,10
+DATA 9,10,6,3,0,5
+DATA 11,21,14
+DATA 14,22,12
+DATA 2,3,6,4
+DATA 16,18,17,15

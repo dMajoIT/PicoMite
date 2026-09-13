@@ -141,8 +141,11 @@ SUB DrawScanner
         IF py < SCTOP THEN py = SCTOP
         IF py > SCBOT THEN py = SCBOT
         IF px > SCX - SCA AND px < SCX + SCA THEN
-          c = cGreen
-          IF sTyp(n) = T_MISSILE THEN c = cYellow
+          ' Six colours on the scanner rather than the cassette version's
+          ' one, which is the single best thing the Second Processor version
+          ' does: a rock is red, a canister or a pod blue, the station green,
+          ' a big trader magenta, a missile yellow, everything else cyan.
+          c = scaCol(sTyp(n))
           LINE px, base, px, py, 1, c
           BOX px, py - 1, 5, 2, 0, c, c
         ENDIF

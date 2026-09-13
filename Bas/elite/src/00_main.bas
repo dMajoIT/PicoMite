@@ -46,8 +46,12 @@ CONST DEMOSCENE = 1                ' 1 flight and combat, 2 docking, 3 the docke
 CONST PANY = VCY - (SCRH \ 2 - 1)  ' shifts Draw3D's centre up to VCY
 
 ' ------------------------------------------------------- universe size
-CONST NSLOT = 12                   ' NOSH: planet + sun/station + 10 ships
-CONST NBP = 12                     ' ship blueprints in the cassette game
+' NOSH: planet, sun or station, and the ships.  The cassette game allows ten
+' ships and four police; the Second Processor version, with a whole second
+' computer to spend, allows eighteen and seven.  Only maxObj of them can hold
+' a mesh at once - the rest are drawn as the original's distant dashes.
+CONST NSLOT = 20
+CONST NBP = 13                     ' twelve cassette blueprints, plus the Cougar
 CONST SLOT_PLANET = 0              ' FRIN slot 0 is always the planet
 CONST SLOT_STAR = 1                ' slot 1 is the sun or the station
 
@@ -61,7 +65,8 @@ CONST T_PLANET = 128, T_SUN = 129, T_CRATER = 130
 CONST T_SIDEWINDER = 1, T_VIPER = 2, T_MAMBA = 3, T_PYTHON = 4
 CONST T_COBRA3 = 5, T_THARGOID = 6, T_TRADER = 7, T_STATION = 8
 CONST T_MISSILE = 9, T_ASTEROID = 10, T_CANISTER = 11, T_THARGON = 12
-CONST T_ESCAPE = 13
+CONST T_ESCAPE = 13, T_COUGAR = 14
+CONST NTYPE = 14                   ' highest ship type number
 
 ' ============================================================ globals
 ' Player.  pRoll and pPitch are the original's JSTX and JSTY: 1..255
@@ -92,14 +97,22 @@ DIM INTEGER bNv(NBP-1), bNf(NBP-1), bNfv(NBP-1), bNf0(NBP-1), bNv0(NBP-1)
 DIM INTEGER bCan(NBP-1), bArea(NBP-1), bBty(NBP-1), bVis(NBP-1)
 DIM INTEGER bEne(NBP-1), bSpd(NBP-1), bLas(NBP-1), bMis(NBP-1)
 DIM INTEGER bGun(NBP-1), bExp(NBP-1), bSize(NBP-1)
-DIM INTEGER tBp(13)                ' ship type 1..13 -> blueprint index
+DIM INTEGER tBp(NTYPE)             ' ship type 1..NTYPE -> blueprint index
 
 ' Scratch mesh buffers, big enough for the largest blueprint (Missile:
 ' 33 vertices, 25 polygons, 80 face-vertex entries).
 DIM FLOAT mV(2, 39), mNrm(2, 15)
 DIM INTEGER mFc(31), mHost(31), mF(159), mEc(31), mFl(31)
 DIM INTEGER col(7)
+' The 6502 Second Processor version's two colour tables, shpcol and scacol,
+' keyed on our own type numbers: what colour a ship is drawn in the space
+' view, and what colour its blip is on the scanner.  shpCol holds an index
+' into col() because a mesh's edge colours are chosen when it is created;
+' scaCol holds the colour itself.
+DIM INTEGER shpCol(NTYPE), scaCol(NTYPE)
+CONST C_WHITE = 0, C_CYAN = 1, C_YELLOW = 2, C_RED = 3
 DIM INTEGER cGreen, cYellow, cWhite, cBlack, cCyan, cDim, cRed, cSel
+DIM INTEGER cMagenta, cBlue
 
 ' Draw3D object pool.  objOwn(n) is the slot that owns object n, or -1.
 DIM INTEGER maxObj, objOwn(15)
@@ -194,7 +207,7 @@ DIM INTEGER mkPrice(NGOODS-1), mkStock(NGOODS-1), mkByte
 DIM INTEGER cargo(NGOODS-1), holdSize, cashTenths
 
 ' Rendering options and the view transform's output.
-DIM INTEGER solidMode, showDot
+DIM INTEGER solidMode, showDot, shotNo
 ' The station is the one mesh given faces as well as edges, so that it
 ' blots out the planet behind it instead of showing its lines through.
 CONST BP_CORIOLIS = 6, C_FILL = 7, STNSOLID = 1

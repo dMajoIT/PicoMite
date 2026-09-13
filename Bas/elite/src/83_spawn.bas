@@ -136,7 +136,23 @@ SUB SpawnHostiles
   IF t = T_THARGOID THEN
     ' And only sometimes, because a Thargoid is not a bounty hunter.
     IF INT(RND * 256) >= 200 THEN
-      IF Aggressor(T_THARGOID, ai) >= 0 THEN n = Aggressor(T_THARGON, 129)
+      ' Once in thirty-two it is not a Thargoid at all but a Cougar, which is
+      ' the rarest thing in Elite.  The Second Processor version reaches this
+      ' test by another road - its police check, one draw in 256 - but the
+      ' test itself is the original's: five bits of the planet's z, and a
+      ' Cougar only when every one of them is zero.  Reached from here the
+      ' odds work out at about one spawning in nine thousand, which is what
+      ' they are in the Second Processor version too.
+      IF (INT(ABS(sZ(SLOT_PLANET))) AND 62) = 0 THEN
+        ' No AI, so it sits there minding its own business: the original's
+        ' way of giving it a cloaking device it has no code for.  Shoot at it
+        ' and the laser turns its AI on, and then it has an E.C.M., sixty
+        ' aggression out of sixty-three, four missiles and a beam laser.
+        n = Aggressor(T_COUGAR, 121)
+        IF n >= 0 THEN sSpd(n) = 18
+      ELSE
+        IF Aggressor(T_THARGOID, ai) >= 0 THEN n = Aggressor(T_THARGON, 129)
+      ENDIF
     ENDIF
     EXIT SUB
   ENDIF

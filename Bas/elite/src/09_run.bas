@@ -9,6 +9,7 @@ SetupScreen
 LoadStats
 ProbeObjects
 SetupViews
+ShipColours
 EquipTable
 LoadSounds
 

@@ -12,7 +12,7 @@ SUB LoadStats
   NEXT b
   tBp(1) = 0 : tBp(2) = 1 : tBp(3) = 2 : tBp(4) = 3 : tBp(5) = 4
   tBp(6) = 5 : tBp(7) = 4 : tBp(8) = 6 : tBp(9) = 7 : tBp(10) = 8
-  tBp(11) = 9 : tBp(12) = 10 : tBp(13) = 11
+  tBp(11) = 9 : tBp(12) = 10 : tBp(13) = 11 : tBp(T_COUGAR) = 12
 END SUB
 
 ' Load blueprint b into the scratch mesh buffers and fill in its stats.
@@ -36,6 +36,7 @@ SUB LoadMesh(b AS INTEGER)
     CASE 9  : RESTORE dat_canister
     CASE 10 : RESTORE dat_thargon
     CASE 11 : RESTORE dat_escape_pod
+    CASE 12 : RESTORE dat_cougar
   END SELECT
   READ bName$(b), bNv(b), bNf(b), bNfv(b), bNf0(b), bNv0(b)
   READ bCan(b), bArea(b), bBty(b), bVis(b), bEne(b), bSpd(b)
@@ -169,12 +170,16 @@ END SUB
 ' as a mesh; there are fewer objects than slots, so they are handed out
 ' on a first come basis and the rest of the bubble shows up as dots.
 SUB GetObject(n AS INTEGER)
-  LOCAL INTEGER o, b, faces
+  LOCAL INTEGER o, b, faces, j, e
   IF sObj(n) > 0 THEN EXIT SUB
   FOR o = 1 TO maxObj
     IF objOwn(o) < 0 THEN
       b = sBp(n)
       LoadMesh b
+      ' Draw3D bakes the colours into the object, so the ship's colour has
+      ' to be chosen now rather than at drawing time.
+      e = shpCol(sTyp(n))
+      FOR j = 0 TO bNf(b) - 1 : mEc(j) = e : NEXT j
       faces = solidMode
       IF STNSOLID THEN
         IF b = BP_CORIOLIS THEN faces = 1
