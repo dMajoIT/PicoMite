@@ -18,6 +18,7 @@ SUB LoadStats
   tBp(T_FERDELANCE) = 19 : tBp(T_BOA) = 20 : tBp(T_ANACONDA) = 21
   tBp(T_BOULDER) = 22 : tBp(T_SPLINTER) = 23 : tBp(T_HERMIT) = 24
   tBp(T_SHUTTLE) = 25 : tBp(T_TRANSPORT) = 26
+  tBp(T_CONSTRICT) = 28
 END SUB
 
 ' Load blueprint b into the scratch mesh buffers and fill in its stats.
@@ -57,6 +58,7 @@ SUB LoadMesh(b AS INTEGER)
     CASE 25 : RESTORE dat_shuttle
     CASE 26 : RESTORE dat_transporter
     CASE 27 : RESTORE dat_dodo
+    CASE 28 : RESTORE dat_constrictor
   END SELECT
   READ bName$(b), bNv(b), bNf(b), bNfv(b), bNf0(b), bNv0(b)
   READ bCan(b), bArea(b), bBty(b), bVis(b), bEne(b), bSpd(b)

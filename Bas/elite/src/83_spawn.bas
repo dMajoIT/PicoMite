@@ -121,6 +121,15 @@ SUB SpawnHostiles
   IF spawnEV >= 0 THEN EXIT SUB
   spawnEV = 0
 
+  ' Carrying the Thargoid plans in mission two brings them after us, one
+  ' pass in five, wherever we are and whatever the government here is.
+  IF CarryingPlans() THEN
+    IF INT(RND * 256) >= 200 THEN
+      IF Aggressor(T_THARGOID, 0) >= 0 THEN n = Aggressor(T_THARGON, 129)
+      EXIT SUB
+    ENDIF
+  ENDIF
+
   r = INT(RND * 256)
   IF sysGov <> 0 THEN
     ' Anywhere but an anarchy has to pass both of these, and the higher the
@@ -173,6 +182,17 @@ SUB SpawnHostiles
   ' Everything but the Thargoid is a lone bounty hunter, and the Second
   ' Processor version puts a heavier ship in that seat than the cassette game
   ' does: a Cobra Mk III, an Asp, a Python or a Fer-de-Lance.
+  '
+  ' In the Constrictor's own system the seat is a nastier one - an E.C.M., an
+  ' aggression of 60 out of 63 and AI enabled - and if the job is still on and
+  ' the ship itself is not about, this is where it turns up.
+  IF ConstrictorHere() THEN
+    ai = 249
+    IF WantConstrictor() THEN
+      n = Aggressor(T_CONSTRICT, ai)
+      EXIT SUB
+    ENDIF
+  ENDIF
   n = Aggressor(HunterShip(), ai)
 END SUB
 

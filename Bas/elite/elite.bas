@@ -28,7 +28,13 @@ RunGame
 ENDIF
 LOOP
 ELSE
-IF DEMOSCENE = 5 THEN
+IF DEMOSCENE = 6 THEN
+MissionScene
+FRAMEBUFFER CLOSE
+MODE 1
+PRINT "missions done,"; shotNo; " pages"
+END
+ELSEIF DEMOSCENE = 5 THEN
 NewCommander
 MissionBrief 10, 0
 MissionBrief 11, 0
@@ -140,6 +146,7 @@ tBp(T_COBRA1) = 16 : tBp(T_WORM) = 17 : tBp(T_ASP) = 18
 tBp(T_FERDELANCE) = 19 : tBp(T_BOA) = 20 : tBp(T_ANACONDA) = 21
 tBp(T_BOULDER) = 22 : tBp(T_SPLINTER) = 23 : tBp(T_HERMIT) = 24
 tBp(T_SHUTTLE) = 25 : tBp(T_TRANSPORT) = 26
+tBp(T_CONSTRICT) = 28
 END SUB
 SUB LoadMesh(b AS INTEGER)
 LOCAL INTEGER j, k
@@ -172,6 +179,7 @@ CASE 24 : RESTORE dat_rock_hermit
 CASE 25 : RESTORE dat_shuttle
 CASE 26 : RESTORE dat_transporter
 CASE 27 : RESTORE dat_dodo
+CASE 28 : RESTORE dat_constrictor
 END SELECT
 READ bName$(b), bNv(b), bNf(b), bNfv(b), bNf0(b), bNv0(b)
 READ bCan(b), bArea(b), bBty(b), bVis(b), bEne(b), bSpd(b)
@@ -1099,7 +1107,7 @@ pCabT = 30 : pLasT = 0 : pAltit = 200 : pMissl = 3
 cashTenths = 1000 : holdSize = 20
 lasView(0) = LAS_PULSE : lasView(1) = 0 : lasView(2) = 0 : lasView(3) = 0
 lasTimer = 0 : lasFlash = 0
-kills = 0 : dead = 0 : energyUnit = 0 : legal = 0
+kills = 0 : dead = 0 : energyUnit = 0 : legal = 0 : mission = 0
 shots = 0 : hits = 0
 docked = 0 : dockComp = 0 : msLock = -1
 vw = 0 : inWitch = 0
@@ -1155,6 +1163,72 @@ ENDIF
 SELECT CASE f
 CASE 260 TO 999 : kFaster = 1
 END SELECT
+END SUB
+SUB MissionScene
+NewCommander
+MissionFind 2, 144, 33
+MissionFind 3, 215, 84
+MissionFind 3, 63, 72
+PRINT
+PRINT "mission byte at the start:"; mission
+kills = 100 : gGal = 1
+MissionCheck
+PRINT "after docking with 100 kills:"; mission
+kills = 300
+MissionCheck
+PRINT "after docking with 300 kills:"; mission; " (expect 1)"
+gGal = 2 : conHere = 1
+PRINT "in its system, want one?"; WantConstrictor(); " (expect 1)"
+conHere = 0
+PRINT "somewhere else, want one?"; WantConstrictor(); " (expect 0)"
+mission = mission OR MI_1DONE
+gGal = 2
+MissionCheck
+PRINT "after killing it and docking:"; mission; " (expect 2)"
+PRINT "  kills"; kills; " (expect 556)  cash"; cashTenths / 10; " Cr"
+gGal = 3
+MissionCheck
+PRINT "third galaxy, 556 kills:"; mission; " (expect 2)"
+kills = 1300
+MissionCheck
+PRINT "third galaxy, 1300 kills:"; mission; " (expect 6)"
+MissionGoto 3, 215, 84
+MissionCheck
+PRINT "docked at Ceerdi:"; mission; " (expect 10)"
+PRINT "  carrying the plans?"; CarryingPlans(); " (expect 1)"
+MissionGoto 3, 63, 72
+MissionCheck
+PRINT "docked at Birera:"; mission; " (expect 14)"
+PRINT "  carrying the plans?"; CarryingPlans(); " (expect 0)"
+PRINT "  energy unit"; energyUnit; " (expect 2, the navy's own)"
+END SUB
+SUB MissionGoto(g AS INTEGER, x AS INTEGER, y AS INTEGER)
+LOCAL INTEGER i
+gGal = g
+SetGalaxy g
+FOR i = 0 TO 255
+SysData
+IF sysX = x AND sysYr = y THEN EXIT FOR
+NextSystem
+NEXT i
+homeSys = i : selSys = i
+homeX = sysX : homeY = sysY * 2
+END SUB
+SUB MissionFind(g AS INTEGER, x AS INTEGER, y AS INTEGER)
+LOCAL INTEGER i, found
+found = -1
+SetGalaxy g
+FOR i = 0 TO 255
+SysData
+IF sysX = x AND sysYr = y THEN found = i : EXIT FOR
+NextSystem
+NEXT i
+IF found < 0 THEN
+PRINT "galaxy"; g; " ("; STR$(x); ","; STR$(y); ") - nothing there"
+ELSE
+PRINT "galaxy"; g; " ("; STR$(x); ","; STR$(y); ") is "; SysName$()
+ENDIF
+SetGalaxy gGal
 END SUB
 SUB SaveShot(f AS INTEGER)
 SAVE IMAGE "A:/fly" + STR$(f) + ".bmp"
@@ -1298,6 +1372,7 @@ h2 = (gs2 >> 8) AND 255
 l1 = gs1 AND 255
 sysX = h1
 sysY = h0 >> 1
+sysYr = h0
 sysGov = (l1 >> 3) AND 7
 sysEco = h0 AND 7
 IF sysGov <= 1 THEN sysEco = sysEco OR 2
@@ -1501,6 +1576,7 @@ LOCAL INTEGER n, pz, sz, sx, ptype
 ClearSlots
 SysData
 StationBlueprint
+MissionHere
 legal = legal \ 2
 spawnEV = 0
 pz = (((gs0 >> 8) AND 7) + 6) \ 2
@@ -1523,6 +1599,7 @@ LOCAL INTEGER n, ptype
 ClearSlots
 SysData
 StationBlueprint
+MissionHere
 ptype = T_PLANET
 IF (sysTech AND 2) <> 0 THEN ptype = T_CRATER
 MATH Q_EULER RAD(35), RAD(40), 0, qA() : qA(4) = 1
@@ -1587,6 +1664,10 @@ dSpeed = 0
 inSafe = 0
 mcnt = 0
 inWitch = 1
+END SUB
+SUB MissionHere
+conHere = 0
+IF gGal = 2 AND sysX = 144 AND sysYr = 33 THEN conHere = 1
 END SUB
 SUB StationBlueprint
 IF sysTech >= 10 THEN
@@ -1889,6 +1970,13 @@ shots = shots + 1
 IF best < 0 THEN EXIT SUB
 hits = hits + 1
 dmg = lasView(vw) AND 127
+IF sTyp(best) = T_CONSTRICT THEN
+IF lasView(vw) <> LAS_MILITARY THEN
+Sfx SFX_HIT
+EXIT SUB
+ENDIF
+dmg = dmg \ 4
+ENDIF
 sEne(best) = sEne(best) - dmg
 IF sAI(best) < 128 THEN sAI(best) = sAI(best) OR 128
 IF sEne(best) <= 0 THEN
@@ -1922,6 +2010,7 @@ Sfx SFX_BOOM
 Sfx SFX_BOOMT
 sSpd(n) = 0
 sAI(n) = 0
+IF sTyp(n) = T_CONSTRICT THEN mission = mission OR MI_1DONE
 kills = kills + 1
 cashTenths = cashTenths + bBty(sBp(n))
 IF bBty(sBp(n)) > 0 THEN Message STR$(bBty(sBp(n)) / 10) + " CR"
@@ -2501,6 +2590,12 @@ LOCAL INTEGER r, i, t, ai, cnt, n
 spawnEV = spawnEV - 1
 IF spawnEV >= 0 THEN EXIT SUB
 spawnEV = 0
+IF CarryingPlans() THEN
+IF INT(RND * 256) >= 200 THEN
+IF Aggressor(T_THARGOID, 0) >= 0 THEN n = Aggressor(T_THARGON, 129)
+EXIT SUB
+ENDIF
+ENDIF
 r = INT(RND * 256)
 IF sysGov <> 0 THEN
 IF r >= 90 THEN EXIT SUB
@@ -2529,6 +2624,13 @@ IF Aggressor(T_THARGOID, ai) >= 0 THEN n = Aggressor(T_THARGON, 129)
 ENDIF
 ENDIF
 EXIT SUB
+ENDIF
+IF ConstrictorHere() THEN
+ai = 249
+IF WantConstrictor() THEN
+n = Aggressor(T_CONSTRICT, ai)
+EXIT SUB
+ENDIF
 ENDIF
 n = Aggressor(HunterShip(), ai)
 END SUB
@@ -2694,7 +2796,7 @@ IF eqOwned(EQ_BOMB) = 0 THEN Sfx SFX_BOOP : EXIT SUB
 eqOwned(EQ_BOMB) = 0
 FOR n = 2 TO nUsed - 1
 IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 THEN
-IF sTyp(n) <> T_STATION THEN Explode n
+IF sTyp(n) <> T_STATION AND sTyp(n) <> T_CONSTRICT THEN Explode n
 ENDIF
 NEXT n
 Sfx SFX_BOOM
@@ -2958,6 +3060,65 @@ dtSink = 0
 brShip = -1
 ClearSlots
 END SUB
+FUNCTION ConstrictorHere() AS INTEGER
+ConstrictorHere = conHere
+END FUNCTION
+FUNCTION AtSystem(x AS INTEGER, y AS INTEGER) AS INTEGER
+AtSystem = 0
+IF sysX = x AND sysYr = y THEN AtSystem = 1
+END FUNCTION
+SUB MissionCheck
+LOCAL INTEGER m
+GotoSystem gGal, homeSys
+SysData
+m = mission AND 3
+IF m = 0 THEN
+IF kills >= 256 AND gGal <= 2 THEN
+mission = mission OR MI_1RUN
+MissionBrief 10, T_CONSTRICT
+ENDIF
+EXIT SUB
+ENDIF
+IF m = 3 THEN
+mission = mission AND (255 - MI_1RUN)
+kills = kills + 256
+cashTenths = cashTenths + 50000
+MissionBrief 15, 0
+EXIT SUB
+ENDIF
+IF m <> 2 THEN EXIT SUB
+IF gGal <> 3 THEN EXIT SUB
+m = mission AND 15
+IF m = MI_1DONE THEN
+IF kills >= 1280 THEN
+mission = mission OR MI_2RUN
+MissionBrief 11, 0
+ENDIF
+ELSEIF m = (MI_1DONE OR MI_2RUN) THEN
+IF AtSystem(215, 84) THEN
+mission = (mission AND 240) OR MI_1DONE OR MI_2PLANS
+MissionBrief 222, 0
+ENDIF
+ELSEIF m = (MI_1DONE OR MI_2PLANS) THEN
+IF AtSystem(63, 72) THEN
+mission = mission OR MI_2RUN
+energyUnit = 2
+MissionBrief 223, 0
+ENDIF
+ENDIF
+END SUB
+FUNCTION CarryingPlans() AS INTEGER
+CarryingPlans = 0
+IF (mission AND (MI_2RUN OR MI_2PLANS)) = MI_2PLANS THEN CarryingPlans = 1
+END FUNCTION
+FUNCTION WantConstrictor() AS INTEGER
+WantConstrictor = 0
+IF ConstrictorHere() = 0 THEN EXIT FUNCTION
+IF (mission AND MI_1RUN) = 0 THEN EXIT FUNCTION
+IF (mission AND MI_1DONE) <> 0 THEN EXIT FUNCTION
+IF CountType(T_CONSTRICT) > 0 THEN EXIT FUNCTION
+WantConstrictor = 1
+END FUNCTION
 SUB EquipTable
 LOCAL INTEGER i
 RESTORE dat_equip
@@ -3236,7 +3397,7 @@ SUB SaveCommander(f$)
 LOCAL INTEGER i, fn
 fn = 1
 OPEN f$ FOR OUTPUT AS #fn
-PRINT #fn, "elite-commander 2"
+PRINT #fn, "elite-commander 3"
 PRINT #fn, gGal
 PRINT #fn, homeSys
 PRINT #fn, cashTenths
@@ -3247,6 +3408,7 @@ PRINT #fn, legal
 PRINT #fn, pMissl
 FOR i = 0 TO 3 : PRINT #fn, lasView(i) : NEXT i
 PRINT #fn, energyUnit
+PRINT #fn, mission
 FOR i = 0 TO NGOODS - 1 : PRINT #fn, cargo(i) : NEXT i
 FOR i = 0 TO NEQUIP - 1 : PRINT #fn, eqOwned(i) : NEXT i
 CLOSE #fn
@@ -3259,7 +3421,7 @@ IF DIR$(f$, FILE) = "" THEN EXIT FUNCTION
 fn = 1
 OPEN f$ FOR INPUT AS #fn
 LINE INPUT #fn, hd$
-IF hd$ <> "elite-commander 2" THEN
+IF hd$ <> "elite-commander 2" AND hd$ <> "elite-commander 3" THEN
 CLOSE #fn
 EXIT FUNCTION
 ENDIF
@@ -3273,6 +3435,8 @@ INPUT #fn, legal
 INPUT #fn, pMissl
 FOR i = 0 TO 3 : INPUT #fn, lasView(i) : NEXT i
 INPUT #fn, energyUnit
+mission = 0
+IF hd$ = "elite-commander 3" THEN INPUT #fn, mission
 FOR i = 0 TO NGOODS - 1 : INPUT #fn, cargo(i) : NEXT i
 FOR i = 0 TO NEQUIP - 1 : INPUT #fn, eqOwned(i) : NEXT i
 CLOSE #fn
@@ -3456,7 +3620,10 @@ frames = frames + 1
 SoundService
 LOOP UNTIL dead OR docked
 tFlight = tFlight + TIMER - t0
-IF docked THEN HangarScreen
+IF docked THEN
+HangarScreen
+MissionCheck
+ENDIF
 END SUB
 SUB PauseGame
 LOCAL INTEGER k

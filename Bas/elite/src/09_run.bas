@@ -33,7 +33,13 @@ IF DEMOFRAMES = 0 THEN
 
 ELSE
 
-  IF DEMOSCENE = 5 THEN
+  IF DEMOSCENE = 6 THEN
+    MissionScene
+    FRAMEBUFFER CLOSE
+    MODE 1
+    PRINT "missions done,"; shotNo; " pages"
+    END
+  ELSEIF DEMOSCENE = 5 THEN
     ' The four mission briefings, which are the whole of the long end of the
     ' token table and the only tokens that need the page layout.
     NewCommander

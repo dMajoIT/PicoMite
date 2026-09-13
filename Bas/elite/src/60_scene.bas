@@ -21,7 +21,7 @@ SUB NewCommander
   ' A new commander carries a pulse laser on the front view only.
   lasView(0) = LAS_PULSE : lasView(1) = 0 : lasView(2) = 0 : lasView(3) = 0
   lasTimer = 0 : lasFlash = 0
-  kills = 0 : dead = 0 : energyUnit = 0 : legal = 0
+  kills = 0 : dead = 0 : energyUnit = 0 : legal = 0 : mission = 0
   shots = 0 : hits = 0
   docked = 0 : dockComp = 0 : msLock = -1
   vw = 0 : inWitch = 0
@@ -100,6 +100,103 @@ SUB DemoInput(f AS INTEGER)
   SELECT CASE f
     CASE 260 TO 999 : kFaster = 1
   END SELECT
+END SUB
+
+' --- both missions, without flying any of them
+'
+' The missions are a state machine over four bits, so driving those bits
+' directly is the honest test of them: every branch of MissionCheck gets
+' taken in the order a player would take it, and each briefing is
+' photographed on the way past.  What this cannot test is the flying, which
+' is the Constrictor turning up in its own system and refusing to die to
+' anything but a military laser.
+SUB MissionScene
+  NewCommander
+
+  ' First: do the three systems the original names actually exist where it
+  ' says they do in the galaxies we generate?
+  MissionFind 2, 144, 33
+  MissionFind 3, 215, 84
+  MissionFind 3, 63, 72
+
+  PRINT
+  PRINT "mission byte at the start:"; mission
+  ' Not enough kills yet, so nothing should happen.
+  kills = 100 : gGal = 1
+  MissionCheck
+  PRINT "after docking with 100 kills:"; mission
+
+  kills = 300
+  MissionCheck
+  PRINT "after docking with 300 kills:"; mission; " (expect 1)"
+
+  ' In the Constrictor's system now, with the job on.  conHere is what the
+  ' arrival code works out; setting it here stands in for flying there.
+  gGal = 2 : conHere = 1
+  PRINT "in its system, want one?"; WantConstrictor(); " (expect 1)"
+  conHere = 0
+  PRINT "somewhere else, want one?"; WantConstrictor(); " (expect 0)"
+
+  ' Shoot it down, and dock.
+  mission = mission OR MI_1DONE
+  gGal = 2
+  MissionCheck
+  PRINT "after killing it and docking:"; mission; " (expect 2)"
+  PRINT "  kills"; kills; " (expect 556)  cash"; cashTenths / 10; " Cr"
+
+  ' Mission two needs the third galaxy and a much better rating.
+  gGal = 3
+  MissionCheck
+  PRINT "third galaxy, 556 kills:"; mission; " (expect 2)"
+  kills = 1300
+  MissionCheck
+  PRINT "third galaxy, 1300 kills:"; mission; " (expect 6)"
+
+  ' Ceerdi, where the plans are picked up.  MissionCheck puts the system
+  ' variables back on homeSys, so the fixture has to move homeSys itself.
+  MissionGoto 3, 215, 84
+  MissionCheck
+  PRINT "docked at Ceerdi:"; mission; " (expect 10)"
+  PRINT "  carrying the plans?"; CarryingPlans(); " (expect 1)"
+
+  ' Birera, where they are handed over.
+  MissionGoto 3, 63, 72
+  MissionCheck
+  PRINT "docked at Birera:"; mission; " (expect 14)"
+  PRINT "  carrying the plans?"; CarryingPlans(); " (expect 0)"
+  PRINT "  energy unit"; energyUnit; " (expect 2, the navy's own)"
+END SUB
+
+' Make the system at these coordinates the one we are docked at.
+SUB MissionGoto(g AS INTEGER, x AS INTEGER, y AS INTEGER)
+  LOCAL INTEGER i
+  gGal = g
+  SetGalaxy g
+  FOR i = 0 TO 255
+    SysData
+    IF sysX = x AND sysYr = y THEN EXIT FOR
+    NextSystem
+  NEXT i
+  homeSys = i : selSys = i
+  homeX = sysX : homeY = sysY * 2
+END SUB
+
+' Which system sits at these galactic coordinates, if any.
+SUB MissionFind(g AS INTEGER, x AS INTEGER, y AS INTEGER)
+  LOCAL INTEGER i, found
+  found = -1
+  SetGalaxy g
+  FOR i = 0 TO 255
+    SysData
+    IF sysX = x AND sysYr = y THEN found = i : EXIT FOR
+    NextSystem
+  NEXT i
+  IF found < 0 THEN
+    PRINT "galaxy"; g; " ("; STR$(x); ","; STR$(y); ") - nothing there"
+  ELSE
+    PRINT "galaxy"; g; " ("; STR$(x); ","; STR$(y); ") is "; SysName$()
+  ENDIF
+  SetGalaxy gGal
 END SUB
 
 SUB SaveShot(f AS INTEGER)

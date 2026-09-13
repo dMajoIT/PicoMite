@@ -10,7 +10,6 @@ polygon builder do all of the work; this picks the ones we want out of the
 
 Left out on purpose, and why:
 
-  Constrictor            the target of mission 1, which we do not have
   Elite logo             not a ship
   Moray                  famously unreachable: the 6502SP picks a lone bounty
                          hunter from types 24 to 27 and the Moray is 28, so no
@@ -43,6 +42,7 @@ EXTRAS = [
     ("SHUTTLE", "Shuttle"),
     ("TRANSPORTER", "Transporter"),
     ("DODO", "Dodo"),
+    ("CONSTRICTOR", "Constrictor"),
 ]
 
 # Everything the scratch mesh buffers in 00_main.bas have to hold.

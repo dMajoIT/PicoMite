@@ -19,8 +19,10 @@ SUB EnergyBomb
   eqOwned(EQ_BOMB) = 0                  ' one use and it is spent
   FOR n = 2 TO nUsed - 1
     IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 THEN
-      ' A station is far too big to care.
-      IF sTyp(n) <> T_STATION THEN Explode n
+      ' A station is far too big to care, and so is the Constrictor: its new
+      ' shield generator is the whole point of the mission, and a bomb would
+      ' be a cheap way round the military laser the briefing sends you to buy.
+      IF sTyp(n) <> T_STATION AND sTyp(n) <> T_CONSTRICT THEN Explode n
     ENDIF
   NEXT n
   Sfx SFX_BOOM

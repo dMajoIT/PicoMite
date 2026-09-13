@@ -43,7 +43,8 @@ CONST DASHY = 176                  ' first dashboard row
 CONST VPLANE = 256                 ' focal length in pixels, as the BBC
 CONST DEMOFRAMES = 0               ' >0 runs a scripted demo and exits; 0 plays
 CONST DEMOSCENE = 1                ' 1 flight and combat, 2 docking, 3 the docked
-                                   ' screens, 4 the ship hangar, 5 the briefings
+                                   ' screens, 4 the ship hangar, 5 the briefings,
+                                   ' 6 both missions end to end
 CONST PANY = VCY - (SCRH \ 2 - 1)  ' shifts Draw3D's centre up to VCY
 
 ' ------------------------------------------------------- universe size
@@ -52,7 +53,7 @@ CONST PANY = VCY - (SCRH \ 2 - 1)  ' shifts Draw3D's centre up to VCY
 ' computer to spend, allows eighteen and seven.  Only maxObj of them can hold
 ' a mesh at once - the rest are drawn as the original's distant dashes.
 CONST NSLOT = 20
-CONST NBP = 28                     ' twelve from the cassette, sixteen more from
+CONST NBP = 29                     ' twelve from the cassette, seventeen more from
                                    ' the 6502 Second Processor version
 CONST SLOT_PLANET = 0              ' FRIN slot 0 is always the planet
 CONST SLOT_STAR = 1                ' slot 1 is the sun or the station
@@ -78,7 +79,10 @@ CONST T_BOULDER = 24, T_SPLINTER = 25, T_HERMIT = 26
 ' Station traffic: the two the station sends out, and the two the hangar
 ' shows you standing on the deck when you dock.
 CONST T_SHUTTLE = 27, T_TRANSPORT = 28
-CONST NTYPE = 28                   ' highest ship type number
+' The ship mission one is about, which appears in exactly one system and is
+' the only thing in the game a military laser is needed for.
+CONST T_CONSTRICT = 29
+CONST NTYPE = 29                   ' highest ship type number
 
 ' ============================================================ globals
 ' Player.  pRoll and pPitch are the original's JSTX and JSTY: 1..255
@@ -155,7 +159,11 @@ DIM FLOAT prof(5)                  ' cls, stardust, planet, ships, dash, move
 ' seeds decode to.  The two-letter fragments names are built from are
 ' held as one string and indexed rather than as 32 separate entries.
 DIM INTEGER gs0, gs1, gs2, gSys, gGal
-DIM INTEGER sysX, sysY, sysGov, sysEco, sysTech, sysPop, sysProd, sysRad
+' sysY is halved, because that is what both charts plot and what the distance
+' between two systems is worked out from.  sysYr is the original's own QQ1,
+' unhalved: the missions name their systems by exact coordinates and the
+' bottom bit of y is the difference between one system and its neighbour.
+DIM INTEGER sysX, sysY, sysYr, sysGov, sysEco, sysTech, sysPop, sysProd, sysRad
 ' Where we are, where the chart cursor is, and which system it picked.
 ' All in raw galaxy coordinates: y is the unhalved value, and the charts
 ' halve it themselves.
@@ -172,6 +180,15 @@ CONST DIGRAPHS = "ALLEXEGEZACEBISOUSESARMAINDIREA?ERATENBERALAVETIEDORQUANTEISRI
 ' the nearest whole number is 2.
 CONST LASPULSE = 2
 DIM INTEGER lasTimer, lasFlash, kills, dead, energyUnit, shots, hits
+' The original's TP: four bits that are the whole of both missions.  It is
+' saved with the commander, because a mission half done has to survive being
+' put down.
+'   bit 0  mission 1 in progress     bit 2  mission 2 started
+'   bit 1  mission 1 completed       bit 3  the plans are aboard
+CONST MI_1RUN = 1, MI_1DONE = 2, MI_2RUN = 4, MI_2PLANS = 8
+DIM INTEGER mission
+' Set while we are in the Constrictor's own system, worked out on arrival.
+DIM INTEGER conHere
 ' A mount for each view, holding that laser's power, as the original: 15 is
 ' a pulse laser and 143 a beam.  A new commander has one on the front only.
 DIM INTEGER lasView(3)

@@ -51,6 +51,16 @@ SUB FireLaser
   hits = hits + 1
 
   dmg = lasView(vw) AND 127
+  ' Nothing but a military laser marks a Constrictor, and then only at a
+  ' quarter of what it would do to anything else - which is the whole reason
+  ' the briefing tells you to go and buy one.
+  IF sTyp(best) = T_CONSTRICT THEN
+    IF lasView(vw) <> LAS_MILITARY THEN
+      Sfx SFX_HIT
+      EXIT SUB
+    ENDIF
+    dmg = dmg \ 4
+  ENDIF
   sEne(best) = sEne(best) - dmg
   ' Anything hit turns on us, whatever it was doing before.
   IF sAI(best) < 128 THEN sAI(best) = sAI(best) OR 128
@@ -95,6 +105,9 @@ SUB Explode(n AS INTEGER)
   Sfx SFX_BOOMT
   sSpd(n) = 0
   sAI(n) = 0
+  ' Shooting down the Constrictor is the whole of mission one; the reward
+  ' comes the next time we dock, which is where the Navy can thank us for it.
+  IF sTyp(n) = T_CONSTRICT THEN mission = mission OR MI_1DONE
   ' Anything destroyed counts towards the combat rating, and pays out
   ' whatever bounty its blueprint carries - which is nothing for most
   ' things and half a credit for an asteroid.

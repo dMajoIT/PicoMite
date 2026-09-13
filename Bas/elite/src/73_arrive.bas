@@ -20,6 +20,7 @@ SUB ArriveInSystem
   ClearSlots
   SysData
   StationBlueprint
+  MissionHere
   ' Arriving somewhere new halves what is on our record: nobody this far
   ' away has heard the details, and the original is as forgiving as that.
   legal = legal \ 2
@@ -53,6 +54,7 @@ SUB LaunchState
   ClearSlots
   SysData
   StationBlueprint
+  MissionHere
   ptype = T_PLANET
   IF (sysTech AND 2) <> 0 THEN ptype = T_CRATER
   MATH Q_EULER RAD(35), RAD(40), 0, qA() : qA(4) = 1
@@ -146,6 +148,14 @@ END SUB
 ' leave sysTech pointing at whatever the cursor last touched.  The level
 ' here is the original's own raw one, which the data screen shows as one
 ' more, so a Dodo is a screen that says technology level 11 or better.
+' Is this the system mission one's Constrictor is hiding in?  Settled here,
+' where SysData has just run for the system we are actually in, because the
+' chart screens leave the system variables pointing anywhere at all.
+SUB MissionHere
+  conHere = 0
+  IF gGal = 2 AND sysX = 144 AND sysYr = 33 THEN conHere = 1
+END SUB
+
 SUB StationBlueprint
   IF sysTech >= 10 THEN
     tBp(T_STATION) = BP_DODO

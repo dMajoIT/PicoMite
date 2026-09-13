@@ -241,9 +241,7 @@ From the **disc version** (and the Master, which is built on it):
   game awards nothing for junk; this and the disc version award for everything.
 - A real docking computer that flies you in, which is where our flown approach
   comes from.
-- The two missions: the Constrictor, and the Thargoid documents run.
-- The energy bomb killing a Constrictor, a disc access menu and printer
-  support.
+- A disc access menu and printer support.
 - Ships carrying the NEWB flags - the pirate, trader, hostile, cop and innocent
   markers that the disc version's spawner works from. Ours reproduces the
   cassette version's own spawning rules instead.
@@ -276,6 +274,21 @@ Taken from it so far:
   boulders, a boulder gives splinters, and a splinter scooped is minerals - or,
   one time in eight, gem-stones. Anything else you shoot a rock with simply
   destroys it, as before.
+- **The two missions.** The whole of both of them is four bits in one byte -
+  the original calls it TP - and every branch of what happens when you dock
+  comes out of those four bits. Reach a combat rating of Competent with 256
+  kills in one of the first two galaxies and the Navy asks you to hunt down a
+  stolen Constrictor; it is hiding in the second galaxy at galactic
+  coordinates (144, 33), which our own galaxy generator turns into Orarra,
+  and nothing but a military laser will scratch it - then only at a quarter
+  of the damage it would do to anything else. Five thousand credits and 256
+  kill points for bringing it down. In the third galaxy, once that is done
+  and you are most of the way from Dangerous to Deadly, Naval Intelligence
+  wants the Thargoid defence plans carried from Ceerdi (215, 84) to Birera
+  (63, 72); while they are aboard the Thargoids come after you on one
+  spawning pass in five, and delivering them earns the Navy's own energy
+  unit, which recharges half as fast again as the one the shops sell.
+  The briefings are the original's own words, from the extended token table.
 - **The Dodo station.** A system of technology level 10 or above has a
   dodecahedron rather than a Coriolis - which is to say a screen that reads
   technology level 11 or better, because the data screen shows one more than
@@ -343,8 +356,8 @@ much spare and a great deal more:
   Shuttle and the Transporter joined them with the hangar, which is where the
   fat end of that list is easiest to see.
 
-Still missing from it: the Constrictor, which belongs to a mission we do not
-have; the log tables; and Bitstik support. The last two are meaningless here. The Moray is missing from
+Still missing from it: the log tables and Bitstik support, both of which are
+meaningless here. The Moray is missing from
 the Second Processor version too - it picks a lone bounty hunter from types 24
 to 27 and the Moray is 28, so nothing in that game ever spawns one either.
 

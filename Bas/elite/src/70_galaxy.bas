@@ -72,6 +72,7 @@ SUB SysData
   l1 = gs1 AND 255
   sysX = h1
   sysY = h0 >> 1
+  sysYr = h0
   sysGov = (l1 >> 3) AND 7
   sysEco = h0 AND 7
   ' An anarchy or a feudal state can never be rich.

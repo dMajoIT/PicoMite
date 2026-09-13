@@ -119,7 +119,10 @@ SUB RunFlight
   ' Inside at last.  The hangar goes here rather than in DoDock because one
   ' more frame of the space view is drawn after docked goes up, and it would
   ' paint straight over it.
-  IF docked THEN HangarScreen
+  IF docked THEN
+    HangarScreen
+    MissionCheck
+  ENDIF
 END SUB
 
 ' Stop the world.  The frame that is already on the screen stays there, so

@@ -343,7 +343,7 @@ SUB SaveCommander(f$)
   LOCAL INTEGER i, fn
   fn = 1
   OPEN f$ FOR OUTPUT AS #fn
-  PRINT #fn, "elite-commander 2"
+  PRINT #fn, "elite-commander 3"
   PRINT #fn, gGal
   PRINT #fn, homeSys
   PRINT #fn, cashTenths
@@ -354,6 +354,7 @@ SUB SaveCommander(f$)
   PRINT #fn, pMissl
   FOR i = 0 TO 3 : PRINT #fn, lasView(i) : NEXT i
   PRINT #fn, energyUnit
+  PRINT #fn, mission
   FOR i = 0 TO NGOODS - 1 : PRINT #fn, cargo(i) : NEXT i
   FOR i = 0 TO NEQUIP - 1 : PRINT #fn, eqOwned(i) : NEXT i
   CLOSE #fn
@@ -367,7 +368,10 @@ FUNCTION LoadCommander(f$) AS INTEGER
   fn = 1
   OPEN f$ FOR INPUT AS #fn
   LINE INPUT #fn, hd$
-  IF hd$ <> "elite-commander 2" THEN
+  ' Version 2 files have everything but the mission byte, and are still
+  ' worth loading: a commander saved before the missions existed simply has
+  ' not started either of them.
+  IF hd$ <> "elite-commander 2" AND hd$ <> "elite-commander 3" THEN
     CLOSE #fn
     EXIT FUNCTION
   ENDIF
@@ -381,6 +385,10 @@ FUNCTION LoadCommander(f$) AS INTEGER
   INPUT #fn, pMissl
   FOR i = 0 TO 3 : INPUT #fn, lasView(i) : NEXT i
   INPUT #fn, energyUnit
+  ' A version 2 file stops short of the mission byte, so it keeps the nought
+  ' a new commander starts with.
+  mission = 0
+  IF hd$ = "elite-commander 3" THEN INPUT #fn, mission
   FOR i = 0 TO NGOODS - 1 : INPUT #fn, cargo(i) : NEXT i
   FOR i = 0 TO NEQUIP - 1 : INPUT #fn, eqOwned(i) : NEXT i
   CLOSE #fn
