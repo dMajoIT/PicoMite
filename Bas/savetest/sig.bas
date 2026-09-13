@@ -3,19 +3,21 @@
 '
 '  The region to check is program memory, but a program that checksums
 '  program memory has to be IN program memory, which changes what it is
-'  checksumming.  So the driver snapshots the region with FLASH SAVE 1
+'  checksumming.  So the driver snapshots the region with FLASH SAVE
 '  first - a straight copy of all MAX_PROG_SIZE bytes - and this reads
 '  that back from the slot instead.
 '
-'  The checksum is over the whole region, not just the program text, so
-'  it covers the CSUB and font binaries that passes 2 and 3 append after
-'  the terminator, and the erased 0xFF tail as well.  Any single byte
-'  written to a different place, or a size word back-filled wrongly,
-'  changes it.
+'  The hashes cover the whole region, so they include the CSUB and font
+'  binaries that passes 2 and 3 append after the program text, and the
+'  erased 0xFF tail as well.  binbase and the blob list localise any
+'  difference: a change in binbase is pass 1 writing a different amount
+'  of program text, a change only in the blob sizes or the hashes is
+'  pass 2 or pass 3.
 ' =====================================================================
 
 DIM INTEGER base, a, w, n, k
-DIM INTEGER h1, h2, plen, blobs
+DIM INTEGER h1, h2, binbase, blobs
+DIM head$ LENGTH 40
 
 base = MM.INFO(FLASH ADDRESS 1)
 n = 147456 / 8                       ' MAX_PROG_SIZE in 64 bit words
@@ -29,20 +31,23 @@ FOR k = 0 TO n - 1
   h2 = (h2 + (h1 XOR k)) AND &H3FFFFFFFFFFFFFF
 NEXT k
 
-' Where the program text ends: the two zero bytes, then the 0xFF header of
-' the binary area.  Reported separately because it localises a difference -
-' a change here is pass 1, a change only in the checksum is pass 2 or 3.
-plen = 0
+' Where the program text ends.  Looking for two zero bytes does not work -
+' tokenised BASIC is full of them - so do what the firmware does and find
+' the first 0xFF, which is the header of the CSUB and font area.
+binbase = 0
 FOR k = 0 TO 147454
-  IF PEEK(BYTE base + k) = 0 AND PEEK(BYTE base + k + 1) = 0 THEN plen = k : EXIT FOR
+  IF PEEK(BYTE base + k) = &HFF THEN binbase = k : EXIT FOR
 NEXT k
 
-' How many CSUB/font blobs follow, and how long each says it is.
-a = plen
-DO WHILE PEEK(BYTE base + a) <> &HFF AND a < 147452
-  a = a + 1
-LOOP
-a = a + 4
+' The first bytes of the image, so that a whole-image shift reads as a
+' shift rather than as an unexplained difference in the hashes.
+head$ = ""
+FOR k = 0 TO 15
+  head$ = head$ + HEX$(PEEK(BYTE base + k), 2)
+NEXT k
+
+' Each CSUB or font blob, and the size word pass 3 back-filled into it.
+a = binbase + 4
 blobs = 0
 DO WHILE a < 147448
   w = PEEK(WORD base + a + 4)
@@ -52,7 +57,8 @@ DO WHILE a < 147448
   a = a + w + 8
 LOOP
 
-PRINT "proglen  "; plen
+PRINT "head     "; head$
+PRINT "binbase  "; binbase
 PRINT "blobs    "; blobs
 PRINT "hash1    "; HEX$(h1, 16)
 PRINT "hash2    "; HEX$(h2, 16)

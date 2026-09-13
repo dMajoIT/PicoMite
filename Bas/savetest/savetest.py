@@ -37,12 +37,27 @@ import pc3
 BASELINE = os.path.join(HERE, "baseline.txt")
 
 
+def free_slot(b):
+    """A flash slot that is not already in use.
+
+    The snapshot needs a whole slot, and a board on a bench usually has
+    something in one of them.  Read FLASH LIST and take the first that is
+    free rather than assuming slot 1, which is how a test quietly destroys
+    somebody's work.
+    """
+    out = b.cmd("FLASH LIST", 30)
+    for n in (1, 2, 3):
+        if re.search(r"Slot %d available" % n, out):
+            return n
+    raise SystemExit("no free flash slot for the snapshot:" + chr(10) + out)
+
+
 def field(out, name):
     m = re.search(r"^%s\s+(.*)$" % re.escape(name), out, re.M)
     return " ".join(m.group(1).split()) if m else None
 
 
-def snapshot(b, label, load):
+def snapshot(b, label, load, slot):
     """Put the fixture into program memory by one route, then measure it."""
     lines = ["[%s]" % label]
 
@@ -55,9 +70,11 @@ def snapshot(b, label, load):
 
     # A program cannot checksum the memory it is running from, so copy the
     # whole region into a flash slot and read that instead.
-    b.cmd("FLASH ERASE 1", 60)
-    b.cmd("FLASH SAVE 1", 60)
-    b.xmodem_send("A:/sig.bas", open(os.path.join(HERE, "sig.bas"), "rb").read())
+    b.cmd("FLASH ERASE %d" % slot, 60)
+    b.cmd("FLASH SAVE %d" % slot, 60)
+    sig = open(os.path.join(HERE, "sig.bas"), encoding="ascii").read()
+    sig = sig.replace("FLASH ADDRESS 1", "FLASH ADDRESS %d" % slot)
+    b.xmodem_send("A:/sig.bas", sig.encode("ascii"))
     b.cmd('LOAD "A:/sig.bas"', 120)
     out = b.cmd("RUN", 300)
     if "rror" in out:
@@ -66,9 +83,9 @@ def snapshot(b, label, load):
         ln = ln.strip()
         if ln.startswith("blob "):
             lines.append(" ".join(ln.split()))
-    for k in ("proglen", "blobs", "hash1", "hash2"):
+    for k in ("head", "binbase", "blobs", "hash1", "hash2"):
         lines.append("%-9s%s" % (k, field(out, k)))
-    b.cmd("FLASH ERASE 1", 60)
+    b.cmd("FLASH ERASE %d" % slot, 60)
     return lines
 
 
@@ -81,6 +98,8 @@ def main():
         b.attention()
         report.append("device   " + " ".join(b.cmd("PRINT MM.DEVICE$, MM.VER", 15).split()))
         b.cmd("LIBRARY DELETE", 60)
+        slot = free_slot(b)
+        print("using flash slot %d for the snapshot" % slot)
 
         # Route 1: LOAD from a file.  FileIO's loader -> SaveProgramToFlash.
         def by_load():
@@ -88,12 +107,12 @@ def main():
             out = b.cmd('LOAD "A:/fixture.bas"', 180)
             if "rror" in out:
                 raise SystemExit("LOAD failed: " + " ".join(out.split()))
-        report += snapshot(b, "LOAD from file", by_load)
+        report += snapshot(b, "LOAD from file", by_load, slot)
 
         # Route 2: AUTOSAVE, which tokenises from the console instead.
         def by_autosave():
             b.upload(fixture.decode("ascii"))
-        report += snapshot(b, "AUTOSAVE from console", by_autosave)
+        report += snapshot(b, "AUTOSAVE from console", by_autosave, slot)
     finally:
         b.close()
 

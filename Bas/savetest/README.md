@@ -37,11 +37,16 @@ For each route into program memory:
 | `fontw`, `fonth` | the test font's metrics - proves the `DefineFont` branch |
 | `csub1`, `csub2` | a CSUB's answers for known inputs |
 | `blob n at a size s` | every CSUB/font blob, where it landed, and the size word back-filled into it |
-| `proglen` | length of the tokenised program text |
+| `head` | the first 16 bytes, so a whole-image shift reads as a shift |
+| `binbase` | where the program text ends and the binary area starts |
 | `hash1`, `hash2` | two running hashes over all `MAX_PROG_SIZE` bytes of the region |
 
-The blob lines and `proglen` localise a difference - a change in `proglen`
-is pass 1, a change only in the blob sizes or the hashes is pass 2 or 3.
+The blob lines and `binbase` localise a difference: a change in `binbase` is
+pass 1 writing a different amount of program text, a change only in the blob
+sizes or the hashes is pass 2 or 3.
+
+`binbase` is coarse on purpose - the binary area always starts on a 256-byte
+boundary, so it only moves in whole blocks. The hashes catch everything finer.
 
 The CSUB is the sharp end. `csubtest.c` computes a sum and a sixteen-round mix
 of its two arguments, and `expected.txt` carries the answers worked out
@@ -72,6 +77,39 @@ running from, so the driver snapshots the region with `FLASH SAVE 1` and
 | `savetest.py` | the driver |
 | `expected.txt` | the CSUB's answers, computed on the host |
 | `baseline.txt` | the recorded pre-change signature |
+
+## The baseline, and what it already proves
+
+    blob 1 at 2308 size 140      the CSUB
+    blob 2 at 2456 size 68       the font
+    binbase  2304                same by both routes
+    csub1    6912 1957857340     matches expected.txt
+    csub2    -92 1415161148      matches expected.txt
+
+Both blob sizes are exactly what they should be from first principles: the
+CSUB is 136 bytes of `.text` plus its 4-byte entry-offset word, and the font is
+4 header bytes plus 8 characters of 8 rows. So pass 3's size back-fill is
+provably right today, and the CSUB's answers match values computed
+independently in Python - the binary landed where the runtime expects it.
+
+The two routes differ only in the program text: `LOAD` prepends a
+`'#A:/fixture.bas` header line, which the `head` field shows and the hashes
+reflect. Both still reach `binbase` 2304 because of the 256-byte alignment.
+
+## Why the runtime needs no change
+
+`CallCFunction` resolves a CSUB with
+`FindCFunction(CFunctionFlash, CmdPtr, ProgMemory)` and falls back to
+`FindCFunction(CFunctionLibrary, CmdPtr, LibMemory)`, matching on
+`CmdPtr - base`. The stored address is an offset **relative to its region's
+base**, and the lookup already knows about the library. A CSUB program copied
+verbatim into another region therefore still works - which is why one runs
+correctly from a flash slot.
+
+That also means pass 3's `FlashWriteWord((unsigned int)(p - flash_progmemory))`
+writes a **region-dependent value**, not just a region-dependent scan. It is
+the fourth hardwired site and the only one that would fail silently: get it
+wrong and the CSUB is simply never found, with no error at write time.
 
 Regenerate the CSUB with:
 

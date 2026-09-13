@@ -1,0 +1,27 @@
+device   PicoMiteHDMIWEB RP2350B 6.030204
+[LOAD from file]
+basic    338350
+fontw    8
+fonth    8
+csub1    6912 1957857340
+csub2    -92 1415161148
+blob 1 at 2308 size 140
+blob 2 at 2456 size 68
+head     01132723413A2F666978747572652E62
+binbase  2304
+blobs    2
+hash1    001581B9B67F6729
+hash2    021CD7F229B78C93
+[AUTOSAVE from console]
+basic    338350
+fontw    8
+fonth    8
+csub1    6912 1957857340
+csub2    -92 1415161148
+blob 1 at 2308 size 140
+blob 2 at 2456 size 68
+head     014A27203D3D3D3D3D3D3D3D3D3D3D3D
+binbase  2304
+blobs    2
+hash1    0181CD99817DA1CC
+hash2    01588507C2B894BE
