@@ -81,11 +81,15 @@ older = [f for f, t in uf2_times.items() if t < t_cfg]
 check("every uf2 newer than the last configuration.h commit", not older,
       ", ".join(older))
 
-# 4. every binary newer than the last firmware-affecting commit
-t_fw = commit_time(FIRMWARE_PATHS)
+# 4. every binary newer than the last firmware-affecting commit.  Version.h
+#    is excluded: the version bump is committed AFTER the build by
+#    definition, and the uf2 FILENAMES already prove which VERSION string
+#    was compiled in - buildpicomite.bat reads it from Version.h.
+fw_paths = FIRMWARE_PATHS + [":(exclude)Version.h"]
+t_fw = commit_time(fw_paths)
 older = [f for f, t in uf2_times.items() if t < t_fw]
 check("every uf2 newer than the last firmware commit (%s)" % git("log", "-1",
-      "--format=%h", "--", *FIRMWARE_PATHS), not older, ", ".join(older))
+      "--format=%h", "--", *fw_paths), not older, ", ".join(older))
 
 # 5. no firmware source edited but not committed (mtimes cannot see this)
 dirty = git("status", "--porcelain", "--", *FIRMWARE_PATHS)
