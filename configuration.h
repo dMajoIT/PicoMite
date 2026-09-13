@@ -653,7 +653,22 @@ extern "C"
 #define PICOMITERP2350 (defined(PICOMITE) && defined(rp2350))
 #define WEBRP2350 (defined(rp2350) && defined(PICOMITEWEB))
 #define BTRP2350 (defined(rp2350) && defined(PICOMITEBT))
-#define PICOCALC ((defined(PICOMITE) || defined(PICOMITEWEB)) && !defined(USBKEYBOARD))
+/* PicoCalc support as a whole: the southbridge keyboard driver, the battery
+ * and BIOS-version readers, the two backlight channels, TestPicoCalc() and the
+ * OPTION ... PICOCALC configuration. Excluded from the cut-down MIN build,
+ * which has no room for a platform it is never flashed onto - and excluding it
+ * here is only half the job, so every site that names PICOCALC, CONFIG_PICOCALC
+ * or "PicoCalc" outside this gate (the OPTION parser, OPTION LIST, the platform
+ * listing) carries the same #if. */
+#define PICOCALC ((defined(PICOMITE) || defined(PICOMITEWEB)) && !defined(USBKEYBOARD) && !defined(PICOMITEMIN))
+/* KEYDOWN() served from the PicoCalc's own keyboard: CheckPicoCalcKeyboard()
+ * keeps a held-key table and drains several FIFO events per poll instead of
+ * one. Confined to the four variants a PicoCalc is actually built as - PICO,
+ * WEB, PICORP2350, WEBRP2350 - so it stays out of the BT builds, whose keyboard
+ * is BLE rather than the southbridge. Where this is false but PICOCALC is true
+ * the driver behaves exactly as it did before: one event per poll, no held-key
+ * tracking. */
+#define PICOCALC_KEYDOWN (PICOCALC && !defined(PICOMITEBT) && !defined(PICOMITEBTH))
 /* BLIT MEMORY332 (the RGB332 count+value RLE blitter) is only meaningful where
  * there is an RGB332 display: the RP2350 SPI-display PicoMite builds (PICO /
  * PICOUSB / PICOBT / PICOBTH RP2350, via the NEXTGEN buffered RGB332 panels)

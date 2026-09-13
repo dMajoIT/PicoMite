@@ -3986,48 +3986,179 @@ void MIPS16 cmd_camera(void)
 #endif
 #endif
 #if PICOCALC
-void MIPS16 CheckPicoCalcKeyboard(int noerror, int read)
+/* ============================================================================
+ * PicoCalc keyboard: FIFO decode, and a held-key table where PICOCALC_KEYDOWN.
+ *
+ * What the STM32 southbridge actually reports, measured on a PicoCalc by
+ * reading register 9 directly over the system I2C bus (Bas/pckeyprobe.bas):
+ *
+ *   ordinary keys  press(1), then press(1) again every ~121ms after a ~322ms
+ *                  typematic delay, then release(3) exactly once
+ *   modifiers      press(1) once, then hold(2) every ~121ms while held, then
+ *                  release(3) once - Shift 0xa2/0xa3, Ctrl 0xa5, Alt 0xa1
+ *   Shift/CapsLock applied by the BIOS to the character itself, so 'a' arrives
+ *                  as 0x41 not 0x61 and the modifier is consumed here
+ *
+ * Several keys can be down together and each repeats on its own cycle, so a
+ * held-key table can be built from press and release alone.  The repeats
+ * double as a keep-alive: anything still down re-announces itself well inside
+ * PC_KEY_STALE_US, so a release lost to an I2C timeout or a FIFO overflow
+ * clears itself rather than sticking forever.  That matters because the BIOS
+ * has no "keys currently down" register to resynchronise against.
+ * ==========================================================================*/
+#if PICOCALC_KEYDOWN
+extern int PS2KeyDown[7];      // input/Keyboard.c - what fun_keydown() reads
+extern volatile char CapsLock; // input/Keyboard.c
+
+#define PC_KEY_SLOTS 6           // KEYDOWN(1..6); PS2KeyDown[6] is the modifier mask
+#define PC_KEY_STALE_US 450000   // longer than the 322ms typematic delay
+#define PC_MAX_EVENTS_PER_POLL 4 // each event costs a ~2.5ms I2C round trip
+
+static unsigned char PCActiveRaw[PC_KEY_SLOTS]; // raw key codes, 0 = free slot
+static uint64_t PCActiveSeen[PC_KEY_SLOTS];     // when each was last announced
+static uint64_t PCModsSeen;
+
+// Record a key as down, or refresh one that already is.  PS2KeyDown[] is kept
+// packed, so KEYDOWN(1)..KEYDOWN(n) are the n keys currently held.
+static void MIPS16 PicoCalcKeyDownAdd(int raw, int mapped)
 {
-  uint16_t buff = 0x0000;
-  int i2cret = 0;
+  int i;
+  for (i = 0; i < PC_KEY_SLOTS; i++)
+  {
+    if (PCActiveRaw[i] == raw)
+    {
+      PS2KeyDown[i] = mapped; // the character can change under shift or ctrl
+      PCActiveSeen[i] = time_us_64();
+      return;
+    }
+  }
+  for (i = 0; i < PC_KEY_SLOTS; i++)
+  {
+    if (PCActiveRaw[i] == 0)
+    {
+      PCActiveRaw[i] = raw;
+      PS2KeyDown[i] = mapped;
+      PCActiveSeen[i] = time_us_64();
+      return;
+    }
+  }
+}
+
+static void MIPS16 PicoCalcKeyDownRemove(int raw)
+{
+  int i, j;
+  for (i = 0; i < PC_KEY_SLOTS; i++)
+  {
+    if (PCActiveRaw[i] != raw)
+      continue;
+    for (j = i; j < PC_KEY_SLOTS - 1; j++)
+    {
+      PCActiveRaw[j] = PCActiveRaw[j + 1];
+      PS2KeyDown[j] = PS2KeyDown[j + 1];
+      PCActiveSeen[j] = PCActiveSeen[j + 1];
+    }
+    PCActiveRaw[PC_KEY_SLOTS - 1] = 0;
+    PS2KeyDown[PC_KEY_SLOTS - 1] = 0;
+    PCActiveSeen[PC_KEY_SLOTS - 1] = 0;
+    return;
+  }
+}
+
+// Drop anything that has stopped announcing itself - see the keep-alive note.
+static void MIPS16 PicoCalcKeyDownExpire(void)
+{
+  uint64_t now = time_us_64();
+  int i;
+  for (i = 0; i < PC_KEY_SLOTS; i++)
+  {
+    if (PCActiveRaw[i] && now - PCActiveSeen[i] > PC_KEY_STALE_US)
+    {
+      PicoCalcKeyDownRemove(PCActiveRaw[i]);
+      i--;
+    }
+  }
+  if (PS2KeyDown[6] && now - PCModsSeen > PC_KEY_STALE_US)
+    PS2KeyDown[6] = 0;
+}
+
+// Modifier bits follow the PS/2 layout in input/Keyboard.c so that KEYDOWN(7)
+// means the same thing on either keyboard.  The PicoCalc has no AltGr.  Alt is
+// ambiguous by design: the BIOS sends 0xa1 for Shift+Enter as well.
+static void MIPS16 PicoCalcModEvent(int raw, int state)
+{
+  int bit;
+  switch (raw)
+  {
+  case 0xa1:
+    bit = 1; // Alt
+    break;
+  case 0xa5:
+    bit = 2; // Ctrl
+    break;
+  case 0xa2:
+    bit = 8; // Shift (left)
+    break;
+  case 0xa3:
+    bit = 128; // Shift (right)
+    break;
+  default:
+    return;
+  }
+  if (state == 3)
+    PS2KeyDown[6] &= ~bit;
+  else
+    PS2KeyDown[6] |= bit;
+  PCModsSeen = time_us_64();
+}
+#else
+#define PC_MAX_EVENTS_PER_POLL 1 // unchanged: one event per poll, no tracking
+#endif
+
+// Decode one FIFO word - state in the low byte, key code in the high byte.
+static void MIPS16 PicoCalcKeyEvent(uint16_t buff)
+{
   static int ctrlheld = 0;
-  I2C2_Sendlen = 1;       // send one byte
-  I2C_Send_Buffer[0] = 9; // the first register to read
-  I2C2_Addr = 0x1f;       // address of the device
-  I2C2_Status = 0;
-  I2C2_Timeout = (Option.SYSTEM_I2C_SLOW ? SystemI2CTimeout * 5 : SystemI2CTimeout);
+  int state = buff & 0xff;
+  int raw = buff >> 8;
 
-  i2cret = i2c_write_timeout_us(i2c1, (uint8_t)I2C2_Addr, (uint8_t *)I2C_Send_Buffer, I2C2_Sendlen, false, I2C2_Timeout * 1000);
-
-  if (i2cret != I2C2_Sendlen)
+  // Modifiers are consumed here and never delivered as characters.  Ctrl used
+  // to be taken from its hold event alone, which left a ~322ms window after
+  // Ctrl went down in which Ctrl+key still produced a plain letter; the press
+  // event now sets it too.
+  switch (raw)
   {
-    buff = 0x0000;
+  case 0xa2: // Shift (left) - the BIOS has already shifted the character
+  case 0xa3: // Shift (right)
+  case 0xa5: // Ctrl
+  case 0xc1: // CapsLk - the BIOS applies caps to the character itself
+    if (raw == 0xa5)
+      ctrlheld = (state != 3);
+#if PICOCALC_KEYDOWN
+    if (raw == 0xc1)
+    {
+      if (state == 1)
+        CapsLock = !CapsLock; // for KEYDOWN(8); nothing else reads it here
+    }
+    else
+      PicoCalcModEvent(raw, state);
+#endif
+    return;
+  default:
+    break;
+  }
+
+  if (state == 3)
+  { // released
+#if PICOCALC_KEYDOWN
+    PicoCalcKeyDownRemove(raw);
+    PicoCalcModEvent(raw, state); // Alt is both a character and a modifier
+#endif
     return;
   }
 
-  sleep_ms(2);
-
-  I2C2_Rcvlen = 2; // get 2 bytes
-  buff = 0x0000;
-
-  i2cret = i2c_read_timeout_us(i2c1, (uint8_t)I2C2_Addr, (uint8_t *)&buff, I2C2_Rcvlen, false, I2C2_Timeout * 1000);
-  if (i2cret != I2C2_Rcvlen)
-  {
-    buff = 0x0000;
-    return;
-  }
-
-  if (buff == 0xA503)
-  {
-    ctrlheld = 0;
-  }
-  else if (buff == 0xA502)
-  {
-    ctrlheld = 1;
-  }
-  else if ((buff & 0xff) == 1)
-  { // pressed
-    int c = buff >> 8;
+  if (state == 1 || state == 2)
+  { // pressed, or a repeat of a key that is still down
+    int c = raw;
     int realc = 0;
     switch (c)
     {
@@ -4124,12 +4255,8 @@ void MIPS16 CheckPicoCalcKeyboard(int noerror, int read)
     case 0x91:
       realc = 0x66;
       break; // USB_HID_KEYBOARD_KEYPAD_KEYBOARD_POWER
-    // --- Modifier keys must be consumed and ignored!
-    case 0xa2: // Shift (left)
-    case 0xa3: // Shift (right)
-    case 0xa5: // Ctrl
-    case 0xc1: // CapsLK
-      return;
+    // --- Modifier keys (0xa2/0xa3 Shift, 0xa5 Ctrl, 0xc1 CapsLk) never get
+    //     this far: they are consumed at the top of PicoCalcKeyEvent().
     default:
       realc = c;
       break;
@@ -4138,6 +4265,12 @@ void MIPS16 CheckPicoCalcKeyboard(int noerror, int read)
 
     if (c >= 'a' && c <= 'z' && ctrlheld)
       c = c - 'a' + 1;
+#if PICOCALC_KEYDOWN
+    PicoCalcKeyDownAdd(raw, c);   // idempotent - a repeat just refreshes the slot
+    PicoCalcModEvent(raw, state); // Alt is both a character and a modifier
+#endif
+    if (state != 1)
+      return; // a hold or repeat refreshes the table but types nothing
     if (c == BreakKey)
     {                                      // if the user wants to stop the progran
       MMAbort = true;                      // set the flag for the interpreter to see
@@ -4162,6 +4295,47 @@ void MIPS16 CheckPicoCalcKeyboard(int noerror, int read)
     }
   }
   return;
+}
+
+/* Poll the southbridge.  Each pass pops up to PC_MAX_EVENTS_PER_POLL events and
+ * stops the moment the FIFO reads back empty, so an idle keyboard costs exactly
+ * what it did before.  Draining matters because a chord going down or coming up
+ * queues several events at once, and at one event per 20ms poll a three-key
+ * chord would take 60ms to register and another 60ms to clear. */
+void MIPS16 CheckPicoCalcKeyboard(int noerror, int read)
+{
+  int events;
+
+  for (events = 0; events < PC_MAX_EVENTS_PER_POLL; events++)
+  {
+    uint16_t buff = 0x0000;
+    int i2cret;
+
+    I2C2_Sendlen = 1;       // send one byte
+    I2C_Send_Buffer[0] = 9; // the first register to read
+    I2C2_Addr = 0x1f;       // address of the device
+    I2C2_Status = 0;
+    I2C2_Timeout = (Option.SYSTEM_I2C_SLOW ? SystemI2CTimeout * 5 : SystemI2CTimeout);
+
+    i2cret = i2c_write_timeout_us(i2c1, (uint8_t)I2C2_Addr, (uint8_t *)I2C_Send_Buffer, I2C2_Sendlen, false, I2C2_Timeout * 1000);
+    if (i2cret != I2C2_Sendlen)
+      break;
+
+    sleep_ms(2);
+
+    I2C2_Rcvlen = 2; // get 2 bytes
+    i2cret = i2c_read_timeout_us(i2c1, (uint8_t)I2C2_Addr, (uint8_t *)&buff, I2C2_Rcvlen, false, I2C2_Timeout * 1000);
+    if (i2cret != I2C2_Rcvlen)
+      break;
+
+    if (buff == 0x0000) // the FIFO is empty
+      break;
+
+    PicoCalcKeyEvent(buff);
+  }
+#if PICOCALC_KEYDOWN
+  PicoCalcKeyDownExpire();
+#endif
 }
 void CheckKbdBacklight()
 {

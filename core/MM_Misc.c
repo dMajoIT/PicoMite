@@ -2829,8 +2829,10 @@ void MIPS16 printoptions(void)
 #endif
     if (Option.KeyboardConfig == CONFIG_I2C)
         PO2Str("KEYBOARD", "I2C");
+#if PICOCALC
     if (Option.KeyboardConfig == CONFIG_PICOCALC)
         PO2Str("KEYBOARD", "PICOCALC");
+#endif
 #ifdef rp2350
 #if defined(PICOMITEWEB) || defined(PICOMITEBT) || defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
     /* CYW43 builds: heartbeat LED is on the wireless chip, present on
@@ -3081,6 +3083,7 @@ void MIPS16 printoptions(void)
 #endif
         PRet();
     }
+#if PICOCALC
     if (strcmp((char *)Option.platform, "PicoCalc") == 0)
     {
         if (Option.BACKLIGHT_KBD)
@@ -3089,6 +3092,7 @@ void MIPS16 printoptions(void)
             PO2Int("BACKLIGHT LCD", Option.BACKLIGHT_LCD); // *EB*
     }
     else
+#endif
     {
         if (Option.BackLightLevel != 100)
             PO2Int("LCD BACKLIGHT", Option.BackLightLevel);
@@ -3829,7 +3833,9 @@ void MIPS16 configure(unsigned char *p, bool noask)
             MMPrintString("Pico-ResTouch-LCD-3.5\r\n");
             MMPrintString("Pico-ResTouch-LCD-2.8\r\n");
             MMPrintString("PICO BACKPACK\r\n");
+#if PICOCALC
             MMPrintString("PicoCalc\r\n");
+#endif
 #ifndef PICOMITEWEB
             MMPrintString("RP2040-LCD-1.28\r\n");
             MMPrintString("RP2040LCD-0.96\r\n");
@@ -4308,6 +4314,7 @@ void MIPS16 configure(unsigned char *p, bool noask)
         }
 #endif
 #ifndef USBKEYBOARD
+#if PICOCALC
         if (checkstring(p, (unsigned char *)"PICOCALC"))
         {
             format = testMODBUFF(true, 192, noask);
@@ -4352,6 +4359,7 @@ void MIPS16 configure(unsigned char *p, bool noask)
             uSec(100000);
             doreset(noask ? 2 : format);
         }
+#endif // PICOCALC
         if (checkstring(p, (unsigned char *)"GAMEMITE"))
         {
             format = testMODBUFF(true, 192, false);
@@ -5744,8 +5752,10 @@ void MIPS16 cmd_option(void)
                 Option.KeyboardConfig = CONFIG_BR;
             else if (checkstring(argv[0], (unsigned char *)"I2C"))
                 Option.KeyboardConfig = CONFIG_I2C;
+#if PICOCALC
             else if (checkstring(argv[0], (unsigned char *)"PICOCALC"))
                 Option.KeyboardConfig = CONFIG_PICOCALC;
+#endif
 #else
         if (checkstring(argv[0], (unsigned char *)"US"))
             Option.USBKeyboard = CONFIG_US;
