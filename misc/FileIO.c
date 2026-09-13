@@ -3658,7 +3658,13 @@ int FileLoadLibrary(unsigned char *fname, uint32_t *hashout, unsigned char **ima
     uint32_t h = 2166136261u; /* FNV-1a over the raw file, before crunching */
     if (!InitSDCard())
         return false;
-    initFonts();
+    /* No initFonts() here, though FileLoadProgram below starts with one.  That
+     * is safe there because it goes on to replace the whole program and
+     * PrepareProgram rebuilds the font table from the new one; here it would
+     * throw away the fonts of the program that is CURRENTLY RUNNING and put
+     * nothing back.  It cost the fonts of every program that called
+     * LIBRARY LOAD - including on the runs where the library already matched
+     * and this function returns without touching anything. */
     fnbr = FindFreeFileNbr();
     p = (char *)getFstring(fname);
     AppendDefaultExtension(p, ".bas");
