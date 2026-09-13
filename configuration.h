@@ -439,7 +439,11 @@ extern "C"
 #define MAXPID 8                   // Maximum PIDs
 #define MAX_ARG_COUNT 75           // Max arguments to PRINT, INPUT, WRITE, ON, DIM, ERASE, DATA, READ
 #define MAXCFUNCTION 20            // Maximum C functions
-#define MAX3D 12                   // Maximum 3D objects (raised from 8 for the Elite port: station + 10-ship bubble)
+#define MAX3D 32                   // Maximum 3D objects.  struct3d[] is a pointer per slot, so an
+                                   // unused one costs 4 bytes and nothing else - the mesh itself is
+                                   // GetMemory'd when the object is created.  8 -> 12 for the Elite
+                                   // port's station + 10-ship bubble, then 12 -> 32 when that bubble
+                                   // grew to the 6502 Second Processor version's eighteen ships.
 #define MAXCAM 3                   // Maximum cameras
 #define MAX_3D_POLYGON_VERTICES 20 // Maximum vertices in a polygon
 #define MAXBLITBUF 64              // Maximum blit buffers
