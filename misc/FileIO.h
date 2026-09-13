@@ -370,7 +370,7 @@ extern "C"
                 float mousespeed;
                 unsigned char extensions[63];
 #else
-                unsigned char extensions[71]; // 896 bytes == 7 XMODEM blocks
+        unsigned char extensions[71]; // 896 bytes == 7 XMODEM blocks
 #endif
                 /* Hash of the source file the library was last loaded from, so
                    LIBRARY LOAD can tell "already have this one" from "about to
@@ -386,9 +386,9 @@ extern "C"
                    is 4-aligned - worth having in a packed struct, where the
                    compiler would otherwise have to take it apart byte by byte. */
                 uint32_t LIBRARY_HASH;
-                                              // #else
-                                              //                 unsigned char extensions[79];    // 896 bytes == 7 XMODEM blocks
-                                              // #endif
+                // #else
+                //                 unsigned char extensions[79];    // 896 bytes == 7 XMODEM blocks
+                // #endif
 
 #if defined(PICOMITEBT) || defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
                 /* BLE bond storage. Two virtual flash banks of 1 KB each
@@ -412,7 +412,7 @@ extern "C"
 #if !defined(PICOMITEBT) && !defined(PICOMITEBTH) && !defined(PICOMITEHDMIBTH)
         _Static_assert(sizeof(struct option_s) == 896, "struct option_s must stay 896 bytes");
 #else
-        _Static_assert(sizeof(struct option_s) == 896 + 2048, "struct option_s must stay 896 bytes plus bt_tlv");
+_Static_assert(sizeof(struct option_s) == 896 + 2048, "struct option_s must stay 896 bytes plus bt_tlv");
 #endif
         _Static_assert(offsetof(struct option_s, LIBRARY_HASH) == 892, "LIBRARY_HASH must be the last 4 bytes of the 896");
 
@@ -532,7 +532,7 @@ extern "C"
         int ForceFileClose(int fnbr);
         void ErrorCheck(int fnbr);
         int FileEOF(int fnbr);
-
+        int FileLoadLibrary(unsigned char *fname, uint32_t *hashout, unsigned char **image);
         /* ============================================================================
          * Function declarations - Character and string I/O
          * ============================================================================ */
