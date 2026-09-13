@@ -38,6 +38,7 @@ It leaves the library installed and slot 1 holding a copy of the program;
 | `main.bas` | a program that uses all of it and prints a checksum |
 | `chain_boot.bas` | the overlay launcher: owns every global and constant |
 | `chain_a.bas`, `chain_b.bas` | two overlays that share its state |
+| `regress_fileload.bas` | the RAM FILE LOAD bug, kept as a regression test |
 | `gen_bulk.py` | generates `biglib.bas` / `bigmain.bas` for the size proof |
 | `runtest.py` | drives the board and reports pass or fail |
 
@@ -150,17 +151,28 @@ Flash slots survive power-off; PSRAM slots do not, but `RAM FILE LOAD n,
 "file.bas"` tokenises a `.bas` straight off the card into a slot at boot, which
 makes them the cheapest to deploy and the easiest to update.
 
-### The trap in `RAM FILE LOAD`
+### The bug in `RAM FILE LOAD` - found here, fixed in the firmware
 
-Found here by bisection, and in no manual: **`RAM FILE LOAD` leaves the running
-program's subroutine table pointing into the slot it has just written.** The
-next call to one of your own SUBs dies with `Error : Inconsistent type suffix`,
-which names a type suffix and points at the call site, so it reads as a naming
-mistake and is not one. A CHAIN puts it right, because that re-prepares.
+`RAM FILE LOAD` is meant to be used from inside a running program: that is how
+a launcher loads the overlays it is about to chain to. But `MemLoadProgram()`
+calls `ClearRuntime()`, which NULLs the whole of `subfun[]`, and the
+`SaveContext()` / `RestoreContext()` pair around it carries the variables and
+the heap **but not the subroutine, function and label tables**. So the program
+being handed control back had no idea where its own SUBs were, and its next
+call to one of them found a null definition pointer and died with
+`Error : Inconsistent type suffix` - an error that names a type suffix, points
+at the call site, and is neither.
 
-The rule that avoids it is one a loader should follow anyway: **do the loading
-last and chain straight out of it.** `chain_boot.bas` is written that way and
-says so.
+Bisected from a working program: a SUB call *before* the load works, the
+identical call *after* it fails. `regress_fileload.bas` is that program, kept
+as a regression test.
+
+Fixed in `misc/FileIO.c` by re-preparing the current program after the restore
+when there is one to return to. Verified on a PC3 running 6.03.02b4.
+
+The rule the bug taught is still worth following, because it costs nothing:
+**a loader should do its loading last and chain straight out of it.**
+`chain_boot.bas` is written that way.
 
 ## The ceiling nobody expects: 480 global slots
 

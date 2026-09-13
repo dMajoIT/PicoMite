@@ -796,6 +796,26 @@ void MIPS16 cmd_psram(void)
         SaveContext();
         MemLoadProgram(argv[2], c);
         RestoreContext(false);
+        /* RAM FILE LOAD is meant to be used from inside a running program -
+           that is how a launcher loads the overlays it is about to CHAIN to -
+           but MemLoadProgram() calls ClearRuntime(), which NULLs the whole of
+           subfun[], and SaveContext()/RestoreContext() carry the variables and
+           the heap but not the subroutine, function and label tables.  So the
+           program we are about to hand control back to is left with no idea
+           where its own SUBs are, and its next call to one of them finds a null
+           definition pointer and dies with "Inconsistent type suffix" - an
+           error that names a type suffix, points at the call site, and is
+           neither.  Rebuild the tables from the program we are returning to; at
+           the command prompt there is nothing to return to and the next RUN
+           prepares them anyway. */
+        if (CurrentLinePtr)
+        {
+            if (PrepareProgram(true))
+            {
+                PrintPreprogramError();
+                return;
+            }
+        }
     }
     else if ((p = checkstring(cmdline, (unsigned char *)"SAVE")))
     {

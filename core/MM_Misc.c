@@ -7770,7 +7770,13 @@ void MIPS16 fun_device(void)
 #endif
 #endif
 #ifdef PICOMITEWEB
+#ifndef PICOMITEHDMIWEB
+    /* HDMIWEB also defines PICOMITEWEB but is an HDMI build, and the HDMI
+       block above has already set "PicoMiteHDMIWEB".  Without this guard
+       that gets overwritten here and MM.DEVICE$ answers "WebMite".  Same
+       reasoning as the MES_SIGNON guard in PicoMite.c. */
     strcpy((char *)sret, "WebMite");
+#endif
 #endif
 #ifdef rp2350
     if (rp2350a)

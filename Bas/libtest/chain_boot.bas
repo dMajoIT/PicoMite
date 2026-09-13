@@ -12,12 +12,11 @@
 '  bootDone is never DIMmed, so it is zero on the first entry and the DIM
 '  block runs, and one on every later entry and the block is jumped over.
 '
-'  And one trap, found by experiment and not in any manual: RAM FILE LOAD
-'  leaves the running program's subroutine table pointing into the slot it
-'  has just written, so the next call to one of your own SUBs fails with
-'  "Inconsistent type suffix".  A CHAIN puts it right, because that
-'  re-prepares.  So a loader must do its loading last and chain straight
-'  out of it, which is what this one does.
+'  This loader does its loading last and chains straight out of it.  That
+'  was once compulsory - before 6.03.02b4 a RAM FILE LOAD left the running
+'  program's subroutine table empty and the next call to one of its own
+'  SUBs died with "Inconsistent type suffix" - and it is still the right
+'  shape for a loader, so it is kept.
 ' =====================================================================
 
 IF bootDone THEN GOTO reentry
