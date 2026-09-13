@@ -181,8 +181,18 @@ constants and variables are in place before any code runs, and `RESTORE` finds
 a label in the library from the program because the two halves share one table
 of subroutine, function and label names.
 
-Measured on a PC3: the program is 78 K of the 144 K a program may have, and the
-library 13 K of its own 144 K. As one file it was 91 K.
+Measured on a PC3: the program is 80 K of the 144 K a program may have, and the
+library 19 K of its own 144 K. As one file, before the extra ships, it was 91 K.
+
+The bubble holds eighteen ships and the firmware allows 32 Draw3D objects, so
+every ship in it can be a mesh. An object is asked for when a ship comes into
+mesh range and given back when it leaves, rather than taken for life when the
+ship is created - which used to hand the pool to whichever ships arrived first
+and could leave a Cobra filling the screen drawn as a dash while a speck on the
+horizon held an object. What limits a crowded bubble now is the frame, not the
+pool: seventeen ships all close at once costs about 76 ms a frame, where five
+costs 41. The game's speed does not depend on the frame rate, so a busy moment
+looks choppy rather than running fast.
 
 The library also carries `OPTION LOCAL VARIABLES 128`, which has to be the
 first thing executed anywhere and so can only go there. MMBasic splits a fixed
@@ -262,9 +272,21 @@ much spare and a great deal more:
   to the card as `SCREEN1.BMP`, `SCREEN2.BMP` and so on - which is what CTRL-D
   does there.
 
-Still missing from it: the ship types it has and the cassette game does not
-(the Asp, the Krait, the Fer-de-lance, the Boa and the rest), the log tables,
-and Bitstik support. The last two are meaningless here.
+- **Its ships.** The cassette game has twelve designs; thirteen more are here,
+  taken from the Second Processor source through the same generator: the Krait,
+  Adder, Gecko, Cobra Mk I and Worm that fill out a pirate pack, the Asp Mk II
+  and Fer-de-Lance a lone bounty hunter flies, the Boa and Anaconda that make a
+  fat trader worth stopping, and boulders, splinters and rock hermits among the
+  rubble. They arrive by the original's own rules: a pirate group is drawn with
+  the AND of two random numbers so the small fighters come up far more often
+  than the Cobra, and a rock hermit is about one asteroid in eighty.
+
+Still missing from it: the Shuttle and the Transporter, which are station
+traffic and need the station to spawn them; the Constrictor and the Dodo, which
+belong to a mission and a second station we do not have; the log tables; and
+Bitstik support. The last two are meaningless here. The Moray is missing from
+the Second Processor version too - it picks a lone bounty hunter from types 24
+to 27 and the Moray is 28, so nothing in that game ever spawns one either.
 
 None of the rest is difficult in the way the cassette game was difficult: the
 blueprints for the Dodo and the rest are published, and the extended token

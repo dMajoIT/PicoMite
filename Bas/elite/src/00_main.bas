@@ -51,7 +51,8 @@ CONST PANY = VCY - (SCRH \ 2 - 1)  ' shifts Draw3D's centre up to VCY
 ' computer to spend, allows eighteen and seven.  Only maxObj of them can hold
 ' a mesh at once - the rest are drawn as the original's distant dashes.
 CONST NSLOT = 20
-CONST NBP = 13                     ' twelve cassette blueprints, plus the Cougar
+CONST NBP = 25                     ' twelve from the cassette, thirteen more from
+                                   ' the 6502 Second Processor version
 CONST SLOT_PLANET = 0              ' FRIN slot 0 is always the planet
 CONST SLOT_STAR = 1                ' slot 1 is the sun or the station
 
@@ -66,7 +67,14 @@ CONST T_SIDEWINDER = 1, T_VIPER = 2, T_MAMBA = 3, T_PYTHON = 4
 CONST T_COBRA3 = 5, T_THARGOID = 6, T_TRADER = 7, T_STATION = 8
 CONST T_MISSILE = 9, T_ASTEROID = 10, T_CANISTER = 11, T_THARGON = 12
 CONST T_ESCAPE = 13, T_COUGAR = 14
-CONST NTYPE = 14                   ' highest ship type number
+' The 6502 Second Processor version's ships.  The first six are the pack a
+' group of pirates is drawn from, then the two a lone bounty hunter flies, the
+' two big traders, and the rubble.
+CONST T_KRAIT = 15, T_ADDER = 16, T_GECKO = 17, T_COBRA1 = 18, T_WORM = 19
+CONST T_ASP = 20, T_FERDELANCE = 21
+CONST T_BOA = 22, T_ANACONDA = 23
+CONST T_BOULDER = 24, T_SPLINTER = 25, T_HERMIT = 26
+CONST NTYPE = 26                   ' highest ship type number
 
 ' ============================================================ globals
 ' Player.  pRoll and pPitch are the original's JSTX and JSTY: 1..255
@@ -115,7 +123,7 @@ DIM INTEGER cGreen, cYellow, cWhite, cBlack, cCyan, cDim, cRed, cSel
 DIM INTEGER cMagenta, cBlue
 
 ' Draw3D object pool.  objOwn(n) is the slot that owns object n, or -1.
-DIM INTEGER maxObj, objOwn(15)
+DIM INTEGER maxObj, objOwn(35)
 
 ' Quaternion scratch.  Draw3D and MATH both want a 5 element float array.
 DIM FLOAT qA(4), qB(4), qC(4), qV(4), qP(4), vwQ(4, 3)

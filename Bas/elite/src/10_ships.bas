@@ -13,6 +13,10 @@ SUB LoadStats
   tBp(1) = 0 : tBp(2) = 1 : tBp(3) = 2 : tBp(4) = 3 : tBp(5) = 4
   tBp(6) = 5 : tBp(7) = 4 : tBp(8) = 6 : tBp(9) = 7 : tBp(10) = 8
   tBp(11) = 9 : tBp(12) = 10 : tBp(13) = 11 : tBp(T_COUGAR) = 12
+  tBp(T_KRAIT) = 13 : tBp(T_ADDER) = 14 : tBp(T_GECKO) = 15
+  tBp(T_COBRA1) = 16 : tBp(T_WORM) = 17 : tBp(T_ASP) = 18
+  tBp(T_FERDELANCE) = 19 : tBp(T_BOA) = 20 : tBp(T_ANACONDA) = 21
+  tBp(T_BOULDER) = 22 : tBp(T_SPLINTER) = 23 : tBp(T_HERMIT) = 24
 END SUB
 
 ' Load blueprint b into the scratch mesh buffers and fill in its stats.
@@ -37,6 +41,18 @@ SUB LoadMesh(b AS INTEGER)
     CASE 10 : RESTORE dat_thargon
     CASE 11 : RESTORE dat_escape_pod
     CASE 12 : RESTORE dat_cougar
+    CASE 13 : RESTORE dat_krait
+    CASE 14 : RESTORE dat_adder
+    CASE 15 : RESTORE dat_gecko
+    CASE 16 : RESTORE dat_cobra_mk_1
+    CASE 17 : RESTORE dat_worm
+    CASE 18 : RESTORE dat_asp_mk_2
+    CASE 19 : RESTORE dat_fer_de_lance
+    CASE 20 : RESTORE dat_boa
+    CASE 21 : RESTORE dat_anaconda
+    CASE 22 : RESTORE dat_boulder
+    CASE 23 : RESTORE dat_splinter
+    CASE 24 : RESTORE dat_rock_hermit
   END SELECT
   READ bName$(b), bNv(b), bNf(b), bNfv(b), bNf0(b), bNv0(b)
   READ bCan(b), bArea(b), bBty(b), bVis(b), bEne(b), bSpd(b)
@@ -112,7 +128,6 @@ FUNCTION NewShip(t AS INTEGER, x AS FLOAT, y AS FLOAT, z AS FLOAT, q() AS FLOAT)
     sBp(n) = tBp(t)
     sEne(n) = bEne(sBp(n))
     sMis(n) = bMis(sBp(n))
-    GetObject n
   ELSE
     sBp(n) = -1                     ' planet and sun are drawn by hand
     sEne(n) = 0
@@ -166,9 +181,13 @@ SUB CopySlot(d AS INTEGER, s AS INTEGER)
 END SUB
 
 ' ------------------------------------------------- Draw3D object pool
-' A slot only needs an object while its ship is close enough to be drawn
-' as a mesh; there are fewer objects than slots, so they are handed out
-' on a first come basis and the rest of the bubble shows up as dots.
+' A slot only needs an object while its ship is close enough to be drawn as a
+' mesh, and there are fewer objects than slots: the firmware allows twelve and
+' the bubble holds eighteen ships.  So the drawing pass asks for one when a
+' ship comes into mesh range and gives it back when it leaves, rather than a
+' ship taking one for life the moment it is created - which handed the twelve
+' to whichever ships happened to arrive first and left a Cobra filling the
+' screen drawn as a dash while a speck on the horizon held an object.
 SUB GetObject(n AS INTEGER)
   LOCAL INTEGER o, b, faces, j, e
   IF sObj(n) > 0 THEN EXIT SUB

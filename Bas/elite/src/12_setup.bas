@@ -74,6 +74,15 @@ SUB ShipColours
   scaCol(T_PYTHON) = cMagenta
   scaCol(T_CANISTER) = cBlue
   scaCol(T_ESCAPE) = cBlue
+  ' The Second Processor version's own choices for its own ships: rubble red,
+  ' the big traders magenta, the Worm blue with the other junk, and the rest of
+  ' the fighters cyan like everything else.
+  shpCol(T_BOULDER) = C_RED     : scaCol(T_BOULDER) = cRed
+  shpCol(T_SPLINTER) = C_RED    : scaCol(T_SPLINTER) = cRed
+  shpCol(T_HERMIT) = C_RED      : scaCol(T_HERMIT) = cRed
+  scaCol(T_BOA) = cMagenta
+  scaCol(T_ANACONDA) = cMagenta
+  scaCol(T_WORM) = cBlue
 END SUB
 
 ' The four views are rotations of the whole universe about the vertical
@@ -95,7 +104,7 @@ SUB ProbeObjects
   LOCAL INTEGER n
   LoadMesh 0
   maxObj = 8
-  FOR n = 9 TO 15
+  FOR n = 9 TO 35
     ON ERROR SKIP 1
     Draw3D CREATE n, bNv(0), bNf(0), 1, mV(), mFc(), mF(), col(), mEc()
     IF MM.ERRNO <> 0 THEN EXIT FOR
@@ -103,7 +112,7 @@ SUB ProbeObjects
     maxObj = n
   NEXT n
   ON ERROR CLEAR
-  FOR n = 0 TO 15 : objOwn(n) = -1 : NEXT n
+  FOR n = 0 TO 35 : objOwn(n) = -1 : NEXT n
 END SUB
 
 SUB CloseAll

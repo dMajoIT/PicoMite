@@ -37,9 +37,10 @@ END SUB
 ' the blueprint's visibility byte picks mesh or dot, except below z_hi 16
 ' where the mesh always wins.
 SUB DrawShips
-  LOCAL INTEGER n, px, py, zb, c
+  LOCAL INTEGER n, px, py, zb, c, near
   FOR n = 0 TO nUsed - 1
     IF sTyp(n) <> 0 AND sBp(n) >= 0 THEN
+      near = 0
       ViewXform n
       IF tz > NEARZ THEN
         zb = tz \ ZHI
@@ -53,6 +54,8 @@ SUB DrawShips
             c = col(shpCol(sTyp(n)))
             IF py > 0 AND py < VIEWH - 2 THEN BOX px + 1, py, 3, 2, 0, c, c
           ELSE
+            near = 1
+            IF sObj(n) = 0 THEN GetObject n
             IF sObj(n) > 0 AND ABS(tx) < FARXY AND ABS(ty) < FARXY THEN
               ViewOrient n
               Draw3D ROTATE qC(), sObj(n)
@@ -60,6 +63,16 @@ SUB DrawShips
             ENDIF
           ENDIF
           IF (sFlg(n) AND 2) <> 0 THEN EnemyBeam n, px, py
+        ENDIF
+      ENDIF
+      ' Give the object back once the ship is clear of mesh range.  The margin
+      ' matters: without it a ship sitting on the threshold would close and
+      ' recreate its mesh every frame.
+      IF near = 0 AND sObj(n) > 0 THEN
+        IF tz <= NEARZ THEN
+          DropObject n
+        ELSEIF (tz \ ZHI) > bVis(sBp(n)) + 4 THEN
+          DropObject n
         ENDIF
       ENDIF
       sFlg(n) = sFlg(n) AND 253

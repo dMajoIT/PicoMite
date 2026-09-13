@@ -60,7 +60,7 @@ FUNCTION SpawnBenign() AS INTEGER
   IF RND < 0.5 THEN
     ' A Cobra Mk III on its way somewhere, with no AI at all: it will not
     ' evade, it will not shoot, and it will not thank you for either.
-    n = NewFacing(T_COBRA3, x, y, z, 180)
+    n = NewFacing(TraderShip(), x, y, z, 180)
     IF n >= 0 THEN
       sAI(n) = 0
       sSpd(n) = 16 + INT(RND * 16)
@@ -72,8 +72,17 @@ FUNCTION SpawnBenign() AS INTEGER
 
   ' The station keeps its own space clear of rocks.
   IF inSafe THEN SpawnBenign = 1 : EXIT FUNCTION
-  t = T_ASTEROID
-  IF INT(RND * 256) < 5 THEN t = T_CANISTER      ' 1.5 per cent of the time
+  ' The original's own proportions: a rock hermit about one pass in eighty, a
+  ' canister about one in fifty, and otherwise a boulder or an asteroid evenly.
+  IF INT(RND * 256) >= 252 THEN
+    t = T_HERMIT
+  ELSEIF INT(RND * 256) < 5 THEN
+    t = T_CANISTER
+  ELSEIF RND < 0.5 THEN
+    t = T_BOULDER
+  ELSE
+    t = T_ASTEROID
+  ENDIF
   n = NewFacing(t, x, y, z, 180)
   IF n >= 0 THEN
     ' Tumbling: half of them roll and travel, half pitch on the spot, and
@@ -118,12 +127,13 @@ SUB SpawnHostiles
 
   r = INT(RND * 256)
   IF r >= 200 THEN
-    ' One to four pirates, Sidewinders and Mambas, and a rest afterwards.
+    ' One to four pirates, and a rest afterwards.  The cassette game has only
+    ' Sidewinders and Mambas to send; the Second Processor version has a pack
+    ' of eight to draw from.
     cnt = INT(RND * 4)
     spawnEV = cnt
     FOR i = 0 TO cnt
-      t = INT(RND * 4) OR 1               ' 1 or 3: Sidewinder or Mamba
-      n = Aggressor(t, 0)
+      n = Aggressor(PackShip(), 0)
     NEXT i
     EXIT SUB
   ENDIF
@@ -156,8 +166,51 @@ SUB SpawnHostiles
     ENDIF
     EXIT SUB
   ENDIF
-  n = Aggressor(t, ai)
+  ' Everything but the Thargoid is a lone bounty hunter, and the Second
+  ' Processor version puts a heavier ship in that seat than the cassette game
+  ' does: a Cobra Mk III, an Asp, a Python or a Fer-de-Lance.
+  n = Aggressor(HunterShip(), ai)
 END SUB
+
+' The eight a pirate group is drawn from, in the original's own order.  It
+' chooses with the AND of two random numbers, so a bit is set only a quarter
+' of the time and the small fighters at the bottom of the list come up far
+' more often than the Cobra at the top.
+FUNCTION PackShip() AS INTEGER
+  LOCAL INTEGER i
+  i = (INT(RND * 256) AND INT(RND * 256)) AND 7
+  SELECT CASE i
+    CASE 0 : PackShip = T_SIDEWINDER
+    CASE 1 : PackShip = T_MAMBA
+    CASE 2 : PackShip = T_KRAIT
+    CASE 3 : PackShip = T_ADDER
+    CASE 4 : PackShip = T_GECKO
+    CASE 5 : PackShip = T_COBRA1
+    CASE 6 : PackShip = T_WORM
+    CASE ELSE : PackShip = T_COBRA3
+  END SELECT
+END FUNCTION
+
+FUNCTION HunterShip() AS INTEGER
+  SELECT CASE INT(RND * 4)
+    CASE 0 : HunterShip = T_COBRA3
+    CASE 1 : HunterShip = T_ASP
+    CASE 2 : HunterShip = T_PYTHON
+    CASE ELSE : HunterShip = T_FERDELANCE
+  END SELECT
+END FUNCTION
+
+' A trader flies whatever the route will bear.  The cassette game has only the
+' Cobra Mk III; the Second Processor version adds the two fat ones, which is
+' why a magenta blip on the scanner is worth a look.
+FUNCTION TraderShip() AS INTEGER
+  SELECT CASE INT(RND * 4)
+    CASE 0 : TraderShip = T_PYTHON
+    CASE 1 : TraderShip = T_BOA
+    CASE 2 : TraderShip = T_ANACONDA
+    CASE ELSE : TraderShip = T_COBRA3
+  END SELECT
+END FUNCTION
 
 ' The original's Ze: a ship a fair way off in one of the four corners,
 ' already hostile.  Bit 7 of the AI flag means it has AI at all and bits

@@ -110,6 +110,10 @@ NEXT b
 tBp(1) = 0 : tBp(2) = 1 : tBp(3) = 2 : tBp(4) = 3 : tBp(5) = 4
 tBp(6) = 5 : tBp(7) = 4 : tBp(8) = 6 : tBp(9) = 7 : tBp(10) = 8
 tBp(11) = 9 : tBp(12) = 10 : tBp(13) = 11 : tBp(T_COUGAR) = 12
+tBp(T_KRAIT) = 13 : tBp(T_ADDER) = 14 : tBp(T_GECKO) = 15
+tBp(T_COBRA1) = 16 : tBp(T_WORM) = 17 : tBp(T_ASP) = 18
+tBp(T_FERDELANCE) = 19 : tBp(T_BOA) = 20 : tBp(T_ANACONDA) = 21
+tBp(T_BOULDER) = 22 : tBp(T_SPLINTER) = 23 : tBp(T_HERMIT) = 24
 END SUB
 SUB LoadMesh(b AS INTEGER)
 LOCAL INTEGER j, k
@@ -127,6 +131,18 @@ CASE 9  : RESTORE dat_canister
 CASE 10 : RESTORE dat_thargon
 CASE 11 : RESTORE dat_escape_pod
 CASE 12 : RESTORE dat_cougar
+CASE 13 : RESTORE dat_krait
+CASE 14 : RESTORE dat_adder
+CASE 15 : RESTORE dat_gecko
+CASE 16 : RESTORE dat_cobra_mk_1
+CASE 17 : RESTORE dat_worm
+CASE 18 : RESTORE dat_asp_mk_2
+CASE 19 : RESTORE dat_fer_de_lance
+CASE 20 : RESTORE dat_boa
+CASE 21 : RESTORE dat_anaconda
+CASE 22 : RESTORE dat_boulder
+CASE 23 : RESTORE dat_splinter
+CASE 24 : RESTORE dat_rock_hermit
 END SELECT
 READ bName$(b), bNv(b), bNf(b), bNfv(b), bNf0(b), bNv0(b)
 READ bCan(b), bArea(b), bBty(b), bVis(b), bEne(b), bSpd(b)
@@ -187,7 +203,6 @@ IF t < T_PLANET THEN
 sBp(n) = tBp(t)
 sEne(n) = bEne(sBp(n))
 sMis(n) = bMis(sBp(n))
-GetObject n
 ELSE
 sBp(n) = -1
 sEne(n) = 0
@@ -318,6 +333,12 @@ scaCol(T_STATION) = cGreen
 scaCol(T_PYTHON) = cMagenta
 scaCol(T_CANISTER) = cBlue
 scaCol(T_ESCAPE) = cBlue
+shpCol(T_BOULDER) = C_RED     : scaCol(T_BOULDER) = cRed
+shpCol(T_SPLINTER) = C_RED    : scaCol(T_SPLINTER) = cRed
+shpCol(T_HERMIT) = C_RED      : scaCol(T_HERMIT) = cRed
+scaCol(T_BOA) = cMagenta
+scaCol(T_ANACONDA) = cMagenta
+scaCol(T_WORM) = cBlue
 END SUB
 SUB SetupViews
 LOCAL INTEGER i
@@ -330,7 +351,7 @@ SUB ProbeObjects
 LOCAL INTEGER n
 LoadMesh 0
 maxObj = 8
-FOR n = 9 TO 15
+FOR n = 9 TO 35
 ON ERROR SKIP 1
 Draw3D CREATE n, bNv(0), bNf(0), 1, mV(), mFc(), mF(), col(), mEc()
 IF MM.ERRNO <> 0 THEN EXIT FOR
@@ -338,7 +359,7 @@ Draw3D CLOSE n
 maxObj = n
 NEXT n
 ON ERROR CLEAR
-FOR n = 0 TO 15 : objOwn(n) = -1 : NEXT n
+FOR n = 0 TO 35 : objOwn(n) = -1 : NEXT n
 END SUB
 SUB CloseAll
 LOCAL INTEGER n
@@ -562,9 +583,10 @@ DrawMessage
 ENDIF
 END SUB
 SUB DrawShips
-LOCAL INTEGER n, px, py, zb, c
+LOCAL INTEGER n, px, py, zb, c, near
 FOR n = 0 TO nUsed - 1
 IF sTyp(n) <> 0 AND sBp(n) >= 0 THEN
+near = 0
 ViewXform n
 IF tz > NEARZ THEN
 zb = tz \ ZHI
@@ -575,6 +597,8 @@ IF zb >= VISFLOOR AND zb > bVis(sBp(n)) THEN
 c = col(shpCol(sTyp(n)))
 IF py > 0 AND py < VIEWH - 2 THEN BOX px + 1, py, 3, 2, 0, c, c
 ELSE
+near = 1
+IF sObj(n) = 0 THEN GetObject n
 IF sObj(n) > 0 AND ABS(tx) < FARXY AND ABS(ty) < FARXY THEN
 ViewOrient n
 Draw3D ROTATE qC(), sObj(n)
@@ -582,6 +606,13 @@ Draw3D WRITE sObj(n), tx, ty, tz, 0, solidMode
 ENDIF
 ENDIF
 IF (sFlg(n) AND 2) <> 0 THEN EnemyBeam n, px, py
+ENDIF
+ENDIF
+IF near = 0 AND sObj(n) > 0 THEN
+IF tz <= NEARZ THEN
+DropObject n
+ELSEIF (tz \ ZHI) > bVis(sBp(n)) + 4 THEN
+DropObject n
 ENDIF
 ENDIF
 sFlg(n) = sFlg(n) AND 253
@@ -2062,7 +2093,7 @@ IF RND < 0.5 THEN x = -x
 y = INT(RND * 256)
 IF RND < 0.5 THEN y = -y
 IF RND < 0.5 THEN
-n = NewFacing(T_COBRA3, x, y, z, 180)
+n = NewFacing(TraderShip(), x, y, z, 180)
 IF n >= 0 THEN
 sAI(n) = 0
 sSpd(n) = 16 + INT(RND * 16)
@@ -2072,8 +2103,15 @@ SpawnBenign = 1
 EXIT FUNCTION
 ENDIF
 IF inSafe THEN SpawnBenign = 1 : EXIT FUNCTION
+IF INT(RND * 256) >= 252 THEN
+t = T_HERMIT
+ELSEIF INT(RND * 256) < 5 THEN
+t = T_CANISTER
+ELSEIF RND < 0.5 THEN
+t = T_BOULDER
+ELSE
 t = T_ASTEROID
-IF INT(RND * 256) < 5 THEN t = T_CANISTER
+ENDIF
 n = NewFacing(t, x, y, z, 180)
 IF n >= 0 THEN
 IF RND < 0.5 THEN
@@ -2107,8 +2145,7 @@ IF r >= 200 THEN
 cnt = INT(RND * 4)
 spawnEV = cnt
 FOR i = 0 TO cnt
-t = INT(RND * 4) OR 1
-n = Aggressor(t, 0)
+n = Aggressor(PackShip(), 0)
 NEXT i
 EXIT SUB
 ENDIF
@@ -2127,8 +2164,38 @@ ENDIF
 ENDIF
 EXIT SUB
 ENDIF
-n = Aggressor(t, ai)
+n = Aggressor(HunterShip(), ai)
 END SUB
+FUNCTION PackShip() AS INTEGER
+LOCAL INTEGER i
+i = (INT(RND * 256) AND INT(RND * 256)) AND 7
+SELECT CASE i
+CASE 0 : PackShip = T_SIDEWINDER
+CASE 1 : PackShip = T_MAMBA
+CASE 2 : PackShip = T_KRAIT
+CASE 3 : PackShip = T_ADDER
+CASE 4 : PackShip = T_GECKO
+CASE 5 : PackShip = T_COBRA1
+CASE 6 : PackShip = T_WORM
+CASE ELSE : PackShip = T_COBRA3
+END SELECT
+END FUNCTION
+FUNCTION HunterShip() AS INTEGER
+SELECT CASE INT(RND * 4)
+CASE 0 : HunterShip = T_COBRA3
+CASE 1 : HunterShip = T_ASP
+CASE 2 : HunterShip = T_PYTHON
+CASE ELSE : HunterShip = T_FERDELANCE
+END SELECT
+END FUNCTION
+FUNCTION TraderShip() AS INTEGER
+SELECT CASE INT(RND * 4)
+CASE 0 : TraderShip = T_PYTHON
+CASE 1 : TraderShip = T_BOA
+CASE 2 : TraderShip = T_ANACONDA
+CASE ELSE : TraderShip = T_COBRA3
+END SELECT
+END FUNCTION
 FUNCTION Aggressor(t AS INTEGER, ai AS INTEGER) AS INTEGER
 LOCAL INTEGER n, a
 LOCAL FLOAT x, y
