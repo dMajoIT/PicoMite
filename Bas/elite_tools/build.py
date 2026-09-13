@@ -272,6 +272,54 @@ def strip(text):
     return chr(10).join(out) + chr(10)
 
 
+def check_split(lib, prog):
+    """Rules that only exist because the program is in two halves."""
+    problems = []
+
+    # The trace cache compiles a subroutine against the program it was
+    # prepared from.  Its options, and every subroutine they name, belong in
+    # the main program; neither may be in the library.
+    for i, ln in enumerate(lib.split(NL), 1):
+        t = ln.strip().upper()
+        if t.startswith("OPTION TRACECACHE") or t.startswith("OPTION CACHE"):
+            problems.append("library line %d: %s belongs in the main program"
+                            % (i, ln.strip()))
+
+    cached = []
+    for ln in prog.split(NL):
+        t = ln.strip()
+        if t.upper().startswith("OPTION CACHE SUB"):
+            for nm in t[16:].split(","):
+                nm = nm.strip().rstrip("$%!")
+                if nm:
+                    cached.append(nm)
+    libsubs = set()
+    for ln in lib.split(NL):
+        m = SUBDEF.match(ln.split(chr(39))[0])
+        if m:
+            libsubs.add(m.group(2).lower().rstrip("$%!"))
+    progsubs = set()
+    for ln in prog.split(NL):
+        m = SUBDEF.match(ln.split(chr(39))[0])
+        if m:
+            progsubs.add(m.group(2).lower().rstrip("$%!"))
+    for nm in cached:
+        if nm.lower() in libsubs:
+            problems.append("OPTION CACHE SUB names %s, which is in the library" % nm)
+        elif nm.lower() not in progsubs:
+            problems.append("OPTION CACHE SUB names %s, which is defined nowhere" % nm)
+
+    # A library is run in front of every program, so an END in it would stop
+    # the run before the program started.
+    for i, ln in enumerate(lib.split(NL), 1):
+        t = ln.strip().upper()
+        if t == "END" or t.startswith("END "):
+            if not t.startswith("END SUB") and not t.startswith("END FUNCTION"):
+                problems.append("library line %d: END would stop the run before the "
+                                "program started: %s" % (i, ln.strip()))
+    return problems
+
+
 def main():
     full_mode = "--full" in sys.argv
     libparts, progparts, libnames, prognames = [], [], [], []
@@ -337,7 +385,7 @@ def main():
 
     # Checked together: the two halves share one namespace at run time, so a
     # duplicate or a collision across the seam is as fatal as one inside a file.
-    problems = check(lib + NL + prog)
+    problems = check(lib + NL + prog) + check_split(lib, prog)
     fulllen = len(lib) + len(prog)
     if not full_mode:
         lib = "' Elite library, built by elite_tools/build.py - read src/ instead." + NL + strip(lib)

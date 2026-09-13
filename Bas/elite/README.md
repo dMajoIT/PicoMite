@@ -191,13 +191,22 @@ only 480 globals - Elite declares 374 of them, and a constant costs a slot just
 as a variable does. At 128 locals there are 608, and measured on the board
 there is room for 243 more.
 
-Two things learned putting it together. A library runs its top level in front
-of *every* program, not just its own, so it must not contain anything
-program-specific: `OPTION CACHE SUB` names two of Elite's subroutines, and with
-it in the library no other program would start at all. `build.py` moves it, and
-every option that is not required to precede a `DIM`, into the program. And
-there must be no `END` in a library - the interpreter runs the whole of it at
-`RUN`, and an `END` would stop the run before the program began.
+Three rules come out of the split, and `build.py` now checks all of them
+rather than leaving them to be remembered.
+
+**The trace cache stays in the main program.** `OPTION TRACECACHE`, `OPTION
+CACHE` and every subroutine they name must be in the program, never the
+library: the cache compiles a subroutine against the program it was prepared
+from.
+
+**A library must contain nothing program-specific.** It runs its top level in
+front of *every* program, not just its own. `OPTION CACHE SUB` names two of
+Elite's subroutines, and with it in the library no other program would start at
+all - `Sub/function not found` before its first line. `build.py` moves it, and
+every option not required to precede a `DIM`, into the program.
+
+**And there must be no `END` in a library** - the interpreter runs the whole of
+it at `RUN`, and an `END` would stop the run before the program began.
 
 ## What the later BBC versions had
 
