@@ -81,6 +81,8 @@ far end. Press any key during the demo and you get a game of your own.
 | `P` | pause; `D` while paused writes the screen to the card |
 | `F1` `F2` `F3` `F4` | fore, aft, left, right views |
 
+On either chart, `F` asks for a system name and moves the cursor to it.
+
 `F5` to `F10` reach the same six screens whether you are flying or docked:
 galactic chart, short range chart, system data, market prices, status,
 inventory. On the charts the arrows move the cursor and it picks out the
@@ -241,8 +243,9 @@ From the **disc version** (and the Master, which is built on it):
 - A real docking computer that flies you in, which is where our flown approach
   comes from.
 - The two missions: the Constrictor, and the Thargoid documents run.
-- Finding a system by typing its name, and moving the chart cursor a long way
-  with SHIFT.
+- Moving the chart cursor a long way with SHIFT. The USB keyboard map reports
+  a distinct code for shift with the right and down arrows but not with left
+  and up, so this waits on a firmware decision rather than being half done.
 - The ship hangar drawn when you dock, with your ship and anything else in it.
 - Kill credit for cargo canisters, asteroids, escape pods and Thargons, not
   just for ships.
@@ -267,6 +270,9 @@ Taken from it so far:
   generator is seeded from the system's two seeds before it starts choosing.
   Lave really is most famous for its vast rain forests and the Lavian tree
   grub.
+- **Finding a system by typing its name.** `F` on either chart asks for a
+  name and moves the cursor to it. The cassette game has no such thing - you
+  hunt for the dot yourself, and with 256 systems to a galaxy that is a chore.
 - **Asteroids worth splitting.** A mining laser is the only thing that breaks a
   rock into anything: an asteroid or a rock hermit gives nought to three
   boulders, a boulder gives splinters, and a splinter scooped is minerals - or,

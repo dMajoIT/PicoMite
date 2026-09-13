@@ -48,6 +48,38 @@ SUB FindSystem(cx AS INTEGER, cy AS INTEGER)
   selSys = best
 END SUB
 
+' Find a system by typing its name, which is the disc version's F key.  The
+' cassette game has no such thing: you hunt for the dot yourself, and with
+' 256 systems to a galaxy that is a real chore.
+'
+' Walking the galaxy moves the seed generator, so whether a name is found or
+' not the caller's system has to be put back before returning.
+SUB FindByName
+  LOCAL INTEGER i, found
+  LOCAL nm$ LENGTH 20
+  nm$ = UCASE$(AskText$("Find system: ", 10))
+  IF nm$ = "" THEN EXIT SUB
+  found = -1
+  SetGalaxy gGal
+  FOR i = 0 TO 255
+    SysData
+    IF SysName$() = nm$ THEN found = i : EXIT FOR
+    NextSystem
+  NEXT i
+  IF found < 0 THEN
+    GotoSystem gGal, selSys
+    SysData
+    Sfx SFX_BOOP
+    EXIT SUB
+  ENDIF
+  GotoSystem gGal, found
+  SysData
+  selSys = found
+  curX = sysX
+  curY = sysY * 2
+  Sfx SFX_BEEP
+END SUB
+
 ' The whole galaxy: 256 dots, the reachable circle around where we are,
 ' and crosshairs on whatever the cursor has picked out.
 SUB ChartLong

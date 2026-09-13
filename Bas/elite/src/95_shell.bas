@@ -198,8 +198,12 @@ SUB RunDocked
         ELSE
           DockAct
         ENDIF
-      CASE 70, 102                             ' F: fill the tank
-        IF dscreen = SCR_EQUIP THEN BuyFuel
+      CASE 70, 102                             ' F: fill the tank, or find a system
+        IF dscreen = SCR_EQUIP THEN
+          BuyFuel
+        ELSEIF dscreen = SCR_LONG OR dscreen = SCR_SHORT THEN
+          FindByName
+        ENDIF
       CASE 83, 115                             ' S: save the commander
         SaveCommander CMDRFILE
         dscreen = SCR_STATUS
@@ -229,6 +233,28 @@ FUNCTION DockKey() AS INTEGER
   DockKey = WaitKey(0)
 END FUNCTION
 
+' Type something on the footer line.  Returns empty if ESCAPE was pressed,
+' so a caller can tell nothing from a deliberate blank.
+FUNCTION AskText$(p$, most AS INTEGER)
+  LOCAL INTEGER k
+  LOCAL t$ LENGTH 20
+  t$ = ""
+  DO
+    DrawDocked
+    TEXT VCX, SCRH - 9, p$ + t$ + "_", "CT", 7, 1, cYellow
+    FRAMEBUFFER COPY F, N
+    k = DockKey()
+    IF k = 27 THEN AskText$ = "" : EXIT FUNCTION
+    IF k = 13 THEN EXIT DO
+    IF k = 8 THEN
+      IF LEN(t$) > 0 THEN t$ = LEFT$(t$, LEN(t$) - 1)
+    ELSEIF k >= 32 AND k < 127 THEN
+      IF LEN(t$) < most THEN t$ = t$ + CHR$(k)
+    ENDIF
+  LOOP
+  AskText$ = t$
+END FUNCTION
+
 SUB DrawDocked
   SELECT CASE dscreen
     CASE SCR_STATUS
@@ -255,7 +281,7 @@ SUB DrawDocked
       DockFooter "arrows move the cursor   F7 data   F1 launch"
     CASE SCR_DATA
       SysDataScreen
-      DockFooter "F5 galactic chart   F6 short range   F1 launch"
+      DockFooter "F5 galactic   F6 short range   F7 data   F1 launch"
   END SELECT
 END SUB
 

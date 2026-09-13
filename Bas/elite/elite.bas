@@ -1359,6 +1359,31 @@ GotoSystem gGal, best
 SysData
 selSys = best
 END SUB
+SUB FindByName
+LOCAL INTEGER i, found
+LOCAL nm$ LENGTH 20
+nm$ = UCASE$(AskText$("Find system: ", 10))
+IF nm$ = "" THEN EXIT SUB
+found = -1
+SetGalaxy gGal
+FOR i = 0 TO 255
+SysData
+IF SysName$() = nm$ THEN found = i : EXIT FOR
+NextSystem
+NEXT i
+IF found < 0 THEN
+GotoSystem gGal, selSys
+SysData
+Sfx SFX_BOOP
+EXIT SUB
+ENDIF
+GotoSystem gGal, found
+SysData
+selSys = found
+curX = sysX
+curY = sysY * 2
+Sfx SFX_BEEP
+END SUB
 SUB ChartLong
 LOCAL INTEGER i, px, py, r
 LOCAL nm$ LENGTH 10
@@ -3158,7 +3183,11 @@ ELSE
 DockAct
 ENDIF
 CASE 70, 102
-IF dscreen = SCR_EQUIP THEN BuyFuel
+IF dscreen = SCR_EQUIP THEN
+BuyFuel
+ELSEIF dscreen = SCR_LONG OR dscreen = SCR_SHORT THEN
+FindByName
+ENDIF
 CASE 83, 115
 SaveCommander CMDRFILE
 dscreen = SCR_STATUS
@@ -3180,6 +3209,25 @@ END SUB
 FUNCTION DockKey() AS INTEGER
 IF demoMode THEN DockKey = DemoKey() : EXIT FUNCTION
 DockKey = WaitKey(0)
+END FUNCTION
+FUNCTION AskText$(p$, most AS INTEGER)
+LOCAL INTEGER k
+LOCAL t$ LENGTH 20
+t$ = ""
+DO
+DrawDocked
+TEXT VCX, SCRH - 9, p$ + t$ + "_", "CT", 7, 1, cYellow
+FRAMEBUFFER COPY F, N
+k = DockKey()
+IF k = 27 THEN AskText$ = "" : EXIT FUNCTION
+IF k = 13 THEN EXIT DO
+IF k = 8 THEN
+IF LEN(t$) > 0 THEN t$ = LEFT$(t$, LEN(t$) - 1)
+ELSEIF k >= 32 AND k < 127 THEN
+IF LEN(t$) < most THEN t$ = t$ + CHR$(k)
+ENDIF
+LOOP
+AskText$ = t$
 END FUNCTION
 SUB DrawDocked
 SELECT CASE dscreen
@@ -3207,7 +3255,7 @@ ChartShort
 DockFooter "arrows move the cursor   F7 data   F1 launch"
 CASE SCR_DATA
 SysDataScreen
-DockFooter "F5 galactic chart   F6 short range   F1 launch"
+DockFooter "F5 galactic   F6 short range   F7 data   F1 launch"
 END SELECT
 END SUB
 SUB DockFooter(t$)
