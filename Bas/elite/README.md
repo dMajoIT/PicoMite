@@ -121,8 +121,14 @@ somebody is shooting at you.
 | `F4` | equip the ship |
 | arrows | choose a row |
 | `Space` | buy or sell one |
+| `Return` | buy or sell a stated number - type it and press `Return` again |
 | `F` | fill the tank, on the equipment screen |
 | `S` / `L` | save / load your commander |
+
+The quantity prompt shows the most you could trade - what the system has, what
+your money will cover and what the hold will take - and refuses a digit that
+would take you past it, rather than accepting the number and quietly trimming
+it. `Escape` backs out without trading.
 
 Saving writes `A:/cmdr.txt`, which is plain text and one value to a line.
 
@@ -228,7 +234,7 @@ things that are simply not in the cassette game and so are not here either.
 From the **disc version** (and the Master, which is built on it):
 
 - A second space station, the Dodo, at the safer end of a system.
-- Rock hermits: an asteroid that turns out to be a trading post.
+- Rock hermits: the ship is here, but not the trading post it turns out to be.
 - Mining lasers and military lasers, and asteroids worth splitting for gems.
 - A real docking computer that flies you in, which is where our flown approach
   comes from.
@@ -237,7 +243,6 @@ From the **disc version** (and the Master, which is built on it):
   cassette game's descriptions are much shorter and drawn from a smaller set.
 - Finding a system by typing its name, and moving the chart cursor a long way
   with SHIFT.
-- Buying and selling a stated number of tonnes rather than one at a time.
 - The ship hangar drawn when you dock, with your ship and anything else in it.
 - Kill credit for cargo canisters, asteroids, escape pods and Thargons, not
   just for ships.
@@ -246,6 +251,11 @@ From the **disc version** (and the Master, which is built on it):
 - Ships carrying the NEWB flags - the pirate, trader, hostile, cop and innocent
   markers that the disc version's spawner works from. Ours reproduces the
   cassette version's own spawning rules instead.
+
+Taken from it so far:
+
+- **Buying and selling a stated number of tonnes** rather than one at a time.
+  `Space` still trades one, so nothing that used to be quick got slower.
 
 From the **6502 Second Processor version**, which had a whole second computer
 to spend - and which this port now follows, because a PicoComputer has that

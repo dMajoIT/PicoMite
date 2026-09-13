@@ -2530,6 +2530,51 @@ cashTenths = cashTenths + mkPrice(i)
 cargo(i) = cargo(i) - 1
 mkStock(i) = mkStock(i) + 1
 END SUB
+FUNCTION TradeMax(i AS INTEGER, buying AS INTEGER) AS INTEGER
+LOCAL INTEGER m
+IF buying = 0 THEN
+TradeMax = cargo(i)
+EXIT FUNCTION
+ENDIF
+m = mkStock(i)
+IF mkPrice(i) > 0 THEN
+IF cashTenths \ mkPrice(i) < m THEN m = cashTenths \ mkPrice(i)
+ENDIF
+IF i < 13 THEN
+IF holdSize - HoldUsed() < m THEN m = holdSize - HoldUsed()
+ENDIF
+IF m < 0 THEN m = 0
+TradeMax = m
+END FUNCTION
+SUB TradeAmount(i AS INTEGER, buying AS INTEGER)
+LOCAL INTEGER most, n, k
+LOCAL t$ LENGTH 4
+LOCAL p$ LENGTH 40
+most = TradeMax(i, buying)
+IF most <= 0 THEN Sfx SFX_BOOP : EXIT SUB
+IF buying THEN p$ = "Buy how many" ELSE p$ = "Sell how many"
+p$ = p$ + " (max " + STR$(most) + ")? "
+t$ = ""
+DO
+MarketScreen i
+TEXT VCX, SCRH - 9, p$ + t$ + "_", "CT", 7, 1, cYellow
+FRAMEBUFFER COPY F, N
+k = DockKey()
+IF k = 27 THEN EXIT SUB
+IF k = 13 THEN EXIT DO
+IF k = 8 THEN
+IF LEN(t$) > 0 THEN t$ = LEFT$(t$, LEN(t$) - 1)
+ELSEIF k >= 48 AND k <= 57 THEN
+IF VAL(t$ + CHR$(k)) <= most THEN t$ = t$ + CHR$(k) ELSE Sfx SFX_BOOP
+ENDIF
+LOOP
+n = VAL(t$)
+IF n <= 0 THEN EXIT SUB
+FOR k = 1 TO n
+IF buying THEN BuyOne i ELSE SellOne i
+NEXT k
+Sfx SFX_BEEP
+END SUB
 SUB EquipScreen(sel AS INTEGER)
 LOCAL INTEGER i, y, c
 CLS
@@ -2894,8 +2939,14 @@ CASE 128 : DockUp
 CASE 129 : DockDown
 CASE 130 : DockLeft
 CASE 131 : DockRight
-CASE 32, 13
+CASE 32
 DockAct
+CASE 13
+IF dscreen = SCR_MARKET THEN
+TradeAmount dsel, dbuy
+ELSE
+DockAct
+ENDIF
 CASE 70, 102
 IF dscreen = SCR_EQUIP THEN BuyFuel
 CASE 83, 115
@@ -2931,9 +2982,9 @@ DockFooter "F1 launch   F2 buy   F3 sell"
 CASE SCR_MARKET
 MarketScreen dsel
 IF dbuy THEN
-DockFooter "up/down choose   SPACE buy one   F3 sell"
+DockFooter "up/down choose  SPACE one  RETURN how many  F3 sell"
 ELSE
-DockFooter "up/down choose   SPACE sell one   F2 buy"
+DockFooter "up/down choose  SPACE one  RETURN how many  F2 buy"
 ENDIF
 CASE SCR_EQUIP
 EquipScreen dsel

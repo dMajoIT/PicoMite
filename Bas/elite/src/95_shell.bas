@@ -190,8 +190,14 @@ SUB RunDocked
       CASE 129 : DockDown
       CASE 130 : DockLeft
       CASE 131 : DockRight
-      CASE 32, 13                              ' space or return: do it
+      CASE 32                                  ' space: one of whatever it is
         DockAct
+      CASE 13                                  ' return: ask how many
+        IF dscreen = SCR_MARKET THEN
+          TradeAmount dsel, dbuy
+        ELSE
+          DockAct
+        ENDIF
       CASE 70, 102                             ' F: fill the tank
         IF dscreen = SCR_EQUIP THEN BuyFuel
       CASE 83, 115                             ' S: save the commander
@@ -234,9 +240,9 @@ SUB DrawDocked
     CASE SCR_MARKET
       MarketScreen dsel
       IF dbuy THEN
-        DockFooter "up/down choose   SPACE buy one   F3 sell"
+        DockFooter "up/down choose  SPACE one  RETURN how many  F3 sell"
       ELSE
-        DockFooter "up/down choose   SPACE sell one   F2 buy"
+        DockFooter "up/down choose  SPACE one  RETURN how many  F2 buy"
       ENDIF
     CASE SCR_EQUIP
       EquipScreen dsel

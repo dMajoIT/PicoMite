@@ -164,6 +164,64 @@ SUB SellOne(i AS INTEGER)
   mkStock(i) = mkStock(i) + 1
 END SUB
 
+' How many of this can be traded at once: what the system has, what the
+' money will cover and what the hold will take, or simply what we are
+' carrying if we are selling.
+FUNCTION TradeMax(i AS INTEGER, buying AS INTEGER) AS INTEGER
+  LOCAL INTEGER m
+  IF buying = 0 THEN
+    TradeMax = cargo(i)
+    EXIT FUNCTION
+  ENDIF
+  m = mkStock(i)
+  IF mkPrice(i) > 0 THEN
+    IF cashTenths \ mkPrice(i) < m THEN m = cashTenths \ mkPrice(i)
+  ENDIF
+  ' Gold, platinum and gems ride in the hold's odd corners and take no
+  ' tonnage, so only the first thirteen are limited by it.
+  IF i < 13 THEN
+    IF holdSize - HoldUsed() < m THEN m = holdSize - HoldUsed()
+  ENDIF
+  IF m < 0 THEN m = 0
+  TradeMax = m
+END FUNCTION
+
+' Type in a quantity.  The cassette game trades one unit a keypress, which
+' is twenty of them to fill a hold with food; the disc version asks how many
+' you want, and so does this.  SPACE still trades one, so nothing that used
+' to be quick got slower - RETURN is the new way in.
+SUB TradeAmount(i AS INTEGER, buying AS INTEGER)
+  LOCAL INTEGER most, n, k
+  LOCAL t$ LENGTH 4
+  LOCAL p$ LENGTH 40
+  most = TradeMax(i, buying)
+  IF most <= 0 THEN Sfx SFX_BOOP : EXIT SUB
+  IF buying THEN p$ = "Buy how many" ELSE p$ = "Sell how many"
+  p$ = p$ + " (max " + STR$(most) + ")? "
+  t$ = ""
+  DO
+    MarketScreen i
+    TEXT VCX, SCRH - 9, p$ + t$ + "_", "CT", 7, 1, cYellow
+    FRAMEBUFFER COPY F, N
+    k = DockKey()
+    IF k = 27 THEN EXIT SUB                    ' escape: changed my mind
+    IF k = 13 THEN EXIT DO
+    IF k = 8 THEN
+      IF LEN(t$) > 0 THEN t$ = LEFT$(t$, LEN(t$) - 1)
+    ELSEIF k >= 48 AND k <= 57 THEN
+      ' Refuse a digit that would ask for more than there is, rather than
+      ' taking the number and silently trimming it.
+      IF VAL(t$ + CHR$(k)) <= most THEN t$ = t$ + CHR$(k) ELSE Sfx SFX_BOOP
+    ENDIF
+  LOOP
+  n = VAL(t$)
+  IF n <= 0 THEN EXIT SUB
+  FOR k = 1 TO n
+    IF buying THEN BuyOne i ELSE SellOne i
+  NEXT k
+  Sfx SFX_BEEP
+END SUB
+
 ' --- the equipment shop
 SUB EquipScreen(sel AS INTEGER)
   LOCAL INTEGER i, y, c
