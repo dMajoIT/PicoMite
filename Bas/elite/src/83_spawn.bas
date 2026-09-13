@@ -58,11 +58,17 @@ FUNCTION SpawnBenign() AS INTEGER
   IF RND < 0.5 THEN y = -y
 
   IF RND < 0.5 THEN
-    ' A Cobra Mk III on its way somewhere, with no AI at all: it will not
-    ' evade, it will not shoot, and it will not thank you for either.
+    ' A trader on its way somewhere.  Half of them are going to the station,
+    ' and the disc version marks those as docking and gives them the AI to
+    ' get there; the other half simply cruise, with no AI at all, and will
+    ' neither evade nor shoot nor thank you for either.
+    LOCAL INTEGER docking
+    docking = 0
+    IF RND < 0.5 THEN docking = 1
+    IF docking THEN newbFlags = NB_DOCKING
     n = NewFacing(TraderShip(), x, y, z, 180)
     IF n >= 0 THEN
-      sAI(n) = 0
+      IF docking THEN sAI(n) = 128 OR 64 ELSE sAI(n) = 0
       sSpd(n) = 16 + INT(RND * 16)
       sRol(n) = INT(RND * 128)            ' clockwise, and rarely undamped
     ENDIF
@@ -215,11 +221,13 @@ FUNCTION PackShip() AS INTEGER
   END SELECT
 END FUNCTION
 
+' The heavier ships a lone hunter flies - and the Cobra and the Python here
+' are the pirates' own, not the ones on the trade lane.
 FUNCTION HunterShip() AS INTEGER
   SELECT CASE INT(RND * 4)
     CASE 0 : HunterShip = T_COBRA3
     CASE 1 : HunterShip = T_ASP
-    CASE 2 : HunterShip = T_PYTHON
+    CASE 2 : HunterShip = T_PYTHONP
     CASE ELSE : HunterShip = T_FERDELANCE
   END SELECT
 END FUNCTION
@@ -232,7 +240,7 @@ FUNCTION TraderShip() AS INTEGER
     CASE 0 : TraderShip = T_PYTHON
     CASE 1 : TraderShip = T_BOA
     CASE 2 : TraderShip = T_ANACONDA
-    CASE ELSE : TraderShip = T_COBRA3
+    CASE ELSE : TraderShip = T_TRADER
   END SELECT
 END FUNCTION
 

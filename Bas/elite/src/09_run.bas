@@ -33,7 +33,15 @@ IF DEMOFRAMES = 0 THEN
 
 ELSE
 
-  IF DEMOSCENE = 6 THEN
+  IF DEMOSCENE = 7 THEN
+    ' Nothing here draws anything, and the console is easier to read when it
+    ' is the console rather than the framebuffer.
+    FRAMEBUFFER CLOSE
+    MODE 1
+    NewbScene
+    PRINT "newb done"
+    END
+  ELSEIF DEMOSCENE = 6 THEN
     MissionScene
     FRAMEBUFFER CLOSE
     MODE 1

@@ -18,7 +18,43 @@ SUB LoadStats
   tBp(T_FERDELANCE) = 19 : tBp(T_BOA) = 20 : tBp(T_ANACONDA) = 21
   tBp(T_BOULDER) = 22 : tBp(T_SPLINTER) = 23 : tBp(T_HERMIT) = 24
   tBp(T_SHUTTLE) = 25 : tBp(T_TRANSPORT) = 26
-  tBp(T_CONSTRICT) = 28
+  tBp(T_CONSTRICT) = 28 : tBp(T_PYTHONP) = 3
+  NewbTable
+END SUB
+
+' The original's E%: what each kind of ship is, before the spawner says
+' anything about the particular one it is making.
+'
+' The two ships that fly on both sides of the law have an entry each way, as
+' they do in the original: T_TRADER and T_PYTHON are the honest ones,
+' T_COBRA3 and T_PYTHONP the pirates.
+SUB NewbTable
+  LOCAL INTEGER i
+  FOR i = 0 TO NTYPE : tNewb(i) = 0 : NEXT i
+  tNewb(T_ESCAPE) = NB_TRADER
+  tNewb(T_SHUTTLE) = NB_TRADER OR NB_INNOCENT
+  tNewb(T_TRANSPORT) = NB_TRADER OR NB_INNOCENT OR NB_COP
+  tNewb(T_COBRA3) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+  tNewb(T_TRADER) = NB_INNOCENT OR NB_POD
+  tNewb(T_PYTHON) = NB_INNOCENT OR NB_POD
+  tNewb(T_PYTHONP) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+  tNewb(T_BOA) = NB_INNOCENT OR NB_POD
+  tNewb(T_ANACONDA) = NB_TRADER OR NB_INNOCENT OR NB_POD
+  tNewb(T_HERMIT) = NB_TRADER OR NB_INNOCENT OR NB_POD
+  tNewb(T_VIPER) = NB_HUNTER OR NB_COP OR NB_POD
+  tNewb(T_SIDEWINDER) = NB_HOSTILE OR NB_PIRATE
+  tNewb(T_MAMBA) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+  tNewb(T_KRAIT) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+  tNewb(T_ADDER) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+  tNewb(T_GECKO) = NB_HOSTILE OR NB_PIRATE
+  tNewb(T_COBRA1) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+  tNewb(T_WORM) = NB_HOSTILE OR NB_TRADER
+  tNewb(T_ASP) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+  tNewb(T_FERDELANCE) = NB_HUNTER OR NB_POD
+  tNewb(T_THARGOID) = NB_HOSTILE OR NB_PIRATE
+  tNewb(T_THARGON) = NB_HOSTILE
+  tNewb(T_CONSTRICT) = NB_HOSTILE
+  tNewb(T_COUGAR) = NB_INNOCENT
 END SUB
 
 ' Load blueprint b into the scratch mesh buffers and fill in its stats.
@@ -125,6 +161,13 @@ FUNCTION NewShip(t AS INTEGER, x AS FLOAT, y AS FLOAT, z AS FLOAT, q() AS FLOAT)
   sObj(n) = 0
   sSpd(n) = 0 : sAcc(n) = 0 : sRol(n) = 0 : sPit(n) = 0
   sFlg(n) = 0 : sAI(n) = 0
+  ' What this ship is: the type's own flags, less the two that only mean
+  ' something once it is flying, plus whatever the spawner staged for it.
+  ' The planet and the sun are types 128 and up and are not ships at all,
+  ' so they are not in the table and have nothing to be.
+  sNewb(n) = 0
+  IF t <= NTYPE THEN sNewb(n) = (tNewb(t) AND 111) OR newbFlags
+  newbFlags = 0
   ' Every field the slot carries has to be cleared, not most of them.  A
   ' slot that last held something which blew up keeps its explosion
   ' counter, and the next ship to be given that slot is killed on its

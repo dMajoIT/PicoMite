@@ -199,6 +199,78 @@ SUB MissionFind(g AS INTEGER, x AS INTEGER, y AS INTEGER)
   SetGalaxy gGal
 END SUB
 
+' --- what each kind of ship is, and what that makes it do
+'
+' The NEWB flags decide whether a ship is coming for us or going about its
+' business, so this asks each kind directly rather than waiting to be shot
+' at.  Peaceful is called a hundred times a row because one of its answers
+' is deliberately random: a trader ignores us four times in five.
+SUB NewbScene
+  LOCAL INTEGER n
+  NewCommander
+  LaunchState
+  PRINT "ship                flags   leaves us alone, clean / fugitive"
+  NewbOne T_TRADER, "Cobra III trader"
+  NewbOne T_COBRA3, "Cobra III pirate"
+  NewbOne T_ANACONDA, "Anaconda"
+  NewbOne T_VIPER, "Viper"
+  NewbOne T_SIDEWINDER, "Sidewinder"
+  NewbOne T_WORM, "Worm"
+  NewbOne T_HERMIT, "Rock hermit"
+  NewbOne T_THARGOID, "Thargoid"
+  NewbOne T_CONSTRICT, "Constrictor"
+  PRINT
+
+  ' Shooting an innocent bystander is the station's business as well as ours.
+  ClearSlots
+  LaunchState
+  PRINT "station AI before"; sAI(SLOT_STAR); " legal"; legal
+  MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+  n = NewShip(T_TRADER, 0, 0, 4000, qA())
+  IF n >= 0 THEN sAI(n) = 128 OR 56
+  Angry n
+  PRINT "after shooting a trader: station AI"; sAI(SLOT_STAR); " legal"; legal;
+  PRINT " the trader is now hostile?"; (sNewb(n) AND NB_HOSTILE) <> 0
+
+  ClearSlots
+  LaunchState
+  legal = 0
+  MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+  n = NewShip(T_SIDEWINDER, 0, 0, 4000, qA())
+  IF n >= 0 THEN sAI(n) = 128 OR 56
+  Angry n
+  PRINT "after shooting a pirate:  station AI"; sAI(SLOT_STAR); " legal"; legal
+  PRINT
+  PRINT "who carries an escape pod:"
+  PRINT "  Krait"; (tNewb(T_KRAIT) AND NB_POD) <> 0;
+  PRINT "  Gecko"; (tNewb(T_GECKO) AND NB_POD) <> 0;
+  PRINT "  Thargoid"; (tNewb(T_THARGOID) AND NB_POD) <> 0
+END SUB
+
+SUB NewbOne(t AS INTEGER, nm$)
+  LOCAL INTEGER n, i, c0, c1, keep
+  MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+  n = NewShip(t, 0, 0, 4000, qA())
+  IF n < 0 THEN PRINT nm$; " - no slot" : EXIT SUB
+  sAI(n) = 128 OR 56
+  keep = sNewb(n)
+  legal = 0
+  c0 = 0
+  FOR i = 1 TO 100
+    sNewb(n) = keep
+    IF Peaceful(n) THEN c0 = c0 + 1
+  NEXT i
+  legal = 60
+  c1 = 0
+  FOR i = 1 TO 100
+    sNewb(n) = keep
+    IF Peaceful(n) THEN c1 = c1 + 1
+  NEXT i
+  PRINT nm$ + SPACE$(20 - LEN(nm$)); keep; SPACE$(6); c0; "%"; SPACE$(4); c1; "%"
+  legal = 0
+  KillShip n
+END SUB
+
 SUB SaveShot(f AS INTEGER)
   SAVE IMAGE "A:/fly" + STR$(f) + ".bmp"
 END SUB

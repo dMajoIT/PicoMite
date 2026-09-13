@@ -44,7 +44,7 @@ CONST VPLANE = 256                 ' focal length in pixels, as the BBC
 CONST DEMOFRAMES = 0               ' >0 runs a scripted demo and exits; 0 plays
 CONST DEMOSCENE = 1                ' 1 flight and combat, 2 docking, 3 the docked
                                    ' screens, 4 the ship hangar, 5 the briefings,
-                                   ' 6 both missions end to end
+                                   ' 6 both missions end to end, 7 the NEWB flags
 CONST PANY = VCY - (SCRH \ 2 - 1)  ' shifts Draw3D's centre up to VCY
 
 ' ------------------------------------------------------- universe size
@@ -82,7 +82,14 @@ CONST T_SHUTTLE = 27, T_TRANSPORT = 28
 ' The ship mission one is about, which appears in exactly one system and is
 ' the only thing in the game a military laser is needed for.
 CONST T_CONSTRICT = 29
-CONST NTYPE = 29                   ' highest ship type number
+' The original carries what a ship is in its type as well as in its flags, and
+' keeps two entries for the two ships that fly on both sides of the law: a
+' Cobra Mk III and a Python for the trade lanes, and another of each for the
+' pirates.  Same blueprint, same statistics, different flags - and ours does
+' the same, with T_TRADER as the honest Cobra and T_PYTHONP as the dishonest
+' Python.
+CONST T_PYTHONP = 30
+CONST NTYPE = 30                   ' highest ship type number
 
 ' ============================================================ globals
 ' Player.  pRoll and pPitch are the original's JSTX and JSTY: 1..255
@@ -104,6 +111,24 @@ DIM FLOAT sQ(4, NSLOT-1)           ' orientation quaternion w,x,y,z,m
 DIM INTEGER sSpd(NSLOT-1), sAcc(NSLOT-1), sRol(NSLOT-1), sPit(NSLOT-1)
 DIM INTEGER sEne(NSLOT-1), sAI(NSLOT-1), sFlg(NSLOT-1), sExp(NSLOT-1)
 DIM INTEGER sTgt(NSLOT-1)   ' a missile's quarry: a slot, or -2 for us
+' The disc version's NEWB flags, byte #36.  sAI is the original's byte #32 and
+' says how a ship behaves; this says what it is, and the two are not the same
+' question - a Viper and a pirate can both be flying at us with the same
+' aggression, but only one of them is a policeman, and shooting it has
+' consequences the other one does not.
+'
+' Bit 7 means two things in the original and it means them here too: in the
+' table of defaults it says the ship type carries an escape pod, and on a ship
+' in the bubble it says the ship has docked or been scooped.  A spawned ship
+' therefore starts with bits 4 and 7 cleared, and whether a pilot has a pod to
+' bail out in is asked of the table, not of the ship.
+CONST NB_TRADER = 1, NB_HUNTER = 2, NB_HOSTILE = 4, NB_PIRATE = 8
+CONST NB_DOCKING = 16, NB_INNOCENT = 32, NB_COP = 64, NB_POD = 128
+DIM INTEGER sNewb(NSLOT-1)
+DIM INTEGER tNewb(NTYPE)
+' Staged for the next ship created, which is how the original does it: the
+' spawner sets NEWB, NWSHP ORs it into the new ship and it is cleared again.
+DIM INTEGER newbFlags
 DIM INTEGER sMis(NSLOT-1)   ' missiles this ship still has to fire at us
 DIM INTEGER nUsed                  ' slots in use, 0..NSLOT
 

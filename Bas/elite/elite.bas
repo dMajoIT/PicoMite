@@ -28,7 +28,13 @@ RunGame
 ENDIF
 LOOP
 ELSE
-IF DEMOSCENE = 6 THEN
+IF DEMOSCENE = 7 THEN
+FRAMEBUFFER CLOSE
+MODE 1
+NewbScene
+PRINT "newb done"
+END
+ELSEIF DEMOSCENE = 6 THEN
 MissionScene
 FRAMEBUFFER CLOSE
 MODE 1
@@ -146,7 +152,36 @@ tBp(T_COBRA1) = 16 : tBp(T_WORM) = 17 : tBp(T_ASP) = 18
 tBp(T_FERDELANCE) = 19 : tBp(T_BOA) = 20 : tBp(T_ANACONDA) = 21
 tBp(T_BOULDER) = 22 : tBp(T_SPLINTER) = 23 : tBp(T_HERMIT) = 24
 tBp(T_SHUTTLE) = 25 : tBp(T_TRANSPORT) = 26
-tBp(T_CONSTRICT) = 28
+tBp(T_CONSTRICT) = 28 : tBp(T_PYTHONP) = 3
+NewbTable
+END SUB
+SUB NewbTable
+LOCAL INTEGER i
+FOR i = 0 TO NTYPE : tNewb(i) = 0 : NEXT i
+tNewb(T_ESCAPE) = NB_TRADER
+tNewb(T_SHUTTLE) = NB_TRADER OR NB_INNOCENT
+tNewb(T_TRANSPORT) = NB_TRADER OR NB_INNOCENT OR NB_COP
+tNewb(T_COBRA3) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+tNewb(T_TRADER) = NB_INNOCENT OR NB_POD
+tNewb(T_PYTHON) = NB_INNOCENT OR NB_POD
+tNewb(T_PYTHONP) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+tNewb(T_BOA) = NB_INNOCENT OR NB_POD
+tNewb(T_ANACONDA) = NB_TRADER OR NB_INNOCENT OR NB_POD
+tNewb(T_HERMIT) = NB_TRADER OR NB_INNOCENT OR NB_POD
+tNewb(T_VIPER) = NB_HUNTER OR NB_COP OR NB_POD
+tNewb(T_SIDEWINDER) = NB_HOSTILE OR NB_PIRATE
+tNewb(T_MAMBA) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+tNewb(T_KRAIT) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+tNewb(T_ADDER) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+tNewb(T_GECKO) = NB_HOSTILE OR NB_PIRATE
+tNewb(T_COBRA1) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+tNewb(T_WORM) = NB_HOSTILE OR NB_TRADER
+tNewb(T_ASP) = NB_HOSTILE OR NB_PIRATE OR NB_POD
+tNewb(T_FERDELANCE) = NB_HUNTER OR NB_POD
+tNewb(T_THARGOID) = NB_HOSTILE OR NB_PIRATE
+tNewb(T_THARGON) = NB_HOSTILE
+tNewb(T_CONSTRICT) = NB_HOSTILE
+tNewb(T_COUGAR) = NB_INNOCENT
 END SUB
 SUB LoadMesh(b AS INTEGER)
 LOCAL INTEGER j, k
@@ -234,6 +269,9 @@ sQ(4, n) = 1
 sObj(n) = 0
 sSpd(n) = 0 : sAcc(n) = 0 : sRol(n) = 0 : sPit(n) = 0
 sFlg(n) = 0 : sAI(n) = 0
+sNewb(n) = 0
+IF t <= NTYPE THEN sNewb(n) = (tNewb(t) AND 111) OR newbFlags
+newbFlags = 0
 sExp(n) = 0 : sTgt(n) = -1
 sMis(n) = 0
 IF t < T_PLANET THEN
@@ -369,6 +407,8 @@ shpCol(T_THARGOID) = C_WHITE  : scaCol(T_THARGOID) = cWhite
 shpCol(T_THARGON) = C_WHITE
 scaCol(T_STATION) = cGreen
 scaCol(T_PYTHON) = cMagenta
+scaCol(T_PYTHONP) = cMagenta
+scaCol(T_TRADER) = cCyan
 scaCol(T_CANISTER) = cBlue
 scaCol(T_ESCAPE) = cBlue
 shpCol(T_BOULDER) = C_RED     : scaCol(T_BOULDER) = cRed
@@ -1230,6 +1270,67 @@ PRINT "galaxy"; g; " ("; STR$(x); ","; STR$(y); ") is "; SysName$()
 ENDIF
 SetGalaxy gGal
 END SUB
+SUB NewbScene
+LOCAL INTEGER n
+NewCommander
+LaunchState
+PRINT "ship                flags   leaves us alone, clean / fugitive"
+NewbOne T_TRADER, "Cobra III trader"
+NewbOne T_COBRA3, "Cobra III pirate"
+NewbOne T_ANACONDA, "Anaconda"
+NewbOne T_VIPER, "Viper"
+NewbOne T_SIDEWINDER, "Sidewinder"
+NewbOne T_WORM, "Worm"
+NewbOne T_HERMIT, "Rock hermit"
+NewbOne T_THARGOID, "Thargoid"
+NewbOne T_CONSTRICT, "Constrictor"
+PRINT
+ClearSlots
+LaunchState
+PRINT "station AI before"; sAI(SLOT_STAR); " legal"; legal
+MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+n = NewShip(T_TRADER, 0, 0, 4000, qA())
+IF n >= 0 THEN sAI(n) = 128 OR 56
+Angry n
+PRINT "after shooting a trader: station AI"; sAI(SLOT_STAR); " legal"; legal;
+PRINT " the trader is now hostile?"; (sNewb(n) AND NB_HOSTILE) <> 0
+ClearSlots
+LaunchState
+legal = 0
+MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+n = NewShip(T_SIDEWINDER, 0, 0, 4000, qA())
+IF n >= 0 THEN sAI(n) = 128 OR 56
+Angry n
+PRINT "after shooting a pirate:  station AI"; sAI(SLOT_STAR); " legal"; legal
+PRINT
+PRINT "who carries an escape pod:"
+PRINT "  Krait"; (tNewb(T_KRAIT) AND NB_POD) <> 0;
+PRINT "  Gecko"; (tNewb(T_GECKO) AND NB_POD) <> 0;
+PRINT "  Thargoid"; (tNewb(T_THARGOID) AND NB_POD) <> 0
+END SUB
+SUB NewbOne(t AS INTEGER, nm$)
+LOCAL INTEGER n, i, c0, c1, keep
+MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+n = NewShip(t, 0, 0, 4000, qA())
+IF n < 0 THEN PRINT nm$; " - no slot" : EXIT SUB
+sAI(n) = 128 OR 56
+keep = sNewb(n)
+legal = 0
+c0 = 0
+FOR i = 1 TO 100
+sNewb(n) = keep
+IF Peaceful(n) THEN c0 = c0 + 1
+NEXT i
+legal = 60
+c1 = 0
+FOR i = 1 TO 100
+sNewb(n) = keep
+IF Peaceful(n) THEN c1 = c1 + 1
+NEXT i
+PRINT nm$ + SPACE$(20 - LEN(nm$)); keep; SPACE$(6); c0; "%"; SPACE$(4); c1; "%"
+legal = 0
+KillShip n
+END SUB
 SUB SaveShot(f AS INTEGER)
 SAVE IMAGE "A:/fly" + STR$(f) + ".bmp"
 END SUB
@@ -1969,6 +2070,7 @@ NEXT n
 shots = shots + 1
 IF best < 0 THEN EXIT SUB
 hits = hits + 1
+Angry best
 dmg = lasView(vw) AND 127
 IF sTyp(best) = T_CONSTRICT THEN
 IF lasView(vw) <> LAS_MILITARY THEN
@@ -1978,11 +2080,9 @@ ENDIF
 dmg = dmg \ 4
 ENDIF
 sEne(best) = sEne(best) - dmg
-IF sAI(best) < 128 THEN sAI(best) = sAI(best) OR 128
 IF sEne(best) <= 0 THEN
 IF sTyp(best) = T_STATION THEN
 sEne(best) = bEne(sBp(best))
-AngerStation
 ELSE
 IF lasView(vw) = LAS_MINING THEN Mine best
 Explode best
@@ -2062,12 +2162,12 @@ FOR n = 2 TO nUsed - 1
 IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 AND sTyp(n) <> T_MISSILE THEN
 IF (sAI(n) AND 128) <> 0 THEN
 IF inSafe THEN
-IF sTyp(n) < T_COBRA3 THEN
-IF sTyp(n) <> T_VIPER THEN sAI(n) = sAI(n) AND 129
-ENDIF
+IF (sNewb(n) AND NB_PIRATE) <> 0 THEN sAI(n) = sAI(n) AND 129
 ENDIF
 IF ((mcnt XOR n) AND 7) = 0 THEN
-IF sTyp(n) = T_HERMIT THEN
+IF Peaceful(n) THEN
+Bystander n
+ELSEIF sTyp(n) = T_HERMIT THEN
 IF INT(RND * 256) >= 200 THEN HermitLaunch n
 ELSE
 d = SQR(sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n))
@@ -2082,7 +2182,7 @@ IF cnt > 0.972 THEN
 HitPlayer dmg
 ENDIF
 ENDIF
-IF sEne(n) * 8 < bEne(sBp(n)) AND sTyp(n) <> T_THARGOID THEN
+IF sEne(n) * 8 < bEne(sBp(n)) AND (tNewb(sTyp(n)) AND NB_POD) <> 0 THEN
 IF (sFlg(n) AND 1) = 0 AND INT(RND * 256) >= 230 THEN
 sFlg(n) = sFlg(n) OR 1
 BailOut n
@@ -2114,6 +2214,57 @@ ENDIF
 ENDIF
 ENDIF
 NEXT n
+END SUB
+FUNCTION Peaceful(n AS INTEGER) AS INTEGER
+LOCAL INTEGER nb
+nb = sNewb(n)
+Peaceful = 0
+IF (nb AND NB_TRADER) <> 0 THEN
+IF INT(RND * 256) >= 50 THEN Peaceful = 1 : EXIT FUNCTION
+ENDIF
+IF (nb AND NB_HUNTER) <> 0 THEN
+IF legal >= 40 THEN
+sNewb(n) = nb OR NB_HOSTILE
+nb = sNewb(n)
+ENDIF
+ENDIF
+IF (nb AND NB_HOSTILE) = 0 THEN Peaceful = 1
+END FUNCTION
+SUB Bystander(n AS INTEGER)
+LOCAL INTEGER tgt
+tgt = SLOT_PLANET
+IF (sNewb(n) AND NB_DOCKING) <> 0 THEN
+IF sTyp(SLOT_STAR) = T_STATION THEN tgt = SLOT_STAR
+ENDIF
+IF sTyp(tgt) = 0 THEN EXIT SUB
+TurnToward n, tgt
+IF sAcc(n) = 0 THEN sAcc(n) = 1
+END SUB
+SUB TurnToward(n AS INTEGER, tgt AS INTEGER)
+LOCAL FLOAT rx, ry, rz, sx2, sy2, sz2, dr, ds, m, dx, dy, dz
+dx = sX(tgt) - sX(n) : dy = sY(tgt) - sY(n) : dz = sZ(tgt) - sZ(n)
+m = SQR(dx*dx + dy*dy + dz*dz)
+IF m < 1 THEN EXIT SUB
+MATH SLICE sQ(), , n, qA()
+MATH Q_VECTOR 0, 1, 0, qB() : MATH Q_ROTATE qA(), qB(), qV()
+rx = qV(1) : ry = qV(2) : rz = qV(3)
+MATH Q_VECTOR 1, 0, 0, qB() : MATH Q_ROTATE qA(), qB(), qV()
+sx2 = qV(1) : sy2 = qV(2) : sz2 = qV(3)
+dr = (dx * rx + dy * ry + dz * rz) / m
+ds = (dx * sx2 + dy * sy2 + dz * sz2) / m
+IF dr > 0 THEN sPit(n) = 3 OR 128 ELSE sPit(n) = 3
+IF (sRol(n) AND 127) < 16 THEN
+IF ds > 0 THEN sRol(n) = 5 OR 128 ELSE sRol(n) = 5
+ENDIF
+END SUB
+SUB Angry(n AS INTEGER)
+IF sTyp(n) = T_STATION THEN AngerStation : EXIT SUB
+IF (sNewb(n) AND NB_INNOCENT) <> 0 THEN AngerStation
+IF sAI(n) = 0 THEN EXIT SUB
+sAI(n) = sAI(n) OR 128
+sAcc(n) = 2
+sPit(n) = 4
+sNewb(n) = sNewb(n) OR NB_HOSTILE
 END SUB
 SUB HermitLaunch(n AS INTEGER)
 LOCAL INTEGER m, t
@@ -2361,7 +2512,10 @@ sRol(m) = 130 : sPit(m) = 5
 NEXT i
 END SUB
 SUB NoteKill(n AS INTEGER)
-IF sTyp(n) = T_VIPER THEN legal = legal OR 64
+IF (sNewb(n) AND NB_COP) <> 0 THEN
+legal = legal OR 64
+IF legal > 255 THEN legal = 255
+ENDIF
 END SUB
 FUNCTION LegalName$()
 IF legal = 0 THEN
@@ -2547,9 +2701,13 @@ IF RND < 0.5 THEN x = -x
 y = INT(RND * 256)
 IF RND < 0.5 THEN y = -y
 IF RND < 0.5 THEN
+LOCAL INTEGER docking
+docking = 0
+IF RND < 0.5 THEN docking = 1
+IF docking THEN newbFlags = NB_DOCKING
 n = NewFacing(TraderShip(), x, y, z, 180)
 IF n >= 0 THEN
-sAI(n) = 0
+IF docking THEN sAI(n) = 128 OR 64 ELSE sAI(n) = 0
 sSpd(n) = 16 + INT(RND * 16)
 sRol(n) = INT(RND * 128)
 ENDIF
@@ -2652,7 +2810,7 @@ FUNCTION HunterShip() AS INTEGER
 SELECT CASE INT(RND * 4)
 CASE 0 : HunterShip = T_COBRA3
 CASE 1 : HunterShip = T_ASP
-CASE 2 : HunterShip = T_PYTHON
+CASE 2 : HunterShip = T_PYTHONP
 CASE ELSE : HunterShip = T_FERDELANCE
 END SELECT
 END FUNCTION
@@ -2661,7 +2819,7 @@ SELECT CASE INT(RND * 4)
 CASE 0 : TraderShip = T_PYTHON
 CASE 1 : TraderShip = T_BOA
 CASE 2 : TraderShip = T_ANACONDA
-CASE ELSE : TraderShip = T_COBRA3
+CASE ELSE : TraderShip = T_TRADER
 END SELECT
 END FUNCTION
 FUNCTION Aggressor(t AS INTEGER, ai AS INTEGER) AS INTEGER
@@ -4210,6 +4368,7 @@ SUB DemoCloseOnStation
 IF sTyp(SLOT_PLANET) = 0 THEN EXIT SUB
 pRoll = JCENTRE : pPitch = JCENTRE
 dSpeed = 8
+IF sTyp(SLOT_STAR) = T_STATION THEN KillShip SLOT_STAR
 sX(SLOT_PLANET) = 0
 sY(SLOT_PLANET) = 0
 sZ(SLOT_PLANET) = 2 * PRADIUS + 3000

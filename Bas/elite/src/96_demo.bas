@@ -481,6 +481,14 @@ SUB DemoCloseOnStation
   ' already going past.
   pRoll = JCENTRE : pPitch = JCENTRE
   dSpeed = 8
+  ' Leg three launches from a station and never gets far enough away for the
+  ' game to forget it - the station is only dropped when it passes out of
+  ' range altogether - so it is still sitting in slot one behind us, and
+  ' StationCheck will not put one up in front while it is there.  Taking it
+  ' away is what lets the station be found again where the planet now is.
+  ' Without this the docking computer is engaged, announces itself, and then
+  ' spends the rest of the demo flying back to where we left.
+  IF sTyp(SLOT_STAR) = T_STATION THEN KillShip SLOT_STAR
   sX(SLOT_PLANET) = 0
   sY(SLOT_PLANET) = 0
   sZ(SLOT_PLANET) = 2 * PRADIUS + 3000

@@ -50,6 +50,7 @@ SUB FireLaser
   IF best < 0 THEN EXIT SUB
   hits = hits + 1
 
+  Angry best
   dmg = lasView(vw) AND 127
   ' Nothing but a military laser marks a Constrictor, and then only at a
   ' quarter of what it would do to anything else - which is the whole reason
@@ -62,12 +63,9 @@ SUB FireLaser
     dmg = dmg \ 4
   ENDIF
   sEne(best) = sEne(best) - dmg
-  ' Anything hit turns on us, whatever it was doing before.
-  IF sAI(best) < 128 THEN sAI(best) = sAI(best) OR 128
   IF sEne(best) <= 0 THEN
     IF sTyp(best) = T_STATION THEN
       sEne(best) = bEne(sBp(best))       ' a station cannot be shot down
-      AngerStation
     ELSE
       ' A mining laser is the only thing that breaks a rock into anything
       ' worth scooping.  Shoot one with anything else and it is simply gone.
@@ -185,18 +183,26 @@ SUB Tactics
     ' no damage, because a missile's blueprint laser power is nought.
     IF sTyp(n) <> 0 AND sBp(n) >= 0 AND sExp(n) = 0 AND sTyp(n) <> T_MISSILE THEN
       IF (sAI(n) AND 128) <> 0 THEN
-        ' Even a pirate will not start something inside the station's
-        ' no-fire zone, so its aggression is taken away while it is in
-        ' there - bit 7 stays, so it still flies, it just will not fight.
-        ' The police and anything bigger than a Mamba are not covered by
-        ' that understanding, and neither are the Thargoids.
+        ' A pirate will not start anything inside the station's no-fire
+        ' zone, so its aggression is taken away while it is in there - bit 7
+        ' stays, so it still flies, it just will not fight.  The cassette
+        ' game decides who this covers by ship type; the disc version asks
+        ' whether the ship is a pirate, which is the same answer for the
+        ' ships the cassette game had and the right one for the rest.
         IF inSafe THEN
-          IF sTyp(n) < T_COBRA3 THEN
-            IF sTyp(n) <> T_VIPER THEN sAI(n) = sAI(n) AND 129
-          ENDIF
+          IF (sNewb(n) AND NB_PIRATE) <> 0 THEN sAI(n) = sAI(n) AND 129
         ENDIF
         IF ((mcnt XOR n) AND 7) = 0 THEN
-         IF sTyp(n) = T_HERMIT THEN
+         ' What a ship is decides whether any of the fighting below applies
+         ' to it at all.  A trader mostly minds its own business; a bounty
+         ' hunter takes an interest in us only if our record is bad enough;
+         ' and anything that is not hostile is going somewhere rather than
+         ' coming for us - to the station if it is docking, to the planet
+         ' otherwise.  This is the disc version's TA14, and it is the whole
+         ' difference between a bubble of enemies and a bubble of traffic.
+         IF Peaceful(n) THEN
+          Bystander n
+         ELSEIF sTyp(n) = T_HERMIT THEN
           ' A rock hermit is a rock with somebody living in it, and none of
           ' the rest of this applies to it.  It sits there with its AI off
           ' until something shoots at it - which turns the AI on, as being
@@ -227,10 +233,12 @@ SUB Tactics
 
             ' Out of energy and out of luck: in the last eighth of its
             ' banks a ship has one chance in ten, each time it is serviced,
-            ' of the pilot deciding to leave.  Thargoids have nobody to
-            ' send.  The original allows this more than once per ship; we
-            ' allow it once, so a wreck does not shed a fleet of pods.
-            IF sEne(n) * 8 < bEne(sBp(n)) AND sTyp(n) <> T_THARGOID THEN
+            ' of the pilot deciding to leave - if there is anything to leave
+            ' in.  Whether there is, is bit 7 of the ship type's own flags,
+            ' which is why a Gecko pilot goes down with the ship and a Krait
+            ' pilot does not.  The original allows this more than once per
+            ' ship; we allow it once, so a wreck does not shed a fleet of pods.
+            IF sEne(n) * 8 < bEne(sBp(n)) AND (tNewb(sTyp(n)) AND NB_POD) <> 0 THEN
               IF (sFlg(n) AND 1) = 0 AND INT(RND * 256) >= 230 THEN
                 sFlg(n) = sFlg(n) OR 1
                 BailOut n
@@ -270,6 +278,84 @@ SUB Tactics
       ENDIF
     ENDIF
   NEXT n
+END SUB
+
+' Is this ship going about its business rather than coming for us?  The
+' original's own order, and the reason a trader is worth passing rather than
+' shooting: four ships in five do nothing at all on a given pass, and the
+' fifth thinks about it the way a bounty hunter does.
+'
+' A bounty hunter - and that fifth trader - turns hostile once our record is
+' bad enough, and stays hostile, which is why a run of piracy is felt long
+' after the ships that saw it are gone.  Forty out of the fifty that makes a
+' fugitive is the original's threshold.
+FUNCTION Peaceful(n AS INTEGER) AS INTEGER
+  LOCAL INTEGER nb
+  nb = sNewb(n)
+  Peaceful = 0
+  IF (nb AND NB_TRADER) <> 0 THEN
+    IF INT(RND * 256) >= 50 THEN Peaceful = 1 : EXIT FUNCTION
+  ENDIF
+  IF (nb AND NB_HUNTER) <> 0 THEN
+    IF legal >= 40 THEN
+      sNewb(n) = nb OR NB_HOSTILE
+      nb = sNewb(n)
+    ENDIF
+  ENDIF
+  IF (nb AND NB_HOSTILE) = 0 THEN Peaceful = 1
+END FUNCTION
+
+' Where a ship that is not interested in us goes: into the station if it is
+' docking, towards the planet if it is not.  The original flies both with the
+' code that flies the player's docking computer; ours points the ship at the
+' planet and lets its own tactics carry it there, which is the same journey
+' without a second docking algorithm to keep working.
+SUB Bystander(n AS INTEGER)
+  LOCAL INTEGER tgt
+  tgt = SLOT_PLANET
+  IF (sNewb(n) AND NB_DOCKING) <> 0 THEN
+    IF sTyp(SLOT_STAR) = T_STATION THEN tgt = SLOT_STAR
+  ENDIF
+  IF sTyp(tgt) = 0 THEN EXIT SUB
+  TurnToward n, tgt
+  IF sAcc(n) = 0 THEN sAcc(n) = 1
+END SUB
+
+' Swing a ship towards something that is not us.  TurnTowards steers at the
+' player because that is all the cassette game ever needed; this is the same
+' arithmetic with the target's position put in first.
+SUB TurnToward(n AS INTEGER, tgt AS INTEGER)
+  LOCAL FLOAT rx, ry, rz, sx2, sy2, sz2, dr, ds, m, dx, dy, dz
+  dx = sX(tgt) - sX(n) : dy = sY(tgt) - sY(n) : dz = sZ(tgt) - sZ(n)
+  m = SQR(dx*dx + dy*dy + dz*dz)
+  IF m < 1 THEN EXIT SUB
+  MATH SLICE sQ(), , n, qA()
+  MATH Q_VECTOR 0, 1, 0, qB() : MATH Q_ROTATE qA(), qB(), qV()
+  rx = qV(1) : ry = qV(2) : rz = qV(3)
+  MATH Q_VECTOR 1, 0, 0, qB() : MATH Q_ROTATE qA(), qB(), qV()
+  sx2 = qV(1) : sy2 = qV(2) : sz2 = qV(3)
+  dr = (dx * rx + dy * ry + dz * rz) / m
+  ds = (dx * sx2 + dy * sy2 + dz * sz2) / m
+  IF dr > 0 THEN sPit(n) = 3 OR 128 ELSE sPit(n) = 3
+  IF (sRol(n) AND 127) < 16 THEN
+    IF ds > 0 THEN sRol(n) = 5 OR 128 ELSE sRol(n) = 5
+  ENDIF
+END SUB
+
+' Somebody has just shot at this ship, and the original has a routine for
+' what that means: the ship wakes up, speeds up, starts to turn, and takes it
+' personally.  If it was an innocent bystander the station takes it personally
+' as well - which is what stops a run through the trade lanes being free, and
+' is the whole point of the innocent flag.
+SUB Angry(n AS INTEGER)
+  IF sTyp(n) = T_STATION THEN AngerStation : EXIT SUB
+  IF (sNewb(n) AND NB_INNOCENT) <> 0 THEN AngerStation
+  ' A rock with nobody in it has nothing to wake up.
+  IF sAI(n) = 0 THEN EXIT SUB
+  sAI(n) = sAI(n) OR 128
+  sAcc(n) = 2
+  sPit(n) = 4
+  sNewb(n) = sNewb(n) OR NB_HOSTILE
 END SUB
 
 ' What comes out of a rock hermit: a Mamba, a Krait, an Adder or a Gecko,

@@ -72,6 +72,8 @@ SUB ShipColours
   shpCol(T_THARGON) = C_WHITE
   scaCol(T_STATION) = cGreen
   scaCol(T_PYTHON) = cMagenta
+  scaCol(T_PYTHONP) = cMagenta
+  scaCol(T_TRADER) = cCyan
   scaCol(T_CANISTER) = cBlue
   scaCol(T_ESCAPE) = cBlue
   ' The Second Processor version's own choices for its own ships: rubble red,
