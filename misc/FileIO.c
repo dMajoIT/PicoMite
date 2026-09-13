@@ -3626,7 +3626,7 @@ int FileLoadCMM2Program(char *fname, bool message)
     *p = 0; // terminate the string in RAM
     FileClose(fnbr);
     unsigned char continuation = Option.continuation;
-    SaveProgramToFlash((unsigned char *)buf, false);
+    SaveProgramToFlash((unsigned char *)buf, false, PROGRAM_FLASH);
     Option.continuation = continuation;
     FreeMemorySafe((void **)&buf);
     FreeMemorySafe((void **)&dlist);
@@ -3698,7 +3698,7 @@ int FileLoadProgram(unsigned char *fname, bool chain, bool crunch)
     *p = 0; // terminate the string in RAM
     FileClose(fnbr);
     ClearSavedVars(); // clear any saved variables
-    SaveProgramToFlash((unsigned char *)buf, false);
+    SaveProgramToFlash((unsigned char *)buf, false, PROGRAM_FLASH);
     return true;
 }
 #ifdef rp2350
@@ -6337,7 +6337,7 @@ readin:;
     while (getConsole() != -1)
         ; // clear any rubbish in the input
           //    ClearSavedVars();                                               // clear any saved variables
-    SaveProgramToFlash(buf, true);
+    SaveProgramToFlash(buf, true, PROGRAM_FLASH);
     ClearSavedVars(); // clear any saved variables
     ClearTempMemory();
 #ifdef PICOMITEWEB

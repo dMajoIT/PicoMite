@@ -4550,7 +4550,17 @@ uint32_t testPSRAM(void)
     }
 
     // takes a pointer to RAM containing a program (in clear text) and writes it to memory in tokenised format
-    void MIPS16 SaveProgramToFlash(unsigned char *pm, int msg)
+    /* region is PROGRAM_FLASH or LIBRARY_FLASH.  Everything below that used to
+       name flash_progmemory or PROGSTART now goes through scanbase/writebase,
+       which FlashWriteInit's own choice of region has to agree with.
+       scanbase is the XIP address the written image can be read back at -
+       passes 2 and 3 scan it for CSUB and DefineFont blocks - and writebase is
+       the flash offset the same image is being written to, which the bounds
+       checks measure from.  Note that the CSUB declaration address written in
+       pass 3 is (p - scanbase), an offset within the image, so it comes out
+       the same wherever the image is put: that is what lets a program with a
+       CSUB in it run from a flash slot or from the library. */
+    void MIPS16 SaveProgramToFlash(unsigned char *pm, int msg, int region)
     {
         unsigned char *p, fontnbr, prevchar = 0, buf[STRINGSIZE];
         unsigned short endtoken, tkn;
@@ -4558,16 +4568,18 @@ uint32_t testPSRAM(void)
         bool continuation = false;
         multi = false;
         uint32_t storedupdates[MAXCFUNCTION], updatecount = 0, realflashsave;
+        const uint8_t *scanbase = (region == LIBRARY_FLASH) ? flash_libmemory : flash_progmemory;
+        uint32_t writebase = (region == LIBRARY_FLASH) ? (uint32_t)(PROGSTART - MAX_PROG_SIZE) : (uint32_t)PROGSTART;
         initFonts();
 #ifdef rp2350
         __dsb();
 #endif
         clearrepeat();
         memcpy(buf, tknbuf, STRINGSIZE); // save the token buffer because we are going to use it
-        FlashWriteInit(PROGRAM_FLASH);
+        FlashWriteInit(region);
         safe_flash_range_erase(realflashpointer, MAX_PROG_SIZE);
         j = MAX_PROG_SIZE / 4;
-        int *pp = (int *)(flash_progmemory);
+        int *pp = (int *)(scanbase);
         while (j--)
             if (*pp++ != 0xFFFFFFFF)
             {
@@ -4627,7 +4639,7 @@ uint32_t testPSRAM(void)
                 FlashWriteByte(*p++);
                 nbr++;
 
-                if ((int)((char *)realflashpointer - (uint32_t)PROGSTART) >= MAX_PROG_SIZE - 5)
+                if ((int)((char *)realflashpointer - writebase) >= MAX_PROG_SIZE - 5)
                     goto exiterror;
             }
             FlashWriteByte(0);
@@ -4645,7 +4657,7 @@ uint32_t testPSRAM(void)
         // The next CFunction/CSub/Font starts immediately following the last word of the previous CFunction/CSub/Font
         int firsthex = 1;
         realflashsave = realflashpointer;
-        p = (unsigned char *)flash_progmemory; // start scanning program memory
+        p = (unsigned char *)scanbase; // start scanning the image just written
         while (*p != 0xff)
         {
             nbr++;
@@ -4739,7 +4751,7 @@ uint32_t testPSRAM(void)
                                 enable_interrupts_pico();
                                 error("Invalid hex word");
                             }
-                            if ((int)((char *)realflashpointer - (uint32_t)PROGSTART) >= MAX_PROG_SIZE - 5)
+                            if ((int)((char *)realflashpointer - writebase) >= MAX_PROG_SIZE - 5)
                                 goto exiterror;
                             n = n << 4;
                             if (*p <= '9')
@@ -4787,7 +4799,7 @@ uint32_t testPSRAM(void)
         }
         realflashpointer = realflashsave;
         updatecount = 0;
-        p = (unsigned char *)flash_progmemory; // start scanning program memory
+        p = (unsigned char *)scanbase; // start scanning the image just written
         while (*p != 0xff)
         {
             nbr++;
@@ -4841,7 +4853,7 @@ uint32_t testPSRAM(void)
                 else
                 {
                     endtoken = GetCommandValue((unsigned char *)"End CSub");
-                    FlashWriteWord((unsigned int)(p - flash_progmemory)); // if a CFunction/CSub save a relative pointer to the declaration
+                    FlashWriteWord((unsigned int)(p - scanbase)); // if a CFunction/CSub save a relative pointer to the declaration
                     fontnbr = 0;
                     p++;
                 }
@@ -4887,7 +4899,7 @@ uint32_t testPSRAM(void)
                                 enable_interrupts_pico();
                                 error("Invalid hex word");
                             }
-                            if ((int)((char *)realflashpointer - (uint32_t)PROGSTART) >= MAX_PROG_SIZE - 5)
+                            if ((int)((char *)realflashpointer - writebase) >= MAX_PROG_SIZE - 5)
                                 goto exiterror;
                             n = n << 4;
                             if (*p <= '9')

@@ -767,7 +767,7 @@ void EditInputLine(void);
 /* ============================================================================
  * Function declarations - Flash memory
  * ============================================================================ */
-void SaveProgramToFlash(unsigned char *pm, int msg);
+void SaveProgramToFlash(unsigned char *pm, int msg, int region);
 
 /* ============================================================================
  * Function declarations - Output formatting

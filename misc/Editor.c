@@ -8997,7 +8997,7 @@ void editDisplayMsg(unsigned char *msg)
 // save the program in the editing buffer into the program memory
 void SaveToProgMemory(void)
 {
-    SaveProgramToFlash(EdBuff, true);
+    SaveProgramToFlash(EdBuff, true, PROGRAM_FLASH);
     ClearProgram(true);
     StartEditPoint = (unsigned char *)(edy + cury); // record out position in case the editor is invoked again
     StartEditChar = edx + curx;

@@ -170,7 +170,7 @@ void MIPS16 cmd_xmodem(void)
                 ymodemReceive(buf, XMODEMBUFFERSIZE, 0, crunch);
 #endif
             ClearSavedVars(); // clear any saved variables
-            SaveProgramToFlash((unsigned char *)buf, true);
+            SaveProgramToFlash((unsigned char *)buf, true, PROGRAM_FLASH);
         }
         else
         {
