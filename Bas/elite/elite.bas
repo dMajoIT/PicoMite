@@ -50,7 +50,9 @@ TestScene
 ENDIF
 frames = 0
 tFrame = TIMER
+ResetTick
 DO
+NextTick
 IF DEMOSCENE = 2 THEN DockInput frames ELSE DemoInput frames
 IF kQuit OR dead OR docked THEN EXIT DO
 UpdatePlayer

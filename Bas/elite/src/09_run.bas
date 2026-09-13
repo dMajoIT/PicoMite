@@ -58,7 +58,12 @@ ELSE
 
   frames = 0
   tFrame = TIMER
+  ' The scene fixtures predate the frame clock, and everything that moves is
+  ' scaled by tick - so without these two the whole universe stands still and
+  ' the fixtures photograph a frozen bubble while reporting a frame rate.
+  ResetTick
   DO
+    NextTick
     IF DEMOSCENE = 2 THEN DockInput frames ELSE DemoInput frames
     IF kQuit OR dead OR docked THEN EXIT DO
     UpdatePlayer
