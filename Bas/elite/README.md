@@ -242,9 +242,6 @@ From the **disc version** (and the Master, which is built on it):
 - A real docking computer that flies you in, which is where our flown approach
   comes from.
 - A disc access menu and printer support.
-- Ships carrying the NEWB flags - the pirate, trader, hostile, cop and innocent
-  markers that the disc version's spawner works from. Ours reproduces the
-  cassette version's own spawning rules instead.
 
 Taken from it so far:
 
@@ -274,6 +271,19 @@ Taken from it so far:
   boulders, a boulder gives splinters, and a splinter scooped is minerals - or,
   one time in eight, gem-stones. Anything else you shoot a rock with simply
   destroys it, as before.
+- **The NEWB flags.** Our spawner and tactics decided everything from the ship
+  type and one AI byte; the disc version splits the question in two. sAI says
+  how a ship behaves, sNewb says what it is - trader, bounty hunter, hostile,
+  pirate, docking, innocent bystander, cop, and whether the type carries an
+  escape pod. A ship that is not hostile now goes somewhere rather than simply
+  existing: to the station if it is docking, to the planet if not. A trader
+  minds its own business four passes in five. The police are bounty hunters,
+  so a Viper ignores a clean commander and only turns on you once your record
+  passes 40 - which is what makes launching with a hold of slaves matter.
+  Shooting an innocent bystander brings the station down on you where shooting
+  a pirate does not, and only a pilot whose ship type carries a pod bails out.
+  The original keeps a separate Cobra Mk III and Python for the pirates -
+  identical ships, different flags - and so do we.
 - **The two missions.** The whole of both of them is four bits in one byte -
   the original calls it TP - and every branch of what happens when you dock
   comes out of those four bits. Reach a combat rating of Competent with 256
