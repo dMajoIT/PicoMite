@@ -241,8 +241,6 @@ From the **disc version** (and the Master, which is built on it):
 - A real docking computer that flies you in, which is where our flown approach
   comes from.
 - The two missions: the Constrictor, and the Thargoid documents run.
-- The long system descriptions, built from an extended token table - the
-  cassette game's descriptions are much shorter and drawn from a smaller set.
 - Finding a system by typing its name, and moving the chart cursor a long way
   with SHIFT.
 - The ship hangar drawn when you dock, with your ship and anything else in it.
@@ -263,6 +261,12 @@ Taken from it so far:
   the top bit set, so it fires continuously like a beam at half again a beam's
   damage. Both appear at tech level 9, which is where the original unlocks the
   whole list at once.
+- **The system descriptions**, built from the disc version's extended token
+  table. The cassette game's data screen stops at the planet's radius; this
+  adds the paragraph underneath, and it is the disc version's own, because the
+  generator is seeded from the system's two seeds before it starts choosing.
+  Lave really is most famous for its vast rain forests and the Lavian tree
+  grub.
 - **Asteroids worth splitting.** A mining laser is the only thing that breaks a
   rock into anything: an asteroid or a rock hermit gives nought to three
   boulders, a boulder gives splinters, and a splinter scooped is minerals - or,
