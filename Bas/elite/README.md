@@ -7,9 +7,10 @@ come from the published 6502 source, so Lave is the Lave you remember.
 ## Getting it running
 
 You need a PicoMite HDMI build and a screen, and the firmware must be
-**version 6.03.02b4 or above**, or b5 for the automatic library install below.
-`PRINT MM.VER` at the prompt: it must report 6.030204 or more. Earlier firmware
-will not do - b3 and before had `MAX3D` set to 8, where the bubble wants one
+**version 6.03.02b5 or above**. `PRINT MM.VER` at the prompt: it must report
+6.030205 or more. b5 is where `LIBRARY LOAD` arrived, and the program's first
+line is one, so nothing earlier will get past it. Earlier firmware would not
+do anyway - b3 and before had `MAX3D` set to 8, where the bubble wants one
 object for the station and one for every ship that is close enough to be drawn
 as a mesh, and the `DRAW3D` and `FRAMEBUFFER CLOSE` fixes this leans on all
 landed after b3 was released. The port asks the firmware how many it may have
@@ -38,10 +39,6 @@ The first `RUN` installs the library and starts again by itself - that takes a
 second or two. Every run after that finds the library already matches and goes
 straight into the game. Nothing else to do: the program's first line is
 `LIBRARY LOAD`, so it looks after its own library.
-
-`LIBRARY LOAD` needs firmware **6.03.02b5 or above**. On b4 you can install the
-library by hand instead - `LOAD "A:/elite_lib.bas"` then `LIBRARY SAVE`, once -
-and then load and run `elite.bas` as normal.
 
 The title screen is a picture file. Copy `Bas/elite/data/title.jpg` to the
 drive as `A:/title.jpg` - `pc3.py put Bas/elite/data/title.jpg A:/title.jpg`
