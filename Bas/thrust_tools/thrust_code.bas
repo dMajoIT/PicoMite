@@ -2,9 +2,16 @@
 '  T H R U S T        PicoMite MMBasic
 '  after the 1986 BBC Micro game by Jeremy C. Smith for Superior Software
 '
-'  Phase 5 of the port (see docs/Thrust_Port_Plan.html): the flight
-'  model, the pod, and the rest of the world - fuel, limpet guns,
-'  bullets and the reactor.
+'  A port of the whole game (see docs/Thrust_Port_Plan.html): the flight
+'  model, the pod on its tether, fuel, limpet guns, bullets, the reactor
+'  and the missions.
+'
+'  Lift the Klystron pod off its stand with the tractor beam and carry it
+'  up out of the cave.  Shoot the reactor fifty times and the planet goes
+'  with it, which is worth two thousand but leaves ten seconds to get
+'  clear.  Six caves, then round again with the guns firing harder each
+'  time - and after the first six, with gravity reversed, or the cave
+'  invisible, or both.
 '
 '  The physics is the original's, in its order and with its constants,
 '  but in floating point rather than Q7.8: on this interpreter a float
@@ -44,9 +51,10 @@
 '            Restart ........ R
 '            Screenshot ..... S  (to A:/thrust.bmp)
 '
-'  For testing: N and P change level, G puts the ship beside the pod with
-'  it already attached, and B runs the entity benchmark - a full particle
-'  pool and every object on the level, drawn and simulated flat out.
+'  For testing: N completes the mission, P swaps the cave under you, G
+'  puts the ship beside the pod with it already attached, and B runs the
+'  entity benchmark - a full particle pool and every object on the level,
+'  drawn and simulated flat out.
 '            Quit ........... ESC
 ' =====================================================================
 
@@ -96,6 +104,18 @@ CONST HULLRY = 3.2                ' in scanlines
 CONST FUEL0 = 0
 CONST FUELADD = 11                ' $11 BCD, per frame on the beam
 CONST FUELMAX = 9999
+'  A cell is not a range but a box, and a tight one: it has to be 1 to 5
+'  columns to the right of the ship's plot origin and 0 to 27 scanlines
+'  below it.  Both subtractions in the 6502 are unsigned, which is what
+'  makes it one-sided - you have to be above the cell and almost on top
+'  of it.  Our shipX,shipY is the sprite's centre rather than its origin,
+'  4 columns and 5 scanlines further on, so the window moves with it.
+CONST FUELDX0 = -3, FUELDX1 = 1
+CONST FUELDY0 = -5, FUELDY1 = 22
+'  And a cell is a fixed ration: 26 frames on the beam and it is spent,
+'  worth 30 points and 286 units of fuel.
+CONST FUELFRAMES = 26
+CONST SCOREFUELCELL = 30
 
 ' ------------------------------------------------------- the world
 CONST MAXOBJ = 20                 ' nineteen is the most any level has
@@ -117,8 +137,26 @@ CONST PT_HOSTILE = 3
 CONST PT_DEBRIS = 4
 CONST PARTLIFE = 40               ' $28 ticks
 CONST BULLETADV = 2               ' steps of head start, to clear the ship
-CONST GUNPROB = 2                 ' in 256, per gun per step
-CONST FGAP = 12                ' steps between the player's shots
+CONST FGAP = 12                   ' steps between the player's shots
+
+' ------------------------------------------------------------- a game
+'  Escaping is a test on the midpoint alone: above world scanline 288 and
+'  you are in orbit.  With the pod that finishes the mission; without it,
+'  it costs a life, which is what the branch after the escape test does.
+CONST ORBITY = 288
+CONST LIVES0 = 4                  ' INITIAL_LIVES
+CONST GUNPROB0 = 2                ' in 256 per gun per step, and it
+                                  ' climbs from mission 3
+CONST GUNPROBMAX = 35             ' $23
+CONST GUNPENALTY = 8              ' for blowing the planet and not leaving
+CONST BONUSBASE = 400             ' 400 * (level + 5), plus 2000 for the
+CONST BONUSPLANET = 2000          ' planet - so 2000 to 6000 a mission
+'  The two modifiers turn over on a two-bit counter, one step at the end
+'  of every six missions: start_new_level inverts reverse gravity, and
+'  only when that switch turns it OFF does it invert the invisible
+'  landscape.  So the rotation is normal, reversed, invisible, both, and
+'  round again after twenty-four missions.
+CONST ANGLEDOWN = 16              ' where you start when down is up
 
 ' ------------------------------------------------------- the pod
 '  The tether is a circle of radius 20 pixels.  That is not obvious from
@@ -173,11 +211,14 @@ DIM INTEGER podAtt, beamOn, hasPod, keepPod
 DIM INTEGER nObj
 DIM FLOAT objX(MAXOBJ - 1), objY(MAXOBJ - 1)
 DIM INTEGER objT(MAXOBJ - 1), objG(MAXOBJ - 1), objLive(MAXOBJ - 1)
+DIM INTEGER objTC(MAXOBJ - 1)
 DIM INTEGER objW(8), objH(8)
 DIM FLOAT paX(MAXPART - 1), paY(MAXPART - 1)
 DIM FLOAT paDX(MAXPART - 1), paDY(MAXPART - 1)
 DIM INTEGER paLife(MAXPART - 1), paType(MAXPART - 1)
 DIM INTEGER score, reactorHP, countdown, fuelBeam, fireGap, nPart
+DIM INTEGER lives, mission, gunProb, gunPen, planetDead, ending, gameOver
+DIM INTEGER warnUp, revGrav, invLand, hiScore, saidRev, saidInv
 DIM INTEGER shipAng, tick, fuel, crashed, deaths
 DIM INTEGER kLeft, kRight, kThrust, kTract
 DIM INTEGER kNext, kPrev, kQuit, kShot, kReset, kGrab, kFire, kBench
@@ -188,12 +229,22 @@ DIM INTEGER nextFrame, t0, caveTop
 '  main
 ' ======================================================================
 Setup
-LoadLevel 0
+DO
+  TitleScreen
+  NewGame
+  RunGame
+LOOP
+END
+
+SUB RunGame
 nextFrame = TIMER + FRAMEMS
 DO
   ReadKeys
   IF kQuit <> 0 THEN EXIT DO
-  IF kNext <> 0 THEN LoadLevel((level + 1) MOD NLEVEL)
+  ' N finishes the mission as though the pod had been carried out, which
+  ' is the only way to reach the later caves and their modifiers without
+  ' playing there.  P just swaps the cave under you.
+  IF kNext <> 0 THEN ending = 1
   IF kPrev <> 0 THEN LoadLevel((level + NLEVEL - 1) MOD NLEVEL)
   IF kReset <> 0 THEN keepPod = 0 : StartShip
   IF kGrab <> 0 THEN GrabPod
@@ -218,13 +269,15 @@ DO
   FRAMEBUFFER COPY F, N
   drawMs = TIMER - t0
 
-  DO WHILE TIMER < nextFrame : LOOP
-  nextFrame = nextFrame + FRAMEMS
-LOOP
-FRAMEBUFFER WRITE N
-CLS RGB(BLACK)
-PRINT "Thrust phase 3 - flight model."
-END
+  IF ending <> 0 THEN
+    EndLevel
+  ELSE
+    DO WHILE TIMER < nextFrame : LOOP
+    nextFrame = nextFrame + FRAMEMS
+  ENDIF
+LOOP UNTIL gameOver <> 0
+IF gameOver = 1 THEN GameOverScreen
+END SUB
 
 ' ======================================================================
 '  one-time set-up
@@ -393,6 +446,12 @@ SUB LoadLevel(lv AS INTEGER)
     READ gravY, startX, startY, j, k
   NEXT i
   startCamY = k + VIEWOFF
+  ' initialise_level_pointers reverses gravity by EOR $FF on the fraction
+  ' with the integer byte set to -1, which comes to -(FRAC + 1) / 256 -
+  ' a shade stronger than the pull it replaces, not a mirror of it.
+  IF revGrav <> 0 THEN gravY = -(gravY + 1 / 256)
+  ' An invisible cave is the landscape drawn in the background colour.
+  IF invLand <> 0 THEN colLand = colBack
 
   ' The objects.  Their x and y are the sprite's plot origin, so they are
   ' kept as they come and the drawing does not shift them.  The pod is the
@@ -409,6 +468,7 @@ SUB LoadLevel(lv AS INTEGER)
       IF i = lv AND nObj < MAXOBJ THEN
         objX(nObj) = c : objY(nObj) = inc
         objT(nObj) = k : objG(nObj) = x : objLive(nObj) = 1
+        objTC(nObj) = 0
         IF k = OBJ_POD THEN
           podHomeX = c + 2.25
           podHomeY = inc + 2.5
@@ -437,7 +497,9 @@ SUB StartShip
   shipX = startX : shipY = startY
   midX = startX : midY = startY
   velX = 0 : velY = 0
-  shipAng = 0 : tick = 0 : simAcc = 0
+  shipAng = 0
+  IF revGrav <> 0 THEN shipAng = ANGLEDOWN
+  tick = 0 : simAcc = 0
   fuel = FUEL0 : crashed = 0
   podAtt = 0 : beamOn = 0 : tethAng = 0 : tethVel = 0
   podX = podHomeX : podY = podHomeY
@@ -538,6 +600,134 @@ SUB GrabPod
   ClampCamera
 END SUB
 
+' ======================================================================
+'  a game
+' ======================================================================
+SUB NewGame
+  lives = LIVES0 : score = 0 : mission = 1
+  gunProb = GUNPROB0 : gunPen = 0 : planetDead = 0
+  gameOver = 0 : deaths = 0 : keepPod = 0
+  revGrav = 0 : invLand = 0 : saidRev = 0 : saidInv = 0
+  LoadLevel 0
+  ending = 0
+END SUB
+
+' level_number = (mission_number - 1) MOD 6, and from mission 3 the guns
+' fire harder every time, capped at 35 in 256.
+SUB NextMission
+  LOCAL INTEGER b
+  b = BONUSBASE * (level + 5)
+  IF planetDead <> 0 THEN b = b + BONUSPLANET
+  score = score + b
+  mission = mission + 1
+  IF mission >= 3 THEN
+    gunProb = gunProb + 1
+    IF gunProb > GUNPROBMAX THEN gunProb = GUNPROBMAX
+  ENDIF
+  planetDead = 0 : keepPod = 0
+  Banner "MISSION " + STR$(mission - 1) + " COMPLETE", "BONUS " + STR$(b)
+  IF score > hiScore THEN hiScore = score
+  ' Every sixth mission the two modifiers step round.  Inverting reverse
+  ' gravity, and inverting the invisible landscape only when that leaves
+  ' gravity normal again, gives: normal, reversed, invisible, both.
+  IF ((mission - 1) MOD NLEVEL) = 0 THEN
+    IF revGrav <> 0 THEN revGrav = 0 ELSE revGrav = 1
+    IF revGrav = 0 THEN
+      IF invLand <> 0 THEN invLand = 0 ELSE invLand = 1
+    ENDIF
+    IF revGrav <> 0 AND saidRev = 0 THEN
+      saidRev = 1
+      Banner "GRAVITY IS REVERSED", "DOWN IS UP"
+    ENDIF
+    IF invLand <> 0 AND saidInv = 0 THEN
+      saidInv = 1
+      Banner "THE CAVE IS INVISIBLE", "FLY BY MEMORY"
+    ENDIF
+  ENDIF
+  LoadLevel((mission - 1) MOD NLEVEL)
+  ending = 0
+END SUB
+
+SUB LoseLife(why$)
+  lives = lives - 1
+  IF planetDead <> 0 THEN gunPen = GUNPENALTY
+  planetDead = 0
+  IF lives <= 0 THEN
+    Banner why$, "NO SHIPS LEFT"
+    IF score > hiScore THEN hiScore = score
+    gameOver = 1
+    EXIT SUB
+  ENDIF
+  Banner why$, STR$(lives) + " SHIP LEFT"
+  StartShip
+  ending = 0
+END SUB
+
+' The three ways a level ends, handled between frames rather than inside
+' the simulation so that the screen is settled when the banner goes up.
+SUB EndLevel
+  SELECT CASE ending
+    CASE 1 : NextMission
+    CASE 2 : LoseLife "YOU LEFT WITHOUT THE POD"
+    CASE 3 : LoseLife "SHIP LOST"
+  END SELECT
+END SUB
+
+SUB Banner(a$, b$)
+  DrawWorld
+  DrawObjects
+  DrawPod
+  DrawShip
+  DrawPanel
+  BOX 40, 96, 240, 48, 1, colObj, RGB(BLACK)
+  TEXT 160, 106, a$, "CT", FONTN, 1, pal(3), RGB(BLACK)
+  TEXT 160, 124, b$, "CT", FONTN, 1, RGB(WHITE), RGB(BLACK)
+  FRAMEBUFFER COPY F, N
+  PAUSE 1600
+  nextFrame = TIMER + FRAMEMS
+END SUB
+
+SUB TitleScreen
+  LOCAL INTEGER t
+  LOCAL ky$ LENGTH 2
+  FRAMEBUFFER WRITE F
+  CLS RGB(BLACK)
+  TEXT 160, 24, "T H R U S T", "CT", FONTN, 3, pal(3), RGB(BLACK)
+  TEXT 160, 56, "after the 1986 Superior Software original", "CT", FONTN, 1, pal(6), RGB(BLACK)
+  TEXT 160, 68, "by Jeremy C. Smith", "CT", FONTN, 1, pal(6), RGB(BLACK)
+  TEXT 60, 100, "LEFT / RIGHT", "LT", FONTN, 1, pal(2), RGB(BLACK)
+  TEXT 170, 100, "TURN", "LT", FONTN, 1, RGB(WHITE), RGB(BLACK)
+  TEXT 60, 114, "UP or SPACE", "LT", FONTN, 1, pal(2), RGB(BLACK)
+  TEXT 170, 114, "THRUST", "LT", FONTN, 1, RGB(WHITE), RGB(BLACK)
+  TEXT 60, 128, "RETURN or A", "LT", FONTN, 1, pal(2), RGB(BLACK)
+  TEXT 170, 128, "TRACTOR, REFUEL", "LT", FONTN, 1, RGB(WHITE), RGB(BLACK)
+  TEXT 60, 142, "DOWN or F", "LT", FONTN, 1, pal(2), RGB(BLACK)
+  TEXT 170, 142, "FIRE", "LT", FONTN, 1, RGB(WHITE), RGB(BLACK)
+  TEXT 160, 168, "LIFT THE POD OUT OF THE CAVE", "CT", FONTN, 1, pal(1), RGB(BLACK)
+  TEXT 160, 182, "THE REACTOR IS WORTH 2000 AND TEN SECONDS", "CT", FONTN, 1, pal(1), RGB(BLACK)
+  IF hiScore > 0 THEN
+    TEXT 160, 196, "BEST " + STR$(hiScore), "CT", FONTN, 1, pal(6), RGB(BLACK)
+  ENDIF
+  TEXT 160, 210, "PRESS SPACE", "CT", FONTN, 1, pal(3), RGB(BLACK)
+  FRAMEBUFFER COPY F, N
+  ' KEYDOWN empties the console buffer, so INKEY$ has to be read first or
+  ' a key arriving over the serial console is thrown away unseen.
+  DO WHILE INKEY$ <> "" : LOOP
+  DO
+    ky$ = INKEY$
+    t = KEYDOWN(0)
+  LOOP UNTIL ky$ <> "" OR t > 0
+END SUB
+
+SUB GameOverScreen
+  BOX 40, 96, 240, 48, 1, colObj, RGB(BLACK)
+  TEXT 160, 106, "GAME OVER", "CT", FONTN, 2, pal(3), RGB(BLACK)
+  TEXT 160, 124, "SCORE " + STR$(score), "CT", FONTN, 1, RGB(WHITE), RGB(BLACK)
+  TEXT 160, 136, "BEST " + STR$(hiScore), "CT", FONTN, 1, pal(6), RGB(BLACK)
+  FRAMEBUFFER COPY F, N
+  PAUSE 3000
+END SUB
+
 SUB ClampCamera
   IF camY < 0 THEN camY = 0
   IF camY > depth - VIEWR THEN camY = depth - VIEWR
@@ -555,9 +745,10 @@ SUB SimStep
   LOCAL INTEGER t, d
   LOCAL FLOAT p
 
+  IF ending <> 0 THEN EXIT SUB
   IF crashed <> 0 THEN
     crashed = crashed - 1
-    IF crashed = 0 THEN StartShip
+    IF crashed = 0 THEN ending = 3
     EXIT SUB
   ENDIF
 
@@ -620,8 +811,18 @@ SUB SimStep
   IF countdown > 0 THEN
     countdown = countdown - 1
     IF (countdown AND 15) = 0 THEN SndCountdown
-    IF countdown = 0 THEN crashed = 40 : deaths = deaths + 1
+    IF countdown = 0 THEN Explode
   ENDIF
+  ' Above scanline 288 is orbit.  Arriving with the pod finishes the
+  ' mission; arriving without it costs a life, and if the planet has been
+  ' blown the next mission's guns are angrier for it.
+  IF ending = 0 AND crashed = 0 AND midY < ORBITY THEN
+    SndEnterOrbit
+    IF podAtt <> 0 THEN ending = 1 ELSE ending = 2
+  ENDIF
+  ' A warning band below the orbit line, so leaving without the pod is a
+  ' decision rather than a surprise.
+  IF podAtt = 0 AND midY < ORBITY + 40 THEN warnUp = 1 ELSE warnUp = 0
 
   IF HitWall() <> 0 THEN Explode
 END SUB
@@ -717,19 +918,29 @@ END SUB
 ' ----------------------------------------------------------------------
 SUB Refuel
   LOCAL INTEGER fi
-  LOCAL FLOAT fa, fb, fr
+  LOCAL FLOAT dx, dy
   fuelBeam = -1
-  IF kTract = 0 OR crashed <> 0 THEN EXIT SUB
+  IF crashed <> 0 OR kTract = 0 THEN EXIT SUB
   FOR fi = 0 TO nObj - 1
-    IF objLive(fi) <> 0 AND objT(fi) = OBJ_FUEL THEN
-      fa = ABS(shipX - objX(fi) - 2) * COLPX
-      fb = ABS(shipY - objY(fi) - 5) * ROWPX
-      IF fa > fb THEN fr = fb + 3 * fa ELSE fr = fa + 3 * fb
-      IF fr < BEAMDIST THEN
-        fuelBeam = fi
-        fuel = fuel + FUELADD
-        IF fuel > FUELMAX THEN fuel = FUELMAX
-        EXIT SUB
+    IF objLive(fi) <> 0 THEN
+      IF objT(fi) = OBJ_FUEL THEN
+        dx = objX(fi) - shipX
+        dy = objY(fi) - shipY
+        IF dx >= FUELDX0 AND dx <= FUELDX1 THEN
+          IF dy >= FUELDY0 AND dy <= FUELDY1 THEN
+            fuelBeam = fi
+            fuel = fuel + FUELADD
+            IF fuel > FUELMAX THEN fuel = FUELMAX
+            objTC(fi) = objTC(fi) + 1
+            IF objTC(fi) >= FUELFRAMES THEN
+              objLive(fi) = 0
+              score = score + SCOREFUELCELL
+              SndCollect1
+              SndCollect2
+            ENDIF
+            EXIT SUB
+          ENDIF
+        ENDIF
       ENDIF
     ENDIF
   NEXT fi
@@ -750,7 +961,7 @@ SUB UpdateGuns
   ' the same firing rate for the same expected number of shots, and costs
   ' two statements instead of nineteen array scans and nineteen function
   ' calls - which is most of what the entity benchmark was measuring.
-  IF RND * 256 >= GUNPROB * nObj THEN EXIT SUB
+  IF RND * 256 >= (gunProb + gunPen) * nObj THEN EXIT SUB
   gi = INT(RND * nObj)
   IF objLive(gi) = 0 THEN EXIT SUB
   IF objT(gi) >= OBJ_FUEL THEN EXIT SUB
@@ -860,6 +1071,7 @@ SUB HitObject(j AS INTEGER)
     SndExplosion2
     IF reactorHP <= 0 THEN
       objLive(j) = 0
+      planetDead = 1
       countdown = CDOWN0
       Debris objX(j) + 2, objY(j) + 5, 8
       SndExplosion1
@@ -1053,12 +1265,14 @@ END SUB
 SUB DrawPanel
   LOCAL s$ LENGTH 48
   BOX 0, 0, SCRW, PANELH, 0, RGB(BLACK), RGB(BLACK)
-  s$ = "L" + STR$(level + 1) + " FUEL " + STR$(fuel) + " SC " + STR$(score)
+  s$ = "M" + STR$(mission) + " SHIPS " + STR$(lives) + " FUEL " + STR$(fuel)
+  IF revGrav <> 0 THEN s$ = s$ + " REV"
+  IF invLand <> 0 THEN s$ = s$ + " DARK"
   IF podAtt <> 0 THEN s$ = s$ + " POD"
-  IF countdown > 0 THEN s$ = s$ + " GO " + STR$(countdown \ 50 + 1)
+  IF countdown > 0 THEN s$ = s$ + "  GET OUT " + STR$(countdown \ 50 + 1)
+  IF warnUp <> 0 THEN s$ = s$ + "  NO POD - TURN BACK"
   TEXT 2, 4, s$, "LT", FONTN, 1, colLand, RGB(BLACK)
-  s$ = STR$(nBox) + " BOX " + STR$(drawMs) + "MS"
-  TEXT SCRW - 2, 4, s$, "RT", FONTN, 1, RGB(WHITE), RGB(BLACK)
+  TEXT SCRW - 2, 4, STR$(score), "RT", FONTN, 1, RGB(WHITE), RGB(BLACK)
 END SUB
 
 ' ======================================================================

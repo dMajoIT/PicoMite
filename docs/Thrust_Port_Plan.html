@@ -228,6 +228,7 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
 <section id="drop">
   <div class="eyebrow">Scope</div>
   <h2>What we deliberately do not port</h2>
+  <div class="note">One that was considered and dropped: the BBC drew its terrain on alternate pixel rows, which is what gives the rock its texture, and TURTLE's <code>FILL PATTERN</code> 15 is exactly that stripe. It would even land world-locked, because our terrain scanline is two pixels and the camera moves in whole scanlines. But the patterned rectangle fill is a per-pixel <code>DrawPixel</code> loop over 72,000 pixels a frame, and the rectangle and polygon paths clamp the pattern index to 7 while the circle path allows all 32 — so it would need a firmware change as well as a frame-time one. Left solid.</div>
   <div class="tablewrap">
   <table>
     <tr><th>Original technique</th><th>Why it existed</th><th>What we do</th></tr>
@@ -377,6 +378,7 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
       </div>
       <p>Six particles is a busy moment and thirty-two is the instant after something large explodes. Play sits in the first of those and has five to ten milliseconds in hand; the full pool overruns the frame by a few, for about half a second. <strong>The cost is the pool and not the objects</strong> — level 0 with four objects costs as much as level 4 with nineteen — which is what an MMBasic array access costs when you make five hundred of them a step. Halving the pool would buy the worst case back, and the debris bursts have already been trimmed from twelve pieces to eight.</p>
       <p><strong>You start a game with an empty tank</strong>, which reads as a bug in the disassembly until you see where the ship is put down. <code>add_fuel</code> is only ever reached from the tractor beam on a fuel cell, and the level reset table starts every level at the same spot — which, once the sprite-origin offset is applied, is <em>exactly</em> above the first fuel cell, to the column. You fall onto it, hold the beam, and fly off with a full tank. That the two independent corrections (plot origin to centre, and the fuel cell's own centre) agree to the column is the strongest confirmation that either is right.</p>
+      <p><strong>Refuelling is a box, not a range</strong>, and that was a bug here until play found it. I had assumed it reused the tractor beam's distance; <code>collecting_fuel_flag</code> is set by a test that the cell is 1 to 5 columns to the <em>right</em> of the ship and 0 to 27 scanlines <em>below</em> it. Both subtractions are unsigned, which is what makes it one-sided: you have to be above the cell and almost on top of it. And a cell is a fixed ration rather than a tap — <code>obj_tractor_counter</code> counts frames on the beam and at 26 the cell is consumed, scoring 30, so one cell is always 286 units of fuel however you approach it.</p>
     </div>
   </div>
 
@@ -384,8 +386,8 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
     <div class="num">6<small>Sound</small></div>
     <div>
       <h3>Four envelopes and nine blocks</h3>
-      <p class="meta">A short phase, now that the engine exists.</p>
-      <p>Chuckie Egg's conversion took an afternoon once the numbers were in hand. Engine noise retriggered while thrusting is the only one needing per-frame attention.</p>
+      <p class="meta"><span class="pill ok">Done</span> A short phase, as expected.</p>
+      <p>All nine are wired: the gun, the hostile gun, both halves of the explosion, the pickup, the engine retriggered on every active thrust tick, the countdown, and entering orbit. The envelope 2 correction described above is the only thing that is not the original's bytes.</p>
     </div>
   </div>
 
@@ -393,8 +395,11 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
     <div class="num">7<small>Game</small></div>
     <div>
       <h3>Missions, score, and the difficulty cycle</h3>
-      <p class="meta">Structure around the simulation.</p>
-      <p><code>level_number = (mission_number - 1) MOD 6</code> — six terrains cycling with escalating difficulty, which is the same shape as Chuckie Egg's five cycles and can reuse that structure. Then reversed gravity and the invisible landscape on later missions, the status panel, the title screen and the high score.</p>
+      <p class="meta"><span class="pill ok">Done</span> Structure around the simulation.</p>
+      <p>Title screen, four ships, a mission bonus of <code>400 &times; (level + 5)</code> plus 2000 for the planet, gun probability climbing from 2 in 256 to a cap of 35 from mission three, a high score, and game over.</p>
+      <p><strong>The two modifiers turn over on a two-bit counter</strong> and it is worth reading <code>start_new_level</code> closely to see it. At the end of each set of six it inverts reverse gravity — and only when <em>that</em> switch leaves gravity normal again does it invert the invisible landscape. So the rotation is normal, reversed, invisible, both, coming round after twenty-four missions.</p>
+      <p>Reverse gravity is not a mirror of the pull it replaces. <code>initialise_level_pointers</code> does <code>EOR #$FF</code> on the fraction with the integer byte set to &minus;1, which comes to <code>-(FRAC + 1) / 256</code> — a shade stronger. On level 0 that is &minus;0.023437 against +0.019531, and the ship is put down pointing at angle 16 instead of 0.</p>
+      <p>Checked by playing to mission 8 with the N shortcut: level 1, reverse gravity on and invisible still off, gravity &minus;0.031250 (exactly <code>-(7 + 1) / 256</code> for that cave), gun probability 8 after six increments, and 20000 of bonus — which is 2000 + 2400 + 2800 + 3200 + 3600 + 4000 + 2000, the documented progression to the digit.</p>
     </div>
   </div>
 </section>
