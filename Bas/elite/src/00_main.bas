@@ -229,6 +229,12 @@ CONST DOCKRANGE = 280              ' touching distance: the station spans 160
 CONST DOCKFACE = 0.896             ' the station's nose back towards us
 CONST DOCKCONE = 0.927             ' how nearly dead ahead it must be
 CONST DOCKROLL = 0.833             ' 80 of 96: the slot within 33.6 deg of level
+' What a ship flying itself in has to do before it goes for the slot.  The
+' original will not let it accelerate until its wings lie along the letterbox
+' - 33 out of 96 - and until then it slows right down and waits for the
+' station's own roll to bring the slot round to it.
+CONST DOCKAPPR = 2200              ' near enough to start caring about the slot
+CONST DOCKALIGN = 0.344            ' 33 of 96
 
 CONST MSTURN = 0.22                ' how hard a missile swings onto a bearing
 CONST ECMFRAMES = 32               ' the original's countdown, in iterations

@@ -198,8 +198,10 @@ Coriolis. It is a different shape with the same slot and the same five tests,
 so it makes no difference to the flying - but it is worth seeing.
 
 You are not the only one docking. A trader on its way in flies the approach for
-itself and goes inside, and leaves no wreck behind it because it did not
-crash.
+itself: it stands off the slot with its engines back until its wings lie along
+the letterbox - it does not have to turn, because the station is turning - and
+then takes the station's own roll and goes in. It leaves no wreck behind it,
+because it did not crash.
 
 The docking computer (`C`) does the whole thing, including the rolling - and
 that is ours, not the original's. In the cassette version pressing `C` docks
@@ -474,15 +476,11 @@ in `tests/sfxtest.bas`, which plays all ten by name so they can be judged.
 
 What is left:
 
-- **One shield, not two.** The original decides which shield a hit lands on
-  from the direction it came from, so being jumped from behind drains the aft
-  shield and leaves the forward one for whatever is in front of you. Ours puts
-  every hit on the forward shield. Both gauges are drawn and both recharge; it
-  is only the choosing that is missing.
-- **An NPC docks on two tests, not five.** A trader flying itself in has to be
-  close enough to touch and on the side the slot is on, but is not asked to lay
-  its wings along the letterbox the way you are. Nothing is gained by watching
-  it fail and go round again, but it is not what the original does.
+- **Two docking routines where the original has one.** The original flies an
+  NPC in with the same code as the player's docking computer. Ours has the
+  computer for the player and a simpler controller for everything else - it
+  stands off the slot until its wings lie along the letterbox, which is the
+  rule that matters, but it is not the same code doing it.
 
 The pace used to be on this list, on the grounds that `TICKRATE` was a guess.
 It is not: the original's own source settles it. `LASCT` is decremented by the
@@ -498,9 +496,10 @@ temperature gauges with the planet and the sun that drive them, collisions,
 the escape pod, the energy bomb, the in-system jump, the other seven galaxies,
 ships that fire missiles at you and jam yours with their own E.C.M., pilots
 who bail out of a dying ship, equipment that has to be bought before it works,
-the hyperspace countdown, the two dashboard bulbs, and cargo and equipment that
-a hit can destroy - the E.C.M., the fuel scoops, the energy bomb, the energy
-unit and the docking computer, which are the five the original puts at risk.
+the hyperspace countdown, the two dashboard bulbs, cargo and equipment that a
+hit can destroy - the E.C.M., the fuel scoops, the energy bomb, the energy unit
+and the docking computer, which are the five the original puts at risk - and
+the aft shield, which takes the hits that come from behind.
 
 ## Testing it
 

@@ -1352,8 +1352,15 @@ legal = 0
 KillShip n
 END SUB
 SUB DockNPCScene
-LOCAL INTEGER n, f, gone, k0
 NewCommander
+DockTrial 180
+DockTrial 140
+DockTrial 100
+DockTrial 60
+END SUB
+SUB DockTrial(hdg AS INTEGER)
+LOCAL INTEGER n, f, gone, k0, aligned, slow
+ClearSlots
 LaunchState
 MATH Q_EULER RAD(180), 0, 0, qA() : qA(4) = 1
 KillShip SLOT_STAR
@@ -1361,14 +1368,14 @@ n = NewShip(T_STATION, 0, 0, 8000, qA())
 IF n >= 0 THEN sRol(n) = 255 : sAI(n) = 1
 dSpeed = 0
 newbFlags = NB_DOCKING
-n = NewFacing(T_TRADER, 600, -400, 14000, 180)
+n = NewFacing(T_TRADER, 600, -400, 2000, hdg)
 IF n < 0 THEN PRINT "no slot for the trader" : EXIT SUB
 sSpd(n) = 20
 sAI(n) = 128 OR 64
 k0 = kills
-PRINT "trader in slot"; n; " flags"; sNewb(n); " at range"; ShipRange(n)
-PRINT "station at z"; sZ(SLOT_STAR)
 gone = 0
+aligned = 0
+slow = 0
 tick = 1
 tickWhole = 1
 FOR f = 1 TO 4000
@@ -1376,15 +1383,17 @@ MoveShips
 Tactics
 mcnt = (mcnt + 1) AND 255
 IF sTyp(n) <> T_TRADER THEN gone = f : EXIT FOR
-IF (f AND 255) = 0 THEN PRINT "  frame"; f; " range"; ShipRange(n); " speed"; sSpd(n)
+IF ShipRange(n) < DOCKAPPR THEN
+aligned = ABS(SlotAlign(n)) >= DOCKALIGN
+IF aligned = 0 THEN slow = slow + 1
+ENDIF
 NEXT f
 IF gone THEN
-PRINT "docked at frame"; gone
+PRINT "heading"; hdg; ": docked at frame"; gone; ", waited"; slow;
+PRINT " frames for the slot, lined up"; aligned; ", kills"; kills - k0
 ELSE
-PRINT "still out there after 4000 frames, range"; ShipRange(n)
+PRINT "heading"; hdg; ": still out there, range"; ShipRange(n); " lined up"; aligned
 ENDIF
-PRINT "kills went from"; k0; "to"; kills; " (must not change)"
-PRINT "slots in use"; nUsed; " (planet, station)"
 END SUB
 FUNCTION ShipRange(n AS INTEGER) AS INTEGER
 LOCAL FLOAT dx, dy, dz
@@ -1423,6 +1432,22 @@ LOOP UNTIL hypCount = 0 OR f > 300
 PRINT "jumped after"; f; " iterations (expect 85)"
 PRINT "  which at"; TICKRATE; "a second is"; STR$(f / TICKRATE, 3, 1); " seconds"
 PRINT "  home system is now"; homeSys; " (expect"; tgt; ")"
+PRINT
+NewCommander
+LaunchState
+MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+n = NewShip(T_VIPER, 0, 0, 4000, qA())
+pFsh = 255 : pAsh = 255
+HitPlayer 40, n
+PRINT "hit from in front: fore"; pFsh; " aft"; pAsh; " (expect 215, 255)"
+sZ(n) = -4000
+pFsh = 255 : pAsh = 255
+HitPlayer 40, n
+PRINT "hit from behind:   fore"; pFsh; " aft"; pAsh; " (expect 255, 215)"
+pFsh = 255 : pAsh = 255
+HitPlayer 40, -1
+PRINT "hit from nowhere:  fore"; pFsh; " aft"; pAsh; " (expect 215, 255)"
+KillShip n
 PRINT
 NewCommander
 FOR i = 0 TO NEQUIP - 1 : eqOwned(i) = 1 : NEXT i
@@ -2298,7 +2323,7 @@ IF d < 8192 AND cnt > 0.917 AND (sAI(n) AND 126) <> 0 THEN
 dmg = bLas(sBp(n)) * 2
 sFlg(n) = sFlg(n) OR 2
 IF cnt > 0.972 THEN
-HitPlayer dmg
+HitPlayer dmg, n
 ENDIF
 ENDIF
 IF sEne(n) * 8 < bEne(sBp(n)) AND (tNewb(sTyp(n)) AND NB_POD) <> 0 THEN
@@ -2364,29 +2389,57 @@ sAcc(n) = 1
 ENDIF
 END SUB
 SUB DockNPC(n AS INTEGER)
-LOCAL FLOAT dx, dy, dz, d, nz
+LOCAL FLOAT d
 IF sTyp(SLOT_STAR) <> T_STATION THEN EXIT SUB
+d = ShipToStation(n)
+IF d > DOCKAPPR THEN
+IF sAcc(n) = 0 THEN sAcc(n) = 1
+EXIT SUB
+ENDIF
+IF d <= DOCKRANGE THEN
+IF DockSide(n) THEN
+sNewb(n) = sNewb(n) OR NB_GONE
+KillShip n
+EXIT SUB
+ENDIF
+ENDIF
+IF ABS(SlotAlign(n)) < DOCKALIGN THEN
+sAcc(n) = -2
+IF sSpd(n) < 2 THEN sAcc(n) = 0
+EXIT SUB
+ENDIF
+sRol(n) = sRol(SLOT_STAR)
+IF sSpd(n) < 8 THEN sAcc(n) = 1
+IF sSpd(n) > 10 THEN sAcc(n) = -2
+END SUB
+FUNCTION ShipToStation(n AS INTEGER) AS FLOAT
+LOCAL FLOAT dx, dy, dz
+dx = sX(n) - sX(SLOT_STAR)
+dy = sY(n) - sY(SLOT_STAR)
+dz = sZ(n) - sZ(SLOT_STAR)
+ShipToStation = SQR(dx*dx + dy*dy + dz*dz)
+END FUNCTION
+FUNCTION DockSide(n AS INTEGER) AS INTEGER
+LOCAL FLOAT dx, dy, dz, d
 dx = sX(n) - sX(SLOT_STAR)
 dy = sY(n) - sY(SLOT_STAR)
 dz = sZ(n) - sZ(SLOT_STAR)
 d = SQR(dx*dx + dy*dy + dz*dz)
-IF d > DOCKRANGE THEN
-IF d < 2000 THEN
-IF sSpd(n) > 6 THEN sAcc(n) = -2
-ELSEIF sAcc(n) = 0 THEN
-sAcc(n) = 1
-ENDIF
-EXIT SUB
-ENDIF
+DockSide = 1
+IF d < 1 THEN EXIT FUNCTION
 MATH SLICE sQ(), , SLOT_STAR, qA()
 MATH Q_VECTOR 0, 0, 1, qB() : MATH Q_ROTATE qA(), qB(), qV()
-IF d > 1 THEN
-nz = (qV(1) * dx + qV(2) * dy + qV(3) * dz) / d
-IF nz > -DOCKFACE THEN EXIT SUB
-ENDIF
-sNewb(n) = sNewb(n) OR NB_GONE
-KillShip n
-END SUB
+IF (qV(1) * dx + qV(2) * dy + qV(3) * dz) / d < DOCKFACE THEN DockSide = 0
+END FUNCTION
+FUNCTION SlotAlign(n AS INTEGER) AS FLOAT
+LOCAL FLOAT rx, ry, rz
+MATH SLICE sQ(), , SLOT_STAR, qA()
+MATH Q_VECTOR 0, 1, 0, qB() : MATH Q_ROTATE qA(), qB(), qV()
+rx = qV(1) : ry = qV(2) : rz = qV(3)
+MATH SLICE sQ(), , n, qA()
+MATH Q_VECTOR 1, 0, 0, qB() : MATH Q_ROTATE qA(), qB(), qV()
+SlotAlign = rx * qV(1) + ry * qV(2) + rz * qV(3)
+END FUNCTION
 SUB TurnToward(n AS INTEGER, tgt AS INTEGER)
 LOCAL FLOAT rx, ry, rz, sx2, sy2, sz2, dr, ds, m, dx, dy, dz
 dx = sX(tgt) - sX(n) : dy = sY(tgt) - sY(n) : dz = sZ(tgt) - sZ(n)
@@ -2445,16 +2498,29 @@ IF (sRol(n) AND 127) < 16 THEN
 IF ds > 0 THEN sRol(n) = 5 ELSE sRol(n) = 5 OR 128
 ENDIF
 END SUB
-SUB HitPlayer(dmg AS INTEGER)
-LOCAL INTEGER dleft
+SUB HitPlayer(dmg AS INTEGER, from AS INTEGER)
+LOCAL INTEGER dleft, aft
 dleft = dmg
 Sfx SFX_HIT
+aft = 0
+IF from >= 0 THEN
+IF sZ(from) < 0 THEN aft = 1
+ENDIF
+IF aft THEN
+IF pAsh >= dleft THEN
+pAsh = pAsh - dleft
+EXIT SUB
+ENDIF
+dleft = dleft - pAsh
+pAsh = 0
+ELSE
 IF pFsh >= dleft THEN
 pFsh = pFsh - dleft
 EXIT SUB
 ENDIF
 dleft = dleft - pFsh
 pFsh = 0
+ENDIF
 pEnergy = pEnergy - dleft
 IF pEnergy <= 0 THEN
 pEnergy = 0
@@ -2598,7 +2664,7 @@ IF sTyp(n) = T_MISSILE AND sExp(n) = 0 AND sTgt(n) = -2 THEN
 d = SQR(sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n))
 IF d < 256 THEN
 Explode n
-IF d < 128 THEN HitPlayer 250 ELSE HitPlayer 80
+IF d < 128 THEN HitPlayer 250, n ELSE HitPlayer 80, n
 ELSE
 HomeOn n, -sX(n), -sY(n), -sZ(n), d
 ENDIF
@@ -2734,7 +2800,7 @@ SUB Crash
 IF dSpeed < 5 THEN
 dSpeed = 1
 sZ(SLOT_STAR) = sZ(SLOT_STAR) + 300
-HitPlayer 10
+HitPlayer 10, SLOT_STAR
 ELSE
 pEnergy = 0
 dead = 1
@@ -3081,7 +3147,7 @@ t = sTyp(n)
 IF Scoopable(t) AND eqOwned(EQ_SCOOPS) <> 0 AND sY(n) < 0 THEN
 ScoopIt n, t
 ELSE
-HitPlayer 32
+HitPlayer 32, n
 Explode n
 n = n + 1
 ENDIF

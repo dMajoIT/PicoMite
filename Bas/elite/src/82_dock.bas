@@ -66,7 +66,7 @@ SUB Crash
   IF dSpeed < 5 THEN
     dSpeed = 1
     sZ(SLOT_STAR) = sZ(SLOT_STAR) + 300
-    HitPlayer 10
+    HitPlayer 10, SLOT_STAR
   ELSE
     pEnergy = 0
     dead = 1

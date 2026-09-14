@@ -91,7 +91,7 @@ SUB Contact
       ELSE
         ' Anything else at that range is a collision, and it goes as badly
         ' for whatever we hit as it does for us.
-        HitPlayer 32
+        HitPlayer 32, n
         Explode n
         n = n + 1
       ENDIF

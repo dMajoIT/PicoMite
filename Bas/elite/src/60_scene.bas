@@ -277,9 +277,21 @@ END SUB
 ' trader out beyond the station with the flag set and runs the game's own
 ' movement and tactics until it either docks or gives up.  What it must not
 ' do is blow up, pay a bounty or count as a kill: it docked, it did not die.
+'
+' Four approaches from four headings, because whether a ship arrives already
+' lined up with the slot is luck: the interesting case is the one that has to
+' stop and wait for the station's own roll to bring the letterbox round.
 SUB DockNPCScene
-  LOCAL INTEGER n, f, gone, k0
   NewCommander
+  DockTrial 180
+  DockTrial 140
+  DockTrial 100
+  DockTrial 60
+END SUB
+
+SUB DockTrial(hdg AS INTEGER)
+  LOCAL INTEGER n, f, gone, k0, aligned, slow
+  ClearSlots
   LaunchState
   ' Put the station in front of us rather than behind, so the ship coming in
   ' is somewhere we could watch it.
@@ -289,19 +301,17 @@ SUB DockNPCScene
   IF n >= 0 THEN sRol(n) = 255 : sAI(n) = 1
   dSpeed = 0
 
-  ' A trader, well beyond the station, told to dock.
   newbFlags = NB_DOCKING
-  n = NewFacing(T_TRADER, 600, -400, 14000, 180)
+  ' On the side the slot is on: the station faces us, so a ship docking
+  ' with it comes from between us and it.
+  n = NewFacing(T_TRADER, 600, -400, 2000, hdg)
   IF n < 0 THEN PRINT "no slot for the trader" : EXIT SUB
   sSpd(n) = 20
   sAI(n) = 128 OR 64
   k0 = kills
-  PRINT "trader in slot"; n; " flags"; sNewb(n); " at range"; ShipRange(n)
-  PRINT "station at z"; sZ(SLOT_STAR)
   gone = 0
-  ' One whole tick an iteration.  This drives the game's own movement without
-  ' the frame clock, so the run is the same every time and takes no longer
-  ' than the arithmetic does.
+  aligned = 0
+  slow = 0
   tick = 1
   tickWhole = 1
   FOR f = 1 TO 4000
@@ -309,15 +319,17 @@ SUB DockNPCScene
     Tactics
     mcnt = (mcnt + 1) AND 255
     IF sTyp(n) <> T_TRADER THEN gone = f : EXIT FOR
-    IF (f AND 255) = 0 THEN PRINT "  frame"; f; " range"; ShipRange(n); " speed"; sSpd(n)
+    IF ShipRange(n) < DOCKAPPR THEN
+      aligned = ABS(SlotAlign(n)) >= DOCKALIGN
+      IF aligned = 0 THEN slow = slow + 1
+    ENDIF
   NEXT f
   IF gone THEN
-    PRINT "docked at frame"; gone
+    PRINT "heading"; hdg; ": docked at frame"; gone; ", waited"; slow;
+    PRINT " frames for the slot, lined up"; aligned; ", kills"; kills - k0
   ELSE
-    PRINT "still out there after 4000 frames, range"; ShipRange(n)
+    PRINT "heading"; hdg; ": still out there, range"; ShipRange(n); " lined up"; aligned
   ENDIF
-  PRINT "kills went from"; k0; "to"; kills; " (must not change)"
-  PRINT "slots in use"; nUsed; " (planet, station)"
 END SUB
 
 FUNCTION ShipRange(n AS INTEGER) AS INTEGER
@@ -362,6 +374,24 @@ SUB LeftScene
   PRINT "jumped after"; f; " iterations (expect 85)"
   PRINT "  which at"; TICKRATE; "a second is"; STR$(f / TICKRATE, 3, 1); " seconds"
   PRINT "  home system is now"; homeSys; " (expect"; tgt; ")"
+
+  ' --- which shield takes a hit
+  PRINT
+  NewCommander
+  LaunchState
+  MATH Q_EULER 0, 0, 0, qA() : qA(4) = 1
+  n = NewShip(T_VIPER, 0, 0, 4000, qA())
+  pFsh = 255 : pAsh = 255
+  HitPlayer 40, n
+  PRINT "hit from in front: fore"; pFsh; " aft"; pAsh; " (expect 215, 255)"
+  sZ(n) = -4000
+  pFsh = 255 : pAsh = 255
+  HitPlayer 40, n
+  PRINT "hit from behind:   fore"; pFsh; " aft"; pAsh; " (expect 255, 215)"
+  pFsh = 255 : pAsh = 255
+  HitPlayer 40, -1
+  PRINT "hit from nowhere:  fore"; pFsh; " aft"; pAsh; " (expect 215, 255)"
+  KillShip n
 
   ' --- what a hit costs
   PRINT

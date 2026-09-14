@@ -105,7 +105,7 @@ SUB Missiles
       d = SQR(sX(n)*sX(n) + sY(n)*sY(n) + sZ(n)*sZ(n))
       IF d < 256 THEN
         Explode n
-        IF d < 128 THEN HitPlayer 250 ELSE HitPlayer 80
+        IF d < 128 THEN HitPlayer 250, n ELSE HitPlayer 80, n
       ELSE
         HomeOn n, -sX(n), -sY(n), -sZ(n), d
       ENDIF

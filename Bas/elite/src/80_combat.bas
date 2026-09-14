@@ -227,7 +227,7 @@ SUB Tactics
               ' it again, so a near miss is still seen as well as heard.
               sFlg(n) = sFlg(n) OR 2
               IF cnt > 0.972 THEN
-                HitPlayer dmg
+                HitPlayer dmg, n
               ENDIF
             ENDIF
 
@@ -342,34 +342,85 @@ END SUB
 ' wings up with the letterbox as the player is, because nothing would be
 ' gained by watching it fail and go round again.
 SUB DockNPC(n AS INTEGER)
-  LOCAL FLOAT dx, dy, dz, d, nz
+  LOCAL FLOAT d
   IF sTyp(SLOT_STAR) <> T_STATION THEN EXIT SUB
+  d = ShipToStation(n)
+  IF d > DOCKAPPR THEN
+    ' Still on the way over, so just get there.
+    IF sAcc(n) = 0 THEN sAcc(n) = 1
+    EXIT SUB
+  ENDIF
+  ' Touching distance and on the side the slot is on is the whole of the
+  ' test, and it is reached whether the ship lined itself up or not - which
+  ' is how the original has it: both branches of its approach fall through to
+  ' the same docking check.  Gating this on the alignment instead leaves a
+  ' ship that drifts out of line at the last moment sitting in the hull.
+  IF d <= DOCKRANGE THEN
+    IF DockSide(n) THEN
+      sNewb(n) = sNewb(n) OR NB_GONE
+      KillShip n
+      EXIT SUB
+    ENDIF
+  ENDIF
+  ' Not there yet.  A ship whose wings do not lie along the letterbox slows
+  ' right down and waits, which is what the original does with it: the ship
+  ' does not have to turn, because the station is turning, and the slot comes
+  ' round to it.  Its roll is left alone while it waits - rolling is what
+  ' swings a ship's own side vector round, and one held at zero roll can
+  ' pitch all day without ever lining its wings up with anything.
+  IF ABS(SlotAlign(n)) < DOCKALIGN THEN
+    sAcc(n) = -2
+    IF sSpd(n) < 2 THEN sAcc(n) = 0
+    EXIT SUB
+  ENDIF
+  ' Lined up: take the station's own roll so it stays lined up, and go in.
+  ' Tactics services one slot in eight, so a ship still doing twenty would
+  ' cover most of the arrival window between one look and the next.
+  sRol(n) = sRol(SLOT_STAR)
+  IF sSpd(n) < 8 THEN sAcc(n) = 1
+  IF sSpd(n) > 10 THEN sAcc(n) = -2
+END SUB
+
+FUNCTION ShipToStation(n AS INTEGER) AS FLOAT
+  LOCAL FLOAT dx, dy, dz
+  dx = sX(n) - sX(SLOT_STAR)
+  dy = sY(n) - sY(SLOT_STAR)
+  dz = sZ(n) - sZ(SLOT_STAR)
+  ShipToStation = SQR(dx*dx + dy*dy + dz*dz)
+END FUNCTION
+
+' Is this ship on the side of the station the slot is on?  The player's own
+' test reads the station's nose against the direction from the station to the
+' player and wants the two pointing the same way; this is that test with the
+' ship standing in for the player.  With the sign the other way up - which is
+' what this said when it was written - a ship docks through the back of the
+' station, where there is no slot at all.
+FUNCTION DockSide(n AS INTEGER) AS INTEGER
+  LOCAL FLOAT dx, dy, dz, d
   dx = sX(n) - sX(SLOT_STAR)
   dy = sY(n) - sY(SLOT_STAR)
   dz = sZ(n) - sZ(SLOT_STAR)
   d = SQR(dx*dx + dy*dy + dz*dz)
-  IF d > DOCKRANGE THEN
-    ' Ease off on the way in, as the docking algorithm itself does, so the
-    ' ship arrives at the slot rather than through it.  Tactics services one
-    ' slot in eight, so a ship still doing twenty would cover most of the
-    ' window below between one look and the next.
-    IF d < 2000 THEN
-      IF sSpd(n) > 6 THEN sAcc(n) = -2
-    ELSEIF sAcc(n) = 0 THEN
-      sAcc(n) = 1
-    ENDIF
-    EXIT SUB
-  ENDIF
-  ' Which way the station is facing, and whether this ship is in front of it.
+  DockSide = 1
+  IF d < 1 THEN EXIT FUNCTION
   MATH SLICE sQ(), , SLOT_STAR, qA()
   MATH Q_VECTOR 0, 0, 1, qB() : MATH Q_ROTATE qA(), qB(), qV()
-  IF d > 1 THEN
-    nz = (qV(1) * dx + qV(2) * dy + qV(3) * dz) / d
-    IF nz > -DOCKFACE THEN EXIT SUB
-  ENDIF
-  sNewb(n) = sNewb(n) OR NB_GONE
-  KillShip n
-END SUB
+  IF (qV(1) * dx + qV(2) * dy + qV(3) * dz) / d < DOCKFACE THEN DockSide = 0
+END FUNCTION
+
+' How nearly a ship's wings lie along the station's slot: the dot product of
+' the station's roof vector with the ship's side vector, which is 1 when they
+' are parallel and 0 when they are square to each other.  The original wants
+' 33 out of 96 before it will let the ship accelerate in.
+FUNCTION SlotAlign(n AS INTEGER) AS FLOAT
+  LOCAL FLOAT rx, ry, rz
+  MATH SLICE sQ(), , SLOT_STAR, qA()
+  MATH Q_VECTOR 0, 1, 0, qB() : MATH Q_ROTATE qA(), qB(), qV()
+  rx = qV(1) : ry = qV(2) : rz = qV(3)
+  MATH SLICE sQ(), , n, qA()
+  MATH Q_VECTOR 1, 0, 0, qB() : MATH Q_ROTATE qA(), qB(), qV()
+  SlotAlign = rx * qV(1) + ry * qV(2) + rz * qV(3)
+END FUNCTION
 
 ' Swing a ship towards something that is not us.  TurnTowards steers at the
 ' player because that is all the cassette game ever needed; this is the same
@@ -459,16 +510,34 @@ END SUB
 
 ' Damage to us.  The forward shield takes it while facing the shot, then
 ' energy; running out is the end.
-SUB HitPlayer(dmg AS INTEGER)
-  LOCAL INTEGER dleft
+' Damage to us.  Which shield takes it is decided by where it came from: the
+' original looks at the sign of the attacking ship's z, so anything behind us
+' lands on the aft shield and anything in front on the forward one.  Damage
+' with nobody behind it - flying into the station's wall - is taken on the
+' front, which is the end that hit something.
+SUB HitPlayer(dmg AS INTEGER, from AS INTEGER)
+  LOCAL INTEGER dleft, aft
   dleft = dmg
   Sfx SFX_HIT
-  IF pFsh >= dleft THEN
-    pFsh = pFsh - dleft
-    EXIT SUB
+  aft = 0
+  IF from >= 0 THEN
+    IF sZ(from) < 0 THEN aft = 1
   ENDIF
-  dleft = dleft - pFsh
-  pFsh = 0
+  IF aft THEN
+    IF pAsh >= dleft THEN
+      pAsh = pAsh - dleft
+      EXIT SUB
+    ENDIF
+    dleft = dleft - pAsh
+    pAsh = 0
+  ELSE
+    IF pFsh >= dleft THEN
+      pFsh = pFsh - dleft
+      EXIT SUB
+    ENDIF
+    dleft = dleft - pFsh
+    pFsh = 0
+  ENDIF
   pEnergy = pEnergy - dleft
   IF pEnergy <= 0 THEN
     pEnergy = 0
