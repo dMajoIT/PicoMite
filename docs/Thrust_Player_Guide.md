@@ -10,9 +10,8 @@ know where it does not.**
 
 - A PicoMite running **MODE 2** — 320 × 240, 16 colours. Any VGA or HDMI
   build, or a 320 × 240 LCD panel that supports `FRAMEBUFFER`.
-- Firmware **V6.03.02b6 or later** for the sound, which uses the new
-  `PLAY BBC SOUND`. On anything older the game still plays, silently, and the
-  title screen says so.
+- Firmware **V6.03.02b6 or later**. The sound is the BBC's own, played
+  through `PLAY BBC SOUND`, which arrived in that version.
 - A keyboard. Several keys need to be *held*, so a joystick will not do.
 
 ## Loading it
@@ -27,7 +26,7 @@ moment to load.
 | --- | --- |
 | **← →** or **Z X** | turn |
 | **↑** or **SPACE** | thrust |
-| **RETURN** or **A** | tractor field — also refuels, and shields |
+| **RETURN** or **A** | tractor field — also refuels; blocks the gun |
 | **↓** or **F** | fire |
 | **ESC** | back to the title screen |
 

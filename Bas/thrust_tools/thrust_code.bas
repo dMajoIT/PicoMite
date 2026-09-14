@@ -244,7 +244,6 @@ DIM INTEGER paLife(MAXPART - 1), paType(MAXPART - 1)
 DIM INTEGER score, reactorHP, countdown, fuelBeam, fireHeld, nPart
 DIM INTEGER lives, mission, gunProb, gunPen, planetDead, ending, gameOver
 DIM INTEGER warnUp, revGrav, invLand, hiScore, saidRev, saidInv
-DIM INTEGER sndOK
 CONST HIFILE = "A:/thrust.hi"
 DIM INTEGER shipAng, tick, fuel, crashed, deaths
 DIM INTEGER kLeft, kRight, kThrust, kTract
@@ -758,9 +757,6 @@ SUB TitleScreen
   TEXT 170, 142, "FIRE", "LT", FONTN, 1, RGB(WHITE), RGB(BLACK)
   TEXT 160, 168, "LIFT THE POD OUT OF THE CAVE", "CT", FONTN, 1, pal(1), RGB(BLACK)
   TEXT 160, 182, "THE REACTOR IS WORTH 2000 AND TEN SECONDS", "CT", FONTN, 1, pal(1), RGB(BLACK)
-  IF sndOK = 0 THEN
-    TEXT 160, 224, "no sound - needs firmware V6.03.02b6 or later", "CT", FONTN, 1, pal(1), RGB(BLACK)
-  ENDIF
   IF hiScore > 0 THEN
     TEXT 160, 196, "BEST " + STR$(hiScore), "CT", FONTN, 1, pal(6), RGB(BLACK)
   ENDIF

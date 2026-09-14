@@ -249,7 +249,6 @@ DIM INTEGER paLife(MAXPART - 1), paType(MAXPART - 1)
 DIM INTEGER score, reactorHP, countdown, fuelBeam, fireHeld, nPart
 DIM INTEGER lives, mission, gunProb, gunPen, planetDead, ending, gameOver
 DIM INTEGER warnUp, revGrav, invLand, hiScore, saidRev, saidInv
-DIM INTEGER sndOK
 CONST HIFILE = "A:/thrust.hi"
 DIM INTEGER shipAng, tick, fuel, crashed, deaths
 DIM INTEGER kLeft, kRight, kThrust, kTract
@@ -763,9 +762,6 @@ SUB TitleScreen
   TEXT 170, 142, "FIRE", "LT", FONTN, 1, RGB(WHITE), RGB(BLACK)
   TEXT 160, 168, "LIFT THE POD OUT OF THE CAVE", "CT", FONTN, 1, pal(1), RGB(BLACK)
   TEXT 160, 182, "THE REACTOR IS WORTH 2000 AND TEN SECONDS", "CT", FONTN, 1, pal(1), RGB(BLACK)
-  IF sndOK = 0 THEN
-    TEXT 160, 224, "no sound - needs firmware V6.03.02b6 or later", "CT", FONTN, 1, pal(1), RGB(BLACK)
-  ENDIF
   IF hiScore > 0 THEN
     TEXT 160, 196, "BEST " + STR$(hiScore), "CT", FONTN, 1, pal(6), RGB(BLACK)
   ENDIF
@@ -2216,11 +2212,6 @@ DATA 0, 3, 5, 8, 11, 13
 '  untouched.
 ' ======================================================================
 SUB SndInit
-  ' PLAY BBC arrived in V6.03.02b6.  On anything older these
-  ' four fail, sndOK stays 0, and the game runs without sound
-  ' rather than stopping with an error a player cannot read.
-  sndOK = 0
-  ON ERROR SKIP 4
   ' 01 02 FB FD FB 02 03 32 7E F9 F9 F4 7E 00
   PLAY BBC ENVELOPE 1, 2, -5, -3, -5, 2, 3, 50, 126, -7, -7, -12, 126, 0
   ' 02 02 FF 00 01 09 09 09 00 00 00 01 01  (+03), AR/ALA/ALD zeroed
@@ -2229,8 +2220,6 @@ SUB SndInit
   PLAY BBC ENVELOPE 3, 4, 0, 0, 0, 1, 1, 1, 126, -4, -2, -4, 126, 110
   ' 04 01 FF FF FF 12 12 12 32 F4 F4 F4 6E 46
   PLAY BBC ENVELOPE 4, 1, -1, -1, -1, 18, 18, 18, 50, -12, -12, -12, 110, 70
-  IF MM.ERRNO = 0 THEN sndOK = 1
-  ON ERROR CLEAR
 END SUB
 
 ' ======================================================================
@@ -2239,62 +2228,53 @@ END SUB
 ' own_gun:      channel 2, flushed, envelope 1
 '   the ship firing
 SUB SndOwnGun
-  IF sndOK = 0 THEN EXIT SUB
   PLAY BBC SOUND &H12, 1, 80, 2
 END SUB
 
 ' explosion_1:  channel 1, flushed, envelope 2
 '   explosion: the channel 1 tone that pitches the noise
 SUB SndExplosion1
-  IF sndOK = 0 THEN EXIT SUB
   PLAY BBC SOUND &H11, 2, 150, 100
 END SUB
 
 ' explosion_2:  channel 0, flushed, envelope 3
 '   explosion: the noise itself
 SUB SndExplosion2
-  IF sndOK = 0 THEN EXIT SUB
   PLAY BBC SOUND &H10, 3, 7, 100
 END SUB
 
 ' hostile_gun:  channel 3, flushed, envelope 4
 '   a limpet gun firing
 SUB SndHostileGun
-  IF sndOK = 0 THEN EXIT SUB
   PLAY BBC SOUND &H13, 4, 30, 20
 END SUB
 
 ' collect_1:    channel 2, volume -15
 '   picking something up
 SUB SndCollect1
-  IF sndOK = 0 THEN EXIT SUB
   PLAY BBC SOUND 2, -15, 190, 1
 END SUB
 
 ' collect_2:    channel 2, silent
 '   the second half of it
 SUB SndCollect2
-  IF sndOK = 0 THEN EXIT SUB
   PLAY BBC SOUND 2, 0, 190, 2
 END SUB
 
 ' engine:       channel 0, flushed, volume -10
 '   thrust, retriggered while the key is held
 SUB SndEngine
-  IF sndOK = 0 THEN EXIT SUB
   PLAY BBC SOUND &H10, -10, 5, 3
 END SUB
 
 ' countdown:    channel 2, volume -15
 '   the ten seconds after the reactor goes
 SUB SndCountdown
-  IF sndOK = 0 THEN EXIT SUB
   PLAY BBC SOUND 2, -15, 150, 1
 END SUB
 
 ' enter_orbit:  channel 2, flushed, envelope 3
 '   leaving the planet
 SUB SndEnterOrbit
-  IF sndOK = 0 THEN EXIT SUB
   PLAY BBC SOUND &H12, 3, 185, 1
 END SUB
