@@ -104,6 +104,7 @@ SUB RunFlight
       StationCheck
       StationPolice
       StationTraffic
+      HyperCount
       SpawnTraffic
       mcnt = (mcnt + 1) AND 255
     ENDIF
@@ -149,10 +150,43 @@ END SUB
 
 ' Hyperspace.  Only outside the safe zone, only if the tank will cover it,
 ' and never to the system we are already sitting in.
+'
+' Pressing the key does not jump: it starts a countdown, and you keep flying
+' while it runs - which is the point of it, because anything out there gets
+' fifteen more counts to stop you.  A second press while it is running does
+' nothing, as the original's does nothing.
 SUB JumpAway
+  IF hypCount > 0 THEN EXIT SUB
   IF inSafe THEN EXIT SUB
   IF selSys = homeSys THEN EXIT SUB
   IF CanReach(selSys) = 0 THEN EXIT SUB
+  hypCount = 15
+  hypTick = 15
+  Sfx SFX_BEEP
+END SUB
+
+' One step of the countdown, once per iteration of the original's main loop.
+' The internal counter runs down to zero, the number on the screen drops by
+' one, and the internal counter goes back to 5 rather than 15 - so the first
+' count is long and the rest are even.
+SUB HyperCount
+  IF hypCount = 0 THEN EXIT SUB
+  hypTick = hypTick - 1
+  IF hypTick > 0 THEN EXIT SUB
+  hypTick = 5
+  hypCount = hypCount - 1
+  IF hypCount > 0 THEN
+    Sfx SFX_BEEP
+    EXIT SUB
+  ENDIF
+  ' The tank has to cover it now as much as it did when the key was pressed,
+  ' and the safe zone has to be as far away: a station caught up with in the
+  ' meantime is as good a reason to stop as any.
+  IF inSafe OR CanReach(selSys) = 0 THEN
+    Message "HYPERSPACE ABORTED"
+    Sfx SFX_BOOP
+    EXIT SUB
+  ENDIF
   Hyperspace selSys
 END SUB
 

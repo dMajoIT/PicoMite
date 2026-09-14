@@ -186,9 +186,12 @@ SUB DemoLeg1
                       ' Compressed: an hour of cruising out of the safe zone.
                       inSafe = 0
                       demoCap$ = "CLEAR OF THE SAFE ZONE"
-    CASE 2960       : kJump = 1 : demoCap$ = "HYPERSPACE"
-    CASE 2990       : demoLeg = 2 : demoTick = 0 : demoCap$ = ""
+    CASE 2960       : kJump = 1 : demoCap$ = "HYPERSPACE: FIFTEEN AND COUNTING"
   END SELECT
+  ' The jump is not instant any more - it counts down from fifteen while we
+  ' keep flying - so the leg ends when the countdown does rather than on a
+  ' tick of its own.
+  IF demoTick > 2965 AND hypCount = 0 THEN demoLeg = 2 : demoTick = 0 : demoCap$ = ""
   ' Closing on the Anaconda to look at it, with the laser off.
   IF demoTick > 1330 AND demoTick < 1550 THEN DemoAim demoTgt, 0
   IF demoTick > 1620 AND demoTick < 2100 THEN DemoAim DemoNearestFoe(), 1

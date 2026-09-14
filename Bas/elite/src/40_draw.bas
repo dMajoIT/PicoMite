@@ -107,6 +107,9 @@ SUB SpaceFurniture
   LINE 0, 0, SCRW - 2, 0, 1, cWhite
   BOX 0, 0, 2, VIEWH, 0, cWhite, cWhite
   BOX SCRW - 2, 0, 2, VIEWH, 0, cWhite, cWhite
+  ' The hyperspace countdown, in the top left corner where the original
+  ' prints it.
+  IF hypCount > 0 THEN TEXT 6, 4, STR$(hypCount), "LT", 7, 1, cWhite
   IF vw = 0 THEN
     LINE VCX - 25, VCY, VCX - 12, VCY, 1, cWhite
     LINE VCX + 12, VCY, VCX + 25, VCY, 1, cWhite

@@ -28,7 +28,13 @@ RunGame
 ENDIF
 LOOP
 ELSE
-IF DEMOSCENE = 8 THEN
+IF DEMOSCENE = 9 THEN
+LeftScene
+FRAMEBUFFER CLOSE
+MODE 1
+PRINT "left-list done"
+END
+ELSEIF DEMOSCENE = 8 THEN
 FRAMEBUFFER CLOSE
 MODE 1
 DockNPCScene
@@ -717,6 +723,7 @@ ENDIF
 LINE 0, 0, SCRW - 2, 0, 1, cWhite
 BOX 0, 0, 2, VIEWH, 0, cWhite, cWhite
 BOX SCRW - 2, 0, 2, VIEWH, 0, cWhite, cWhite
+IF hypCount > 0 THEN TEXT 6, 4, STR$(hypCount), "LT", 7, 1, cWhite
 IF vw = 0 THEN
 LINE VCX - 25, VCY, VCX - 12, VCY, 1, cWhite
 LINE VCX + 12, VCY, VCX + 25, VCY, 1, cWhite
@@ -1068,6 +1075,13 @@ Bar DL, DLY(5), pAltit \ 16, 99, cRed, cYellow
 MissileBlocks
 DrawScanner
 DrawCompass
+Bulbs
+END SUB
+SUB Bulbs
+BOX BULBX, BULBY, 9, 7, 0, cBlack, cBlack
+BOX BULBX + 13, BULBY, 9, 7, 0, cBlack, cBlack
+IF ecmActive THEN TEXT BULBX + 2, BULBY, "E", "LT", 7, 1, cYellow
+IF inSafe THEN TEXT BULBX + 15, BULBY, "S", "LT", 7, 1, cGreen
 END SUB
 SUB Bar(x AS INTEGER, y AS INTEGER, lv AS INTEGER, t1 AS INTEGER, hi AS INTEGER, lo AS INTEGER)
 LOCAL INTEGER w, c, v
@@ -1155,7 +1169,7 @@ lasView(0) = LAS_PULSE : lasView(1) = 0 : lasView(2) = 0 : lasView(3) = 0
 lasTimer = 0 : lasFlash = 0
 kills = 0 : dead = 0 : energyUnit = 0 : legal = 0 : mission = 0
 shots = 0 : hits = 0
-docked = 0 : dockComp = 0 : msLock = -1
+docked = 0 : dockComp = 0 : msLock = -1 : hypCount = 0
 vw = 0 : inWitch = 0
 FOR i = 0 TO NEQUIP - 1 : eqOwned(i) = 0 : NEXT i
 FOR i = 0 TO NGOODS - 1 : cargo(i) = 0 : NEXT i
@@ -1379,6 +1393,63 @@ dy = sY(n) - sY(SLOT_STAR)
 dz = sZ(n) - sZ(SLOT_STAR)
 ShipRange = SQR(dx*dx + dy*dy + dz*dz)
 END FUNCTION
+SUB LeftScene
+LOCAL INTEGER i, n, f, lost, tgt
+NewCommander
+LaunchState
+inSafe = 0
+tgt = -1
+SetGalaxy gGal
+FOR i = 0 TO 255
+SysData
+IF i <> homeSys THEN
+IF CanReach(i) THEN tgt = i : EXIT FOR
+ENDIF
+NextSystem
+NEXT i
+GotoSystem gGal, homeSys
+SysData
+selSys = tgt
+PRINT "jumping to system"; tgt
+JumpAway
+PRINT "the key starts it at"; hypCount; " (expect 15)"
+JumpAway
+PRINT "a second press leaves it at"; hypCount; " (expect 15)"
+f = 0
+DO
+HyperCount
+f = f + 1
+LOOP UNTIL hypCount = 0 OR f > 300
+PRINT "jumped after"; f; " iterations (expect 85)"
+PRINT "  which at"; TICKRATE; "a second is"; STR$(f / TICKRATE, 3, 1); " seconds"
+PRINT "  home system is now"; homeSys; " (expect"; tgt; ")"
+PRINT
+NewCommander
+FOR i = 0 TO NEQUIP - 1 : eqOwned(i) = 1 : NEXT i
+FOR i = 0 TO NGOODS - 1 : cargo(i) = 5 : NEXT i
+energyUnit = 1
+lost = 0
+FOR n = 1 TO 5000
+msgText$ = ""
+Ouch
+IF msgText$ <> "" THEN lost = lost + 1
+FOR i = 0 TO NEQUIP - 1 : eqOwned(i) = 1 : NEXT i
+FOR i = 0 TO NGOODS - 1 : cargo(i) = 5 : NEXT i
+NEXT n
+PRINT "5000 hits destroyed"; lost; " things (expect about 215, one in 23)"
+FOR i = 0 TO NEQUIP - 1 : eqOwned(i) = 1 : NEXT i
+FOR i = 0 TO NGOODS - 1 : cargo(i) = 5 : NEXT i
+energyUnit = 1
+FOR n = 1 TO 20000
+msgText$ = ""
+Ouch
+NEXT n
+PRINT "after 20000 hits, still fitted:"
+FOR i = 0 TO NEQUIP - 1
+IF eqOwned(i) THEN PRINT "  "; eqName$(i)
+NEXT i
+PRINT "cargo left"; HoldUsed(); " (expect 0)   energy unit"; energyUnit; " (expect 0)"
+END SUB
 SUB SaveShot(f AS INTEGER)
 SAVE IMAGE "A:/fly" + STR$(f) + ".bmp"
 END SUB
@@ -2388,7 +2459,36 @@ pEnergy = pEnergy - dleft
 IF pEnergy <= 0 THEN
 pEnergy = 0
 dead = 1
+EXIT SUB
 ENDIF
+Ouch
+END SUB
+SUB Ouch
+LOCAL INTEGER i, e
+IF INT(RND * 256) >= 128 THEN EXIT SUB
+i = INT(RND * 256)
+IF i >= 22 THEN EXIT SUB
+IF msgText$ <> "" THEN EXIT SUB
+IF i < NGOODS THEN
+IF cargo(i) = 0 THEN EXIT SUB
+cargo(i) = 0
+Message UCASE$(mkName$(i)) + " DESTROYED"
+Sfx SFX_BOOM
+EXIT SUB
+ENDIF
+SELECT CASE i
+CASE 17    : e = EQ_ECM
+CASE 18    : e = EQ_SCOOPS
+CASE 19    : e = EQ_BOMB
+CASE 20    : e = EQ_ENERGY
+CASE ELSE  : e = EQ_DOCK
+END SELECT
+IF eqOwned(e) = 0 THEN EXIT SUB
+eqOwned(e) = 0
+IF e = EQ_ENERGY AND energyUnit = 1 THEN energyUnit = 0
+IF e = EQ_DOCK THEN dockComp = 0
+Message UCASE$(eqName$(e)) + " DESTROYED"
+Sfx SFX_BOOM
 END SUB
 SUB Recharge
 IF (mcnt AND 7) <> 0 THEN EXIT SUB
@@ -2643,6 +2743,7 @@ END SUB
 SUB DoDock
 docked = 1
 dSpeed = 0
+hypCount = 0
 dockComp = 0
 msLock = -1
 pEnergy = 255 : pFsh = 255 : pAsh = 255
@@ -3842,6 +3943,7 @@ CabinTemp
 StationCheck
 StationPolice
 StationTraffic
+HyperCount
 SpawnTraffic
 mcnt = (mcnt + 1) AND 255
 ENDIF
@@ -3875,9 +3977,29 @@ LOOP
 ResetTick
 END SUB
 SUB JumpAway
+IF hypCount > 0 THEN EXIT SUB
 IF inSafe THEN EXIT SUB
 IF selSys = homeSys THEN EXIT SUB
 IF CanReach(selSys) = 0 THEN EXIT SUB
+hypCount = 15
+hypTick = 15
+Sfx SFX_BEEP
+END SUB
+SUB HyperCount
+IF hypCount = 0 THEN EXIT SUB
+hypTick = hypTick - 1
+IF hypTick > 0 THEN EXIT SUB
+hypTick = 5
+hypCount = hypCount - 1
+IF hypCount > 0 THEN
+Sfx SFX_BEEP
+EXIT SUB
+ENDIF
+IF inSafe OR CanReach(selSys) = 0 THEN
+Message "HYPERSPACE ABORTED"
+Sfx SFX_BOOP
+EXIT SUB
+ENDIF
 Hyperspace selSys
 END SUB
 SUB RunDocked
@@ -4233,9 +4355,9 @@ CASE 2871       : demoScrn = DEMOREAD
 CASE 2910       : DemoPickTarget
 inSafe = 0
 demoCap$ = "CLEAR OF THE SAFE ZONE"
-CASE 2960       : kJump = 1 : demoCap$ = "HYPERSPACE"
-CASE 2990       : demoLeg = 2 : demoTick = 0 : demoCap$ = ""
+CASE 2960       : kJump = 1 : demoCap$ = "HYPERSPACE: FIFTEEN AND COUNTING"
 END SELECT
+IF demoTick > 2965 AND hypCount = 0 THEN demoLeg = 2 : demoTick = 0 : demoCap$ = ""
 IF demoTick > 1330 AND demoTick < 1550 THEN DemoAim demoTgt, 0
 IF demoTick > 1620 AND demoTick < 2100 THEN DemoAim DemoNearestFoe(), 1
 IF demoTick > 2130 AND demoTick < 2199 THEN DemoAim demoTgt, 0

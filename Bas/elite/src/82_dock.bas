@@ -79,6 +79,7 @@ END SUB
 SUB DoDock
   docked = 1
   dSpeed = 0
+  hypCount = 0
   dockComp = 0
   msLock = -1
   pEnergy = 255 : pFsh = 255 : pAsh = 255

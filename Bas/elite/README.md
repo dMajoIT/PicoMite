@@ -105,6 +105,11 @@ are within about 65000 units of it; fly to one planet radius and you are dead.
 Cabin temperature climbs as you approach the sun, reaches the fuel scooping
 threshold at about 32000 units, and kills you at about 22400.
 
+Under the scanner, to the right of the missiles, are two indicator bulbs. **S**
+lights while you are inside a station's safe zone - which is also the answer to
+"am I far enough out to hyperspace yet", because you are not until it goes out.
+**E** lights while an E.C.M. is running.
+
 The ellipse is the scanner. Each contact is a dash with a stick down to the
 plane you are flying in, so the stick tells you how far above or below you it
 is, and its colour says what it is: **red** a rock, **blue** a canister or an
@@ -152,8 +157,14 @@ the green circle is what the tank will reach; put the cursor on something
 inside it, check `F7` for what is there, then launch.
 
 **Hyperspace only works once you are clear of the station's zone**, which means
-flying away from it for about half a minute at full speed. Press `H` when you
-are out.
+flying away from it for about half a minute at full speed. Watch the **S** bulb
+on the dashboard: press `H` once it has gone out.
+
+`H` does not jump. It starts a countdown from fifteen, shown in the top left
+corner, and you keep flying while it runs - about seven seconds in which
+anything out there gets a last chance at you. Pressing `H` again while it is
+running does nothing. If you have strayed back into a safe zone by the time it
+reaches zero, or spent the fuel, the jump is abandoned.
 
 ## The missions
 
@@ -463,27 +474,33 @@ in `tests/sfxtest.bas`, which plays all ten by name so they can be judged.
 
 What is left:
 
-- **The hyperspace countdown.** The jump happens at once behind its tunnel of
-  rings; the original counts down from 15 while you keep flying, and you can be
-  attacked during it.
-- **The pace.** Every one of the original's constants is per iteration of its
-  main loop, which ran at something like ten or twelve a second. The game now
-  scales by how much of one of those iterations each frame is worth, so the
-  speed no longer depends on the frame rate, but the rate itself - `TICKRATE`
-  in `00_main.bas` - is an estimate rather than a measured fact.
-- **No indicator for the safe zone.** Getting clear of it to hyperspace takes
-  about half a minute of flying away from the station and nothing tells you
-  when you are out; press `H` and see.
-- **Equipment cannot be damaged.** In the original a hit can take out your
-  E.C.M.
+- **One shield, not two.** The original decides which shield a hit lands on
+  from the direction it came from, so being jumped from behind drains the aft
+  shield and leaves the forward one for whatever is in front of you. Ours puts
+  every hit on the forward shield. Both gauges are drawn and both recharge; it
+  is only the choosing that is missing.
+- **An NPC docks on two tests, not five.** A trader flying itself in has to be
+  close enough to touch and on the side the slot is on, but is not asked to lay
+  its wings along the letterbox the way you are. Nothing is gained by watching
+  it fail and go round again, but it is not what the original does.
+
+The pace used to be on this list, on the grounds that `TICKRATE` was a guess.
+It is not: the original's own source settles it. `LASCT` is decremented by the
+vertical sync interrupt fifty times a second, and the source says of the death
+sequence that "the main loop decrements it by 4" - so one iteration of the main
+loop is four vertical syncs, and the rate is 12.5 a second. It checks out
+against the other clock in the game: an in-flight message is held for 22
+iterations, which at that rate is 1.76 seconds, which is what it looks like.
 
 Everything else on this list has been closed: sound, in-flight messages, the
 per-view laser mounts, cargo scooping and fuel scoops, the altitude and cabin
 temperature gauges with the planet and the sun that drive them, collisions,
 the escape pod, the energy bomb, the in-system jump, the other seven galaxies,
 ships that fire missiles at you and jam yours with their own E.C.M., pilots
-who bail out of a dying ship, and equipment that has to be bought before it
-works.
+who bail out of a dying ship, equipment that has to be bought before it works,
+the hyperspace countdown, the two dashboard bulbs, and cargo and equipment that
+a hit can destroy - the E.C.M., the fuel scoops, the energy bomb, the energy
+unit and the docking computer, which are the five the original puts at risk.
 
 ## Testing it
 

@@ -23,7 +23,7 @@ SUB NewCommander
   lasTimer = 0 : lasFlash = 0
   kills = 0 : dead = 0 : energyUnit = 0 : legal = 0 : mission = 0
   shots = 0 : hits = 0
-  docked = 0 : dockComp = 0 : msLock = -1
+  docked = 0 : dockComp = 0 : msLock = -1 : hypCount = 0
   vw = 0 : inWitch = 0
   FOR i = 0 TO NEQUIP - 1 : eqOwned(i) = 0 : NEXT i
   FOR i = 0 TO NGOODS - 1 : cargo(i) = 0 : NEXT i
@@ -327,6 +327,72 @@ FUNCTION ShipRange(n AS INTEGER) AS INTEGER
   dz = sZ(n) - sZ(SLOT_STAR)
   ShipRange = SQR(dx*dx + dy*dy + dz*dz)
 END FUNCTION
+
+' --- the hyperspace countdown, and what a hit costs beyond energy
+SUB LeftScene
+  LOCAL INTEGER i, n, f, lost, tgt
+  NewCommander
+  LaunchState
+  inSafe = 0
+
+  ' Somewhere the tank will reach.
+  tgt = -1
+  SetGalaxy gGal
+  FOR i = 0 TO 255
+    SysData
+    IF i <> homeSys THEN
+      IF CanReach(i) THEN tgt = i : EXIT FOR
+    ENDIF
+    NextSystem
+  NEXT i
+  GotoSystem gGal, homeSys
+  SysData
+  selSys = tgt
+  PRINT "jumping to system"; tgt
+
+  JumpAway
+  PRINT "the key starts it at"; hypCount; " (expect 15)"
+  JumpAway
+  PRINT "a second press leaves it at"; hypCount; " (expect 15)"
+  f = 0
+  DO
+    HyperCount
+    f = f + 1
+  LOOP UNTIL hypCount = 0 OR f > 300
+  PRINT "jumped after"; f; " iterations (expect 85)"
+  PRINT "  which at"; TICKRATE; "a second is"; STR$(f / TICKRATE, 3, 1); " seconds"
+  PRINT "  home system is now"; homeSys; " (expect"; tgt; ")"
+
+  ' --- what a hit costs
+  PRINT
+  NewCommander
+  FOR i = 0 TO NEQUIP - 1 : eqOwned(i) = 1 : NEXT i
+  FOR i = 0 TO NGOODS - 1 : cargo(i) = 5 : NEXT i
+  energyUnit = 1
+  lost = 0
+  FOR n = 1 TO 5000
+    msgText$ = ""
+    Ouch
+    IF msgText$ <> "" THEN lost = lost + 1
+    FOR i = 0 TO NEQUIP - 1 : eqOwned(i) = 1 : NEXT i
+    FOR i = 0 TO NGOODS - 1 : cargo(i) = 5 : NEXT i
+  NEXT n
+  PRINT "5000 hits destroyed"; lost; " things (expect about 215, one in 23)"
+
+  ' And now without putting anything back: what can be lost at all.
+  FOR i = 0 TO NEQUIP - 1 : eqOwned(i) = 1 : NEXT i
+  FOR i = 0 TO NGOODS - 1 : cargo(i) = 5 : NEXT i
+  energyUnit = 1
+  FOR n = 1 TO 20000
+    msgText$ = ""
+    Ouch
+  NEXT n
+  PRINT "after 20000 hits, still fitted:"
+  FOR i = 0 TO NEQUIP - 1
+    IF eqOwned(i) THEN PRINT "  "; eqName$(i)
+  NEXT i
+  PRINT "cargo left"; HoldUsed(); " (expect 0)   energy unit"; energyUnit; " (expect 0)"
+END SUB
 
 SUB SaveShot(f AS INTEGER)
   SAVE IMAGE "A:/fly" + STR$(f) + ".bmp"

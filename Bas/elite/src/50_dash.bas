@@ -78,6 +78,20 @@ SUB DrawDash
   MissileBlocks
   DrawScanner
   DrawCompass
+  Bulbs
+END SUB
+
+' The two indicator bulbs the original lights on the dashboard: S while the
+' station is close enough for its safe zone to matter, which is also the
+' answer to "am I clear enough to hyperspace yet", and E while an E.C.M. is
+' running.  Ours are in a different place - there is nowhere either side of
+' our scanner to put them - and are coloured to match what they stand for
+' rather than drawn in the dashboard's own colour.
+SUB Bulbs
+  BOX BULBX, BULBY, 9, 7, 0, cBlack, cBlack
+  BOX BULBX + 13, BULBY, 9, 7, 0, cBlack, cBlack
+  IF ecmActive THEN TEXT BULBX + 2, BULBY, "E", "LT", 7, 1, cYellow
+  IF inSafe THEN TEXT BULBX + 15, BULBY, "S", "LT", 7, 1, cGreen
 END SUB
 
 ' A bar of length lv on the original's 0..16 scale.  It takes colour hi at

@@ -473,7 +473,58 @@ SUB HitPlayer(dmg AS INTEGER)
   IF pEnergy <= 0 THEN
     pEnergy = 0
     dead = 1
+    EXIT SUB
   ENDIF
+  ' The shields are gone and that one got through to the banks, so something
+  ' in the hold may not have survived it.
+  Ouch
+END SUB
+
+' What a hit costs you beyond energy, which the original calls OUCH.
+'
+' It draws two random numbers and needs both: the first has to be positive, a
+' half chance, and the second has to be below 22, which is another eight and a
+' half per cent - so about one hit in twenty-three picks one of the twenty-two
+' things that can be destroyed.  Seventeen of those are the cargo bays, and the
+' other five are the E.C.M., the fuel scoops, the energy bomb, the energy unit
+' and the docking computer.  A laser, a missile rack, the escape pod, the
+' larger hold and the galactic hyperdrive are not on the list and cannot be
+' lost.
+'
+' Nothing happens if you do not have the thing it picked, and nothing happens
+' while a message is already on the screen - which is the original's own way of
+' making sure you are told what you lost.
+SUB Ouch
+  LOCAL INTEGER i, e
+  IF INT(RND * 256) >= 128 THEN EXIT SUB
+  i = INT(RND * 256)
+  IF i >= 22 THEN EXIT SUB
+  IF msgText$ <> "" THEN EXIT SUB
+  IF i < NGOODS THEN
+    IF cargo(i) = 0 THEN EXIT SUB
+    cargo(i) = 0
+    Message UCASE$(mkName$(i)) + " DESTROYED"
+    Sfx SFX_BOOM
+    EXIT SUB
+  ENDIF
+  ' The five pieces of equipment, in the original's own order.
+  SELECT CASE i
+    CASE 17    : e = EQ_ECM
+    CASE 18    : e = EQ_SCOOPS
+    CASE 19    : e = EQ_BOMB
+    CASE 20    : e = EQ_ENERGY
+    CASE ELSE  : e = EQ_DOCK
+  END SELECT
+  IF eqOwned(e) = 0 THEN EXIT SUB
+  eqOwned(e) = 0
+  ' The energy unit is two things: the equipment, and the rate the banks
+  ' recharge at.  Losing the one the shop sold you drops the rate back, but
+  ' the Navy's own unit from mission two is a different article and is not on
+  ' this list at all, so a rate of 2 is left where it is.
+  IF e = EQ_ENERGY AND energyUnit = 1 THEN energyUnit = 0
+  IF e = EQ_DOCK THEN dockComp = 0
+  Message UCASE$(eqName$(e)) + " DESTROYED"
+  Sfx SFX_BOOM
 END SUB
 
 ' Once every eight frames the shields recharge from the energy banks, and

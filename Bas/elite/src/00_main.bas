@@ -45,7 +45,8 @@ CONST DEMOFRAMES = 0               ' >0 runs a scripted demo and exits; 0 plays
 CONST DEMOSCENE = 1                ' 1 flight and combat, 2 docking, 3 the docked
                                    ' screens, 4 the ship hangar, 5 the briefings,
                                    ' 6 both missions end to end, 7 the NEWB flags,
-                                   ' 8 a trader docking itself
+                                   ' 8 a trader docking itself, 9 the hyperspace
+                                   ' countdown and what a hit costs
 CONST PANY = VCY - (SCRH \ 2 - 1)  ' shifts Draw3D's centre up to VCY
 
 ' ------------------------------------------------------- universe size
@@ -232,6 +233,11 @@ CONST DOCKROLL = 0.833             ' 80 of 96: the slot within 33.6 deg of level
 CONST MSTURN = 0.22                ' how hard a missile swings onto a bearing
 CONST ECMFRAMES = 32               ' the original's countdown, in iterations
 DIM INTEGER msLock, ecmActive, legal, docked, dockComp
+' The hyperspace countdown.  hypCount is the number on the screen, hypTick the
+' internal counter that steps it: the original starts both at 15 and resets the
+' internal one to 5 after each step, so the first second of the countdown is
+' three times as long as the ones that follow.
+DIM INTEGER hypCount, hypTick
 ' Whose E.C.M. is going off: only ours costs us energy to run.
 DIM INTEGER ecmMine
 ' The original's EV: how many spawning passes to sit out before the next
@@ -394,6 +400,11 @@ CONST SCBOT = 230                  ' BBC 246
 ' Compass: BBC centre (195, 203), a normalised component of +-96 becoming
 ' +-9 pixels.  Yellow and two rows deep when the target is ahead, green
 ' and one row deep when it is behind.
+' The two indicator bulbs, which the original puts on the dashboard either
+' side of the scanner.  Ours go under it, in the one strip of the dashboard
+' with room: the left column ends at x 60, the right bars at y 231, and the
+' scanner clears everything between.
+CONST BULBX = 64, BULBY = 232
 CONST CPX = 244
 CONST CPY = 187
 CONST CPR = 9
@@ -412,7 +423,13 @@ CONST PROFILE = 1                  ' accumulate per-stage frame times
 ' Anything the original did once per iteration rather than continuously -
 ' the counters, the schedules, the joystick spring - is gated on tickWhole
 ' instead, which is true on the frames where a whole iteration has elapsed.
-CONST TICKRATE = 12                ' the original's main loop, times a second
+' The original's main loop, times a second.  This is not a guess: LASCT is
+' decremented by the vertical sync interrupt fifty times a second, and the
+' source says of the death sequence that "the main loop decrements it by 4" -
+' so one iteration of the main loop is four vertical syncs, or 12.5 a second.
+' It checks out against the other clock in the game: an in-flight message is
+' held for 22 iterations, which at this rate is 1.76 seconds.
+CONST TICKRATE = 12.5
 CONST TICKMAX = 0.5                ' never let one frame move the world further
 DIM FLOAT tick, tickAcc, tickPrev
 DIM INTEGER tickWhole

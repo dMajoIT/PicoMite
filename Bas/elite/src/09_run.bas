@@ -33,7 +33,15 @@ IF DEMOFRAMES = 0 THEN
 
 ELSE
 
-  IF DEMOSCENE = 8 THEN
+  IF DEMOSCENE = 9 THEN
+    ' The framebuffer stays open: the jump draws its tunnel of rings through
+    ' it, and closing it first stops the countdown ever arriving anywhere.
+    LeftScene
+    FRAMEBUFFER CLOSE
+    MODE 1
+    PRINT "left-list done"
+    END
+  ELSEIF DEMOSCENE = 8 THEN
     FRAMEBUFFER CLOSE
     MODE 1
     DockNPCScene
