@@ -469,6 +469,8 @@ CONST SCR_LONG = 4, SCR_SHORT = 5, SCR_DATA = 6
 ' so nothing here is tied to one drive letter.
 DIM homeDir$ LENGTH 48
 DIM cmdrFile$ LENGTH 64
+' What the screen said it was before we told it otherwise - see SetupScreen.
+DIM INTEGER scrVres
 DIM INTEGER quitGame, dscreen, dsel, dbuy, titleKey
 ' How far one press moves the chart cursor: one notch, or eight with shift.
 CONST CHARTFAST = 8

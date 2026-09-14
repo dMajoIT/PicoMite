@@ -38,12 +38,12 @@ ELSE
     ' it, and closing it first stops the countdown ever arriving anywhere.
     LeftScene
     FRAMEBUFFER CLOSE
-    MODE 1
+    RestoreScreen
     PRINT "left-list done"
     END
   ELSEIF DEMOSCENE = 8 THEN
     FRAMEBUFFER CLOSE
-    MODE 1
+    RestoreScreen
     DockNPCScene
     PRINT "npc dock done"
     END
@@ -51,14 +51,14 @@ ELSE
     ' Nothing here draws anything, and the console is easier to read when it
     ' is the console rather than the framebuffer.
     FRAMEBUFFER CLOSE
-    MODE 1
+    RestoreScreen
     NewbScene
     PRINT "newb done"
     END
   ELSEIF DEMOSCENE = 6 THEN
     MissionScene
     FRAMEBUFFER CLOSE
-    MODE 1
+    RestoreScreen
     PRINT "missions done,"; shotNo; " pages"
     END
   ELSEIF DEMOSCENE = 5 THEN
@@ -70,7 +70,7 @@ ELSE
     MissionBrief 222, 0
     MissionBrief 223, 0
     FRAMEBUFFER CLOSE
-    MODE 1
+    RestoreScreen
     PRINT "briefings done,"; shotNo; " pages"
     ' The briefings and the system descriptions share one set of case rules,
     ' so this fixture is also where a change to them shows up.
@@ -86,13 +86,13 @@ ELSE
       SaveShot frames
     NEXT frames
     FRAMEBUFFER CLOSE
-    MODE 1
+    RestoreScreen
     PRINT "hangar done"
     END
   ELSEIF DEMOSCENE = 3 THEN
     DockedScreens
     FRAMEBUFFER CLOSE
-    MODE 1
+    RestoreScreen
     PRINT "docked screens done"
     END
   ELSEIF DEMOSCENE = 2 THEN
@@ -151,7 +151,7 @@ IF dead THEN DeathScreen : HoldFor 1500
 SoundOff
 CloseAll
 FRAMEBUFFER CLOSE
-MODE 1
+RestoreScreen
 frameMs = 0
 IF frames > 0 THEN frameMs = tFlight / frames
 PRINT "frames"; frames; "  average"; STR$(frameMs, 4, 2); " ms per frame"

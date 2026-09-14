@@ -31,25 +31,25 @@ ELSE
 IF DEMOSCENE = 9 THEN
 LeftScene
 FRAMEBUFFER CLOSE
-MODE 1
+RestoreScreen
 PRINT "left-list done"
 END
 ELSEIF DEMOSCENE = 8 THEN
 FRAMEBUFFER CLOSE
-MODE 1
+RestoreScreen
 DockNPCScene
 PRINT "npc dock done"
 END
 ELSEIF DEMOSCENE = 7 THEN
 FRAMEBUFFER CLOSE
-MODE 1
+RestoreScreen
 NewbScene
 PRINT "newb done"
 END
 ELSEIF DEMOSCENE = 6 THEN
 MissionScene
 FRAMEBUFFER CLOSE
-MODE 1
+RestoreScreen
 PRINT "missions done,"; shotNo; " pages"
 END
 ELSEIF DEMOSCENE = 5 THEN
@@ -59,7 +59,7 @@ MissionBrief 11, 0
 MissionBrief 222, 0
 MissionBrief 223, 0
 FRAMEBUFFER CLOSE
-MODE 1
+RestoreScreen
 PRINT "briefings done,"; shotNo; " pages"
 GotoSystem gGal, homeSys
 SysData
@@ -71,13 +71,13 @@ HangarScreen
 SaveShot frames
 NEXT frames
 FRAMEBUFFER CLOSE
-MODE 1
+RestoreScreen
 PRINT "hangar done"
 END
 ELSEIF DEMOSCENE = 3 THEN
 DockedScreens
 FRAMEBUFFER CLOSE
-MODE 1
+RestoreScreen
 PRINT "docked screens done"
 END
 ELSEIF DEMOSCENE = 2 THEN
@@ -130,7 +130,7 @@ IF dead THEN DeathScreen : HoldFor 1500
 SoundOff
 CloseAll
 FRAMEBUFFER CLOSE
-MODE 1
+RestoreScreen
 frameMs = 0
 IF frames > 0 THEN frameMs = tFlight / frames
 PRINT "frames"; frames; "  average"; STR$(frameMs, 4, 2); " ms per frame"
@@ -379,10 +379,18 @@ MATH Q_MULT qB(), qA(), qC()
 ENDIF
 qC(4) = 1
 END SUB
+SUB RestoreScreen
+IF scrVres > MM.VRES THEN POKE DISPLAY VRES scrVres
+ON ERROR SKIP 1
+MODE 1
+ON ERROR CLEAR
+END SUB
 SUB SetupScreen
 ON ERROR SKIP 1
 MODE 2
 ON ERROR CLEAR
+scrVres = MM.VRES
+IF scrVres > SCRH THEN POKE DISPLAY VRES SCRH
 FRAMEBUFFER CREATE
 FRAMEBUFFER WRITE F
 homeDir$ = MM.INFO(PATH)

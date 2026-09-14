@@ -1,6 +1,17 @@
 ' =====================================================================
 '  Screen, camera, view and object-pool set up
 ' =====================================================================
+' Undo SetupScreen: put back the height we borrowed and leave the console in
+' a text mode.  Both are allowed to fail - MODE for the reason SetupScreen
+' gives, and the height because a screen we never shrank is one we must not
+' stretch.  Every way out of the program comes through here.
+SUB RestoreScreen
+  IF scrVres > MM.VRES THEN POKE DISPLAY VRES scrVres
+  ON ERROR SKIP 1
+  MODE 1
+  ON ERROR CLEAR
+END SUB
+
 SUB SetupScreen
   ' MODE 2 is what an HDMI or VGA screen wants and what this was written for.
   ' A PicoCalc has no modes at all and the command is an error there, so it is
@@ -8,6 +19,16 @@ SUB SetupScreen
   ON ERROR SKIP 1
   MODE 2
   ON ERROR CLEAR
+  ' A screen taller than the 240 rows this was written for is told it is 240
+  ' for as long as we are running.  POKE DISPLAY VRES moves MMBasic's own idea
+  ' of the height and nothing else - nothing is written to flash - and it has
+  ' to come before FRAMEBUFFER CREATE, which sizes the buffer HRES * VRES / 2.
+  ' A PicoCalc's panel is 320x320, so without this the buffer is 50 KB instead
+  ' of 38 KB and the 12 KB difference buys eighty rows below the dashboard
+  ' that nothing ever draws on - which is enough to run the heap out later,
+  ' and did.  On a screen already 240 or shorter this does nothing at all.
+  scrVres = MM.VRES
+  IF scrVres > SCRH THEN POKE DISPLAY VRES SCRH
   FRAMEBUFFER CREATE
   FRAMEBUFFER WRITE F
   ' Beside the program, wherever that was loaded from.  A program that was

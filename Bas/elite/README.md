@@ -23,6 +23,12 @@ asks for `MODE 2` itself, and lets the request fail rather than stopping if
 the display has no modes to choose from, as a PicoCalc's has not - whatever
 the screen already is, is what the game draws on.
 
+A screen taller than 240 rows is told it is 240 for as long as the game is
+running, and told the truth again on the way out. That is not cosmetic: the
+framebuffer is `HRES * VRES / 2` bytes, so a PicoCalc's 320x320 panel would
+otherwise spend 12 KB of heap on eighty rows below the dashboard that nothing
+ever draws on - and the game runs out of heap later for want of them.
+
 Elite comes in two files. `elite_lib.bas` holds the declarations - every
 constant, every variable and the ship blueprints - and is installed as the
 PicoMite's library; `elite.bas` is the code. One MMBasic program cannot be more
