@@ -6,7 +6,10 @@
 ' their pitch from channel 1 - and last an A/B of Elite's explosion
 ' with the noise tuned and then not, which is the difference the
 ' tuned settings make.
-' Needs OPTION AUDIO configured (PWM, I2S or VS1053).
+' Needs firmware 6.03.02b6 or above - PRINT MM.VER should report 6.030206
+' or more - and OPTION AUDIO configured (PWM, I2S or VS1053).  Sections 8
+' to 11 want b6 in particular: that is where the noise channel learned the
+' BBC's periodic and channel-1-tuned settings.
 
 OPTION EXPLICIT
 DIM INTEGER p, i, t
