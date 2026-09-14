@@ -176,7 +176,8 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
   <p>The three reference documents are the best thing about that repository and they are what made this port cheap, but they are notes rather than a specification, and two claims in <code>ship-physics.md</code> do not match the 6502 beside them. Both were caught by reading the assembly when the behaviour looked odd, and both would have been silent bugs.</p>
   <ul>
     <li><strong>"The result is negated (thrust opposes the facing direction)."</strong> It is not. The sequence after the shifts is <code>AND #$01 / EOR #$FF / ADC #$01</code>, which sign-extends the integer byte that the rotates have shifted the sign out of, and the accumulate is <code>ADC</code>. The table already points the way the ship flies: heading 0 is up and its Y entry is &minus;2.5. Negating it drives the ship backwards.</li>
-    <li><strong>"Rotation rate: 3 out of 4 frames, ~8.4 steps/second at 50fps."</strong> Three in four of 50 is 37.5, and <code>ship_input_rotate</code> is exactly <code>AND #$03 / BEQ return</code>. A full turn takes a little under a second.</li>
+    <li><strong>"Rotation rate: 3 out of 4 frames, ~8.4 steps/second at 50fps."</strong> Neither number is right. <code>ship_input_rotate</code> is exactly <code>AND #$03 / BEQ return</code>, so three frames in four — but the frame is 33.3 Hz, not 50, giving 25 steps a second and a full turn in 1.28 seconds.</li>
+    <li><strong>"50fps", in four separate places.</strong> The worst of the three, because everything else is expressed relative to it. <code>draw_player_timed_to_vsync</code> waits for the centisecond clock to reach 3, so the frame is 30 ms and the game runs at 33.3 Hz. Believing the notes made this port 1.5&times; too fast in every axis at once, which is hard to spot precisely because it is uniform: nothing looks wrong, the game is just unplayable.</li>
   </ul>
 </section>
 
@@ -209,8 +210,11 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
   <h3>Screen layout</h3>
   <p>The BBC play area is 288 &times; 146 pixels — a 2.1:1 letterbox once pixel aspect is applied. Our 320 &times; 240 square-pixel screen is 1.33:1, so a full-screen playfield would show roughly half as much again vertically and make the game easier. Recommendation: <strong>320 &times; 176 playfield with a 64-row panel</strong> beneath it for fuel, score, lives and the shield indicator. That is 80 &times; 88 world units against the BBC's 72 &times; 73 — 11% wider and 20% taller. Tunable, and worth playing both before fixing.</p>
 
-  <h3>Timing: a 50 Hz simulation under a 30 Hz render</h3>
-  <p>The original integrates position every frame at 50 Hz and updates forces on 6 ticks in 16. Both cadences are part of the feel, so decouple them from our frame rate: run a fixed 50 Hz simulation step off an accumulator (1 or 2 steps per rendered frame) and render at the 33 ms cadence we already pace at. Do not rescale the constants to 30 Hz — the tick gating pattern is irregular ($00, $03, $05, $08, $0B, $0D) and would not survive it.</p>
+  <h3>Timing: one clock, and it is the BBC's 33.3 Hz</h3>
+  <p class="ref">This section said 50 Hz until the game was playable enough to feel wrong. It is the most consequential correction in the port.</p>
+  <p><code>draw_player_timed_to_vsync</code> does not wait for a vsync. It spins on <code>OSWORD 1</code> until the BBC's centisecond clock reads 3 and then zeroes it, so <strong>a frame is 30 ms and the game runs at 33.3 Hz</strong>. <code>level_tick_counter</code> advances once per pass of <code>tick_loop</code>, and that counter is what gates the rotation, the six-in-sixteen force update and the tether torque — so every rate in the game is 33.3 Hz based, not 50.</p>
+  <p>So there is no accumulator and no second clock: pace to 30 ms, take one simulation step per frame, and every cadence falls out at the rate it had in 1986. The tick gating pattern survives because it is untouched.</p>
+  <p>Taking the disassembly's "50fps" at its word made the whole game half again too fast — gravity, thrust, turn rate, bullet speed, the pendulum and the countdown all 1.5&times; — which is exactly the sort of thing that reads as "this port is too hard" rather than as a bug.</p>
 
   <h3>Terrain rendering: run-merged solid fills, no scrolling primitive</h3>
   <p><code>SPRITE SCROLL</code> is tempting but wrong here. It helps only when the exposed edge is cheap to fill, and Thrust's camera moves diagonally, so a 1-pixel horizontal scroll exposes a full-height strip that needs the same per-scanline work as a complete redraw. Redraw the visible window each frame from the decoded wall arrays, merging runs into <code>BOX</code> calls, into the framebuffer, then one <code>FRAMEBUFFER COPY</code>. This is the same pattern Chuckie Egg already runs at 30 fps, and the measurement above says it fits.</p>
@@ -334,7 +338,7 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
       </table>
       </div>
       <p>Up and down are symmetric to the second decimal about free fall, left and right are exact mirrors, and fuel came off at 18 units in 48 steps &mdash; six in sixteen, as the tick gate says. The vertical response is 2.16&times; the horizontal, which is the table's 2:1 ellipse plus X drag being four times stronger: that asymmetry <em>is</em> the feel of Thrust, and it comes out of the data without being asked for.</p>
-      <p class="ref">Still to come here: the exhaust flame, the explosion animation, and a proper look at whether the ship turns at the right rate to fly by.</p>
+      <p class="ref">The figures above were taken before the frame rate was corrected. They are still right per step — the per-step physics did not change — but each of those 48 steps now takes 30 ms rather than 20, so the ship accelerates over distance at 4/9 of what it did and tops out at 2/3 the speed. A full turn takes 1.28 seconds, not 0.85.</p>
     </div>
   </div>
 
@@ -369,17 +373,18 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
       <div class="tablewrap">
       <table>
         <tr><th>Level</th><th class="num">objects</th><th class="num">particles</th><th class="num">sim ms</th><th class="num">draw ms</th><th class="num">total</th><th class="num">fps</th></tr>
-        <tr><td>0</td><td class="num">4</td><td class="num">6</td><td class="num">7.35</td><td class="num">14.87</td><td class="num">22.22</td><td class="num">45</td></tr>
-        <tr><td>0</td><td class="num">4</td><td class="num">32</td><td class="num">19.80</td><td class="num">17.91</td><td class="num">37.72</td><td class="num">27</td></tr>
-        <tr><td>2</td><td class="num">13</td><td class="num">6</td><td class="num">8.89</td><td class="num">15.42</td><td class="num">24.31</td><td class="num">41</td></tr>
-        <tr><td>2</td><td class="num">13</td><td class="num">32</td><td class="num">18.02</td><td class="num">16.56</td><td class="num">34.58</td><td class="num">29</td></tr>
-        <tr><td>4</td><td class="num">19</td><td class="num">6</td><td class="num">7.41</td><td class="num">17.22</td><td class="num">24.63</td><td class="num">41</td></tr>
-        <tr><td>4</td><td class="num">19</td><td class="num">32</td><td class="num">17.12</td><td class="num">18.21</td><td class="num">35.32</td><td class="num">28</td></tr>
-        <tr class="rec"><td>5</td><td class="num">17</td><td class="num">6</td><td class="num">9.38</td><td class="num">19.08</td><td class="num">28.46</td><td class="num">35</td></tr>
-        <tr class="rec"><td>5</td><td class="num">17</td><td class="num">32</td><td class="num">19.03</td><td class="num">20.15</td><td class="num">39.19</td><td class="num">26</td></tr>
+        <tr><td>0</td><td class="num">4</td><td class="num">6</td><td class="num">4.82</td><td class="num">14.82</td><td class="num">19.64</td><td class="num">51</td></tr>
+        <tr><td>0</td><td class="num">4</td><td class="num">32</td><td class="num">12.57</td><td class="num">17.92</td><td class="num">30.49</td><td class="num">33</td></tr>
+        <tr><td>2</td><td class="num">13</td><td class="num">6</td><td class="num">5.75</td><td class="num">15.42</td><td class="num">21.17</td><td class="num">47</td></tr>
+        <tr><td>2</td><td class="num">13</td><td class="num">32</td><td class="num">11.56</td><td class="num">16.90</td><td class="num">28.46</td><td class="num">35</td></tr>
+        <tr><td>4</td><td class="num">19</td><td class="num">6</td><td class="num">6.24</td><td class="num">17.38</td><td class="num">23.61</td><td class="num">42</td></tr>
+        <tr><td>4</td><td class="num">19</td><td class="num">32</td><td class="num">12.25</td><td class="num">18.69</td><td class="num">30.94</td><td class="num">32</td></tr>
+        <tr class="rec"><td>5</td><td class="num">17</td><td class="num">6</td><td class="num">6.09</td><td class="num">18.82</td><td class="num">24.91</td><td class="num">40</td></tr>
+        <tr class="rec"><td>5</td><td class="num">17</td><td class="num">32</td><td class="num">11.98</td><td class="num">20.18</td><td class="num">32.16</td><td class="num">31</td></tr>
       </table>
       </div>
-      <p>Six particles is a busy moment and thirty-two is the instant after something large explodes. Play sits in the first of those and has five to ten milliseconds in hand; the full pool overruns the frame by a few, for about half a second. <strong>The cost is the pool and not the objects</strong> — level 0 with four objects costs as much as level 4 with nineteen — which is what an MMBasic array access costs when you make five hundred of them a step. Halving the pool would buy the worst case back, and the debris bursts have already been trimmed from twelve pieces to eight.</p>
+      <p class="ref">Re-measured after the frame rate was corrected. The budget is a 30 ms frame now rather than 33, but the numbers improved anyway, because the simulation runs once a frame instead of 1.65 times.</p>
+      <p>Six particles is a busy moment and thirty-two is the instant after something large explodes. Play sits in the first of those and has five to ten milliseconds in hand against the 30 ms frame; only level 5 with a completely full pool goes over, by two. <strong>The cost is the pool and not the objects</strong> — level 0 with four objects costs as much as level 4 with nineteen — which is what an MMBasic array access costs when you make five hundred of them a step. Halving the pool would buy the worst case back, and the debris bursts have already been trimmed from twelve pieces to eight.</p>
       <p><strong>You start a game with an empty tank</strong>, which reads as a bug in the disassembly until you see where the ship is put down. <code>add_fuel</code> is only ever reached from the tractor beam on a fuel cell, and the level reset table starts every level at the same spot — which, once the sprite-origin offset is applied, is <em>exactly</em> above the first fuel cell, to the column. You fall onto it, hold the beam, and fly off with a full tank. That the two independent corrections (plot origin to centre, and the fuel cell's own centre) agree to the column is the strongest confirmation that either is right.</p>
       <p><strong>Refuelling is a box, not a range</strong>, and that was a bug here until play found it. I had assumed it reused the tractor beam's distance; <code>collecting_fuel_flag</code> is set by a test that the cell is 1 to 5 columns to the <em>right</em> of the ship and 0 to 27 scanlines <em>below</em> it. Both subtractions are unsigned, which is what makes it one-sided: you have to be above the cell and almost on top of it. And a cell is a fixed ration rather than a tap — <code>obj_tractor_counter</code> counts frames on the beam and at 26 the cell is consumed, scoring 30, so one cell is always 286 units of fuel however you approach it.</p>
     </div>

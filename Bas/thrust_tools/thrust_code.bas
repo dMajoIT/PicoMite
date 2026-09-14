@@ -22,12 +22,12 @@
 '  pixels were not square; work out SIN and COS instead and that
 '  compensation is thrown away and the ship stops feeling right.
 '
-'  Timing is two clocks.  The original integrates position every frame
-'  at 50 Hz and updates forces on six ticks in sixteen, and both of
-'  those cadences are part of the feel, so the simulation runs at a
-'  fixed 50 Hz off an accumulator while the screen is drawn at the 33 ms
-'  we pace at.  Rescaling the constants to 30 Hz would not survive the
-'  irregular tick pattern.
+'  Timing is one clock, and it is the BBC's.  Its loop waits for the
+'  centisecond counter to reach 3 before going round again, so a frame
+'  is 30 ms and level_tick_counter - which gates the rotation, the
+'  forces and the tether torque - advances once per frame at 33.3 Hz.
+'  We pace to the same 30 ms and take one simulation step per frame, so
+'  every rate in the game falls out at the rate it had in 1986.
 '
 '  The cave is two numbers per scanline: the X of the left wall and the
 '  X of the right, with open ground between.  So a frame is one fill of
@@ -72,7 +72,14 @@ CONST ROWPX = 2                   ' a terrain scanline is two
 CONST VIEWC = SCRW \ COLPX        ' 80 columns across
 CONST VIEWR = PLAYH \ ROWPX       ' 112 scanlines down
 CONST FONTN = 7, FW = 6, FH = 8   ' font 7 is the 6 x 8 one
-CONST FRAMEMS = 33                ' about 30 frames a second
+'  The original's frame is three centiseconds, not one fiftieth of a
+'  second.  draw_player_timed_to_vsync spins on OSWORD 1 until the BBC's
+'  centisecond clock reads 3 and then zeroes it, and level_tick_counter
+'  advances once per pass - so the whole game, and every rate derived
+'  from that counter, runs at 33.3 Hz.  The disassembly's notes say 50 in
+'  four places; its own code says otherwise, and taking the notes at
+'  their word made this port half again too fast to fly.
+CONST FRAMEMS = 30                ' 33.3 frames a second, as the BBC does
 
 ' --------------------------------------------------------------- world
 '  The world is 184 columns wide and the original wraps X at its edge.
@@ -88,7 +95,7 @@ CONST VIEWOFF = 73
 
 ' -------------------------------------------------------- flight model
 CONST NANG = 32                   ' 32 headings, 11.25 degrees apart
-CONST SIMPF = 50.0 / 30.30        ' simulation steps per drawn frame
+CONST SIMPF = 1.0                 ' one simulation step to a drawn frame
 CONST ROTMASK = 3                 ' rotate on three frames in four
 CONST THRDIV = 16                 ' thrust is the table value over 16
 CONST DRAGX = 64                  ' velX -= velX / 64   per active tick
@@ -131,7 +138,11 @@ CONST OBJ_FUEL = 4
 CONST OBJ_POD = 5
 CONST OBJ_REACTOR = 6
 CONST RHP0 = 50              ' $32, generator_total_damage
-CONST CDOWN0 = 500             ' ten seconds at 50 Hz
+'  Ten seconds, counted in frames: the original holds a seconds counter
+'  and steps it once every $20 frames, which at 33.3 Hz is very nearly a
+'  second, sounding a note each time.
+CONST CDOWNSEC = 32
+CONST CDOWN0 = 10 * CDOWNSEC
 CONST SCOREGUN = 75               ' obj_type_score_value, $75 BCD
 CONST SCOREFUEL = 15
 
@@ -145,7 +156,11 @@ CONST PT_HOSTILE = 3
 CONST PT_DEBRIS = 4
 CONST PARTLIFE = 40               ' $28 ticks
 CONST BULLETADV = 2               ' steps of head start, to clear the ship
-CONST FGAP = 12                   ' steps between the player's shots
+'  Firing is one shot to a press, not a repeat rate: test_fire_key
+'  latches player_pressed_fire and will not fire again until the key has
+'  been let go.  And holding the tractor key blocks the gun outright -
+'  ship_input_fire sets the latch and returns without testing anything -
+'  so the field and the gun are two modes, not two buttons.
 
 ' ------------------------------------------------------------- a game
 '  Escaping is a test on the midpoint alone: above world scanline 288 and
@@ -218,7 +233,7 @@ DIM INTEGER shieldOn
 DIM FLOAT midX, midY, podX, podY, podHomeX, podHomeY
 DIM FLOAT tethAng, tethVel
 DIM INTEGER podAtt, beamOn, hasPod, keepPod
-DIM INTEGER nObj
+DIM INTEGER nObj, nGun
 DIM FLOAT objX(MAXOBJ - 1), objY(MAXOBJ - 1)
 DIM INTEGER objT(MAXOBJ - 1), objG(MAXOBJ - 1), objLive(MAXOBJ - 1)
 DIM INTEGER objTC(MAXOBJ - 1)
@@ -226,7 +241,7 @@ DIM INTEGER objW(8), objH(8)
 DIM FLOAT paX(MAXPART - 1), paY(MAXPART - 1)
 DIM FLOAT paDX(MAXPART - 1), paDY(MAXPART - 1)
 DIM INTEGER paLife(MAXPART - 1), paType(MAXPART - 1)
-DIM INTEGER score, reactorHP, countdown, fuelBeam, fireGap, nPart
+DIM INTEGER score, reactorHP, countdown, fuelBeam, fireHeld, nPart
 DIM INTEGER lives, mission, gunProb, gunPen, planetDead, ending, gameOver
 DIM INTEGER warnUp, revGrav, invLand, hiScore, saidRev, saidInv
 CONST HIFILE = "A:/thrust.hi"
@@ -491,6 +506,7 @@ SUB LoadLevel(lv AS INTEGER)
   ' tether has to reach.
   hasPod = 0
   nObj = 0
+  nGun = 0
   RESTORE objdata
   FOR i = 0 TO lv
     READ n
@@ -500,6 +516,7 @@ SUB LoadLevel(lv AS INTEGER)
         objX(nObj) = c : objY(nObj) = inc
         objT(nObj) = k : objG(nObj) = x : objLive(nObj) = 1
         objTC(nObj) = 0
+        IF k < OBJ_FUEL THEN nGun = nGun + 1
         IF k = OBJ_POD THEN
           podHomeX = c + 2.25
           podHomeY = inc + 2.5
@@ -534,7 +551,7 @@ SUB StartShip
   fuel = FUEL0 : crashed = 0
   podAtt = 0 : beamOn = 0 : tethAng = 0 : tethVel = 0
   podX = podHomeX : podY = podHomeY
-  countdown = 0 : fuelBeam = 0 : fireGap = 0
+  countdown = 0 : fuelBeam = 0 : fireHeld = 0
   FOR nPart = 0 TO MAXPART - 1 : paLife(nPart) = 0 : NEXT nPart
   nPart = 0
   ' Crash while carrying the pod and you get it back, hanging straight
@@ -863,11 +880,12 @@ SUB SimStep
   Refuel
   UpdateGuns
   UpdateParticles
-  IF kFire <> 0 AND fireGap = 0 THEN FirePlayer
-  IF fireGap > 0 THEN fireGap = fireGap - 1
+  IF (kFire <> 0) AND (kTract = 0) AND (fireHeld = 0) THEN FirePlayer
+  fireHeld = kFire
+  IF kTract <> 0 THEN fireHeld = 1
   IF countdown > 0 THEN
     countdown = countdown - 1
-    IF (countdown AND 15) = 0 THEN SndCountdown
+    IF (countdown MOD CDOWNSEC) = 0 THEN SndCountdown
     IF countdown = 0 THEN Explode
   ENDIF
   ' Above scanline 288 is orbit.  Arriving with the pod finishes the
@@ -1012,13 +1030,16 @@ END SUB
 ' ----------------------------------------------------------------------
 SUB UpdateGuns
   LOCAL INTEGER gi, base, mask, ga, gp
-  IF crashed <> 0 OR nObj = 0 THEN EXIT SUB
+  IF crashed <> 0 OR nGun = 0 THEN EXIT SUB
   ' The original rolls once per gun per frame at a probability of 2 in
   ' 256.  Rolling once for the whole level and then picking a gun gives
   ' the same firing rate for the same expected number of shots, and costs
   ' two statements instead of nineteen array scans and nineteen function
   ' calls - which is most of what the entity benchmark was measuring.
-  IF RND * 256 >= (gunProb + gunPen) * nObj THEN EXIT SUB
+  ' one roll for the level in place of the original's one per gun, which
+  ' is the same expected rate as long as it is scaled by the number of
+  ' GUNS and not by every object on the level
+  IF RND * 256 >= (gunProb + gunPen) * nGun THEN EXIT SUB
   gi = INT(RND * nObj)
   IF objLive(gi) = 0 THEN EXIT SUB
   IF objT(gi) >= OBJ_FUEL THEN EXIT SUB
@@ -1078,7 +1099,6 @@ SUB FirePlayer
   paDX(p) = angX(shipAng) : paDY(p) = angY(shipAng)
   paX(p) = shipX + paDX(p) * BULLETADV
   paY(p) = shipY + paDY(p) * BULLETADV
-  fireGap = FGAP
   SndOwnGun
 END SUB
 
@@ -1337,7 +1357,7 @@ SUB DrawPanel
   IF revGrav <> 0 THEN s$ = s$ + " REV"
   IF invLand <> 0 THEN s$ = s$ + " DARK"
   IF podAtt <> 0 THEN s$ = s$ + " POD"
-  IF countdown > 0 THEN s$ = s$ + "  GET OUT " + STR$(countdown \ 50 + 1)
+  IF countdown > 0 THEN s$ = s$ + "  GET OUT " + STR$(countdown \ CDOWNSEC)
   IF warnUp <> 0 THEN s$ = s$ + "  NO POD - TURN BACK"
   TEXT 2, 4, s$, "LT", FONTN, 1, colLand, RGB(BLACK)
   TEXT SCRW - 2, 4, STR$(score), "RT", FONTN, 1, RGB(WHITE), RGB(BLACK)
