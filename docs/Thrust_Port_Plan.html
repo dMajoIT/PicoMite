@@ -121,7 +121,7 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
   <p>What does need to survive is the feel, and the feel is a table of constants. The thrust divisors, the two drag ratios, the tick gating, the rotation rate limit, the 32-entry elliptical angle tables: copy those exactly and the ship flies like the original whether the arithmetic underneath is fixed point or MMBasic floats. Per the house rule that interpreting dominates and the arithmetic is free, floats cost us nothing, so there is no argument for reproducing the fixed point.</p>
   <div class="decide">
     <div class="eyebrow">The one question that could have killed it</div>
-    <p>Can MMBasic redraw a screenful of cave wall inside a 33 ms frame? That has been answered before writing a line of BASIC — see <a href="#terrain">the measurement</a>. Because the terrain is stored as long runs at a constant X, a typical frame merges down to <strong>8 to 40 rectangle fills</strong>, and the worst frame in all six levels is 158. Not 240 scanline draws. The design is comfortable.</p>
+    <p>Can MMBasic redraw a screenful of cave wall inside a 33 ms frame? That has been answered before writing a line of BASIC — see <a href="#terrain">the measurement</a>. Because the terrain is stored as long runs at a constant X, a typical frame merges down to <strong>13 to 56 rectangle fills</strong>, and the worst frame in all six levels is 158. Not 240 scanline draws. The design is comfortable.</p>
   </div>
 </section>
 
@@ -158,7 +158,7 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
     <div class="card">
       <h3>Terrain — two numbers per scanline</h3>
       <p>For every scanline in the world the game stores the X of the left wall and the X of the right wall; the cave is the gap between. Both are RLE delta-compressed as (count, signed increment) pairs, decoded forwards <em>and backwards</em> so the 256-byte window can be extended at whichever edge the camera moves toward.</p>
-      <p class="ref">Six levels. The largest is 1517 scanlines deep. All six terrains together are under 250 bytes of source data.</p>
+      <p class="ref">Six levels. The largest is 1262 scanlines deep. All six terrains together are under 250 bytes of source data.</p>
     </div>
     <div class="card">
       <h3>Sprites — XOR everything</h3>
@@ -177,19 +177,19 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
 <section id="terrain">
   <div class="eyebrow">Measurement</div>
   <h2>The cave costs tens of fills a frame, not hundreds</h2>
-  <p>The terrain is drawn as two solid masses with a gap. Drawn naively — one horizontal line per scanline per wall — a 240-row screen costs 240 draws a frame, which would be marginal. But the RLE the original uses is mostly long runs at a constant X, so consecutive scanlines share a wall position and collapse into one rectangle. Decoding all six levels and sliding a 120-scanline window down each of them gives the real cost:</p>
+  <p>The terrain is drawn as two solid masses with a gap. Drawn naively — one horizontal line per scanline per wall — a 240-row screen costs 240 draws a frame, which would be marginal. But the RLE the original uses is mostly long runs at a constant X, so consecutive scanlines share a wall position and collapse into one rectangle. Decoding all six levels and sliding a 120-scanline window down each of them gives the real cost. The top two thirds of every level is open sky at a constant X — one fill, and the player never flies up there — so "typical" below is the median taken over the cave alone:</p>
   <div class="tablewrap">
   <table>
-    <tr><th>Level</th><th class="num">Scanlines deep</th><th class="num">Left wall fills<br>typical / worst</th><th class="num">Right wall fills<br>typical / worst</th><th class="num">Worst frame</th><th class="num">Objects</th></tr>
-    <tr><td>0</td><td class="num">947</td><td class="num">5 / 31</td><td class="num">3 / 12</td><td class="num">43</td><td class="num">4</td></tr>
-    <tr><td>1</td><td class="num">1088</td><td class="num">10 / 60</td><td class="num">10 / 46</td><td class="num">106</td><td class="num">5</td></tr>
-    <tr><td>2</td><td class="num">1184</td><td class="num">6 / 33</td><td class="num">4 / 15</td><td class="num">47</td><td class="num">13</td></tr>
-    <tr><td>3</td><td class="num">1484</td><td class="num">14 / 73</td><td class="num">6 / 27</td><td class="num">96</td><td class="num">12</td></tr>
-    <tr><td>4</td><td class="num">1429</td><td class="num">11 / 48</td><td class="num">10 / 45</td><td class="num">80</td><td class="num">19</td></tr>
-    <tr class="rec"><td>5</td><td class="num">1517</td><td class="num">17 / 82</td><td class="num">24 / 100</td><td class="num">158</td><td class="num">17</td></tr>
+    <tr><th>Level</th><th class="num">Scanlines deep</th><th class="num">Cave starts</th><th class="num">Fills, typical</th><th class="num">Fills, mean</th><th class="num">Worst frame</th><th class="num">Objects</th></tr>
+    <tr><td>0</td><td class="num">692</td><td class="num">426</td><td class="num">13</td><td class="num">20</td><td class="num">43</td><td class="num">4</td></tr>
+    <tr><td>1</td><td class="num">833</td><td class="num">430</td><td class="num">49</td><td class="num">45</td><td class="num">106</td><td class="num">5</td></tr>
+    <tr><td>2</td><td class="num">929</td><td class="num">440</td><td class="num">18</td><td class="num">19</td><td class="num">47</td><td class="num">13</td></tr>
+    <tr><td>3</td><td class="num">1229</td><td class="num">415</td><td class="num">14</td><td class="num">31</td><td class="num">96</td><td class="num">12</td></tr>
+    <tr><td>4</td><td class="num">1174</td><td class="num">420</td><td class="num">36</td><td class="num">35</td><td class="num">80</td><td class="num">19</td></tr>
+    <tr class="rec"><td>5</td><td class="num">1262</td><td class="num">382</td><td class="num">56</td><td class="num">63</td><td class="num">158</td><td class="num">17</td></tr>
   </table>
   </div>
-  <p>So the median frame is a dozen or so <code>BOX</code> calls and the pathological frame — a long diagonal on level 5, where every scanline genuinely does differ — is 158. That is the number to size the budget against, and it is comfortably inside 33 ms if a <code>BOX</code> costs anything like what Chuckie Egg's drawing did. <a href="#risks">Spike&nbsp;1</a> confirms it on the board before phase 3 starts.</p>
+  <p>So a typical frame is 13 to 56 <code>BOX</code> calls and the pathological frame — a long diagonal on level 5, where every scanline genuinely does differ — is 158. That is the number to size the budget against, and it is comfortably inside 33 ms if a <code>BOX</code> costs anything like what Chuckie Egg's drawing did. <a href="#risks">Spike&nbsp;1</a> confirms it on the board before phase 3 starts.</p>
   <p>Two consequences worth noticing. First, the whole bidirectional RLE decoder — four decoder triples, a circular window, forward and reverse step functions — exists only to fit 256 bytes. We decode each level once at load time into two arrays and throw all of it away. Second, because we hold the entire wall profile, terrain collision becomes a handful of array lookups instead of a side effect of XOR plotting.</p>
 </section>
 
@@ -278,8 +278,9 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
     <div class="num">1<small>Data</small></div>
     <div>
       <h3>Extract terrain, sprites, objects and sound</h3>
-      <p class="meta">Mirrors <code>chuckie_tools/</code> exactly.</p>
-      <p><code>gen_terrain.py</code> decodes the six RLE levels to wall arrays; <code>gen_sprites.py</code> pulls the 17 ship shapes, the pod, the fuel cell, the limpet gun, the reactor and the shield; <code>gen_objects.py</code> reads the per-level object tables; <code>gen_sound.py</code> emits the envelopes and blocks as DATA. Verification is the same trick that caught the level-4 lift in Chuckie Egg: render all six caves to PNG and compare against screenshots of the real game.</p>
+      <p class="meta"><span class="pill ok">Done</span> Mirrors <code>chuckie_tools/</code>.</p>
+      <p><code>gen_terrain.py</code> decodes the six RLE levels to wall arrays; <code>gen_sprites.py</code> pulls the 17 ship headings, the pod, the shield and the nine object shapes; <code>gen_objects.py</code> reads the per-level object tables; <code>gen_sound.py</code> emits the envelopes and blocks as <code>PLAY BBC</code>. All four write into <code>out/</code>, and all but the last draw what they extracted.</p>
+      <p><strong>The check that turned out to be worth having</strong> is not a screenshot comparison but an arithmetic one. <code>gen_objects.py</code> reports what fraction of each object stands inside rock. Across all six levels every one of the 33 limpet guns comes out at exactly 0.25 buried, every one of the 19 fuel cells at 0.30, every pod and door switch at 0.00 and every reactor at 0.10. Those figures are identical level to level because the designer placed objects against the wall, so they can only come out clean if the terrain decoder and the object tables agree to the column. They did not at first: the right wall starts at $FF rather than 0 and segment 0 of the RLE is never read, and getting that wrong put every cave 255 scanlines below its own objects.</p>
     </div>
   </div>
 
@@ -357,15 +358,16 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
   <div class="eyebrow">Tooling</div>
   <h2>Data pipeline</h2>
   <pre><code>Bas/thrust_tools/
-    thrust.6502          the disassembly, vendored
-    gen_terrain.py       six levels of RLE  -> wall arrays as DATA
-    gen_sprites.py       6502 sprite data   -> 17 ship shapes + objects
-    gen_objects.py       per-level object tables
-    gen_sound.py         4 envelopes + 9 blocks -> PLAY BBC DATA
-    thrust_code.bas      the game, without generated data
-    build.py             glue, writing ../thrust.bas
-    compare.py           traced caves beside real screenshots</code></pre>
-  <p>One correction carried over from Chuckie Egg: <code>build.py</code> writes straight to <code>Bas/thrust.bas</code>. A build left sitting in the tools directory is a build nobody runs.</p>
+    thrust.6502          the disassembly - fetched, NOT vendored
+    thrustdata.py        shared reader, colours, geometry
+    gen_terrain.py       six levels of RLE; --stats and --png
+    gen_objects.py       object tables; --png, and the buried-fraction check
+    gen_sprites.py       17 ship headings, pod, shield, nine object shapes
+    gen_sound.py         4 envelopes + 9 blocks -> PLAY BBC
+    out/                 generated .bas fragments and verification images
+    thrust_code.bas      the game, without generated data     (phase 2 on)
+    build.py             glue, writing ../thrust.bas          (phase 2 on)</code></pre>
+  <p>One correction carried over from Chuckie Egg: <code>build.py</code> will write straight to <code>Bas/thrust.bas</code>. A build left sitting in the tools directory is a build nobody runs.</p>
 </section>
 
 <section id="sources">
