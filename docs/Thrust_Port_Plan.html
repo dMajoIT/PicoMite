@@ -267,8 +267,8 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
       <h3>Answer the three questions that change the design</h3>
       <p class="meta">A day. Nothing here ships.</p>
       <ul>
-        <li><strong>S1 — fill rate.</strong> Time 158 <code>BOX</code> calls into the framebuffer plus one <code>FRAMEBUFFER COPY</code>. <em>Accept if under 12 ms</em>, leaving 20 ms for entities and logic. If it fails, fall back to striped half-resolution (halves the fills) before considering a CSUB.</li>
-        <li><strong>S2 — entity cost.</strong> Time one sprite plus 19 object sprites plus 32 <code>PIXEL</code> particles moved and drawn. <em>Accept if under 8 ms.</em></li>
+        <li><strong>S1 — fill rate.</strong> <span class="pill ok">Passed</span> Measured on the PC3 by flying the camera down all six levels a scanline at a time: 9.0 to 12.2 ms average and 20 ms in the worst frame, including the <code>FRAMEBUFFER COPY</code>. Standalone that is 82 to 111 fps. The striped half-resolution fallback is not needed.</li>
+        <li><strong>S2 — entity cost.</strong> <span class="pill warn">Next</span> Time one sprite plus 19 object sprites plus 32 <code>PIXEL</code> particles moved and drawn. <em>Accept if under 8 ms.</em></li>
         <li><strong>S3 — the letterbox.</strong> Put a static cave on screen at 320&times;176 and at full 320&times;240 and decide which reads as Thrust.</li>
       </ul>
     </div>
@@ -288,8 +288,21 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
     <div class="num">2<small>Terrain</small></div>
     <div>
       <h3>A cave you can scroll around with the cursor keys</h3>
-      <p class="meta">No physics. The renderer, standalone.</p>
-      <p>Wall arrays in, camera position in, run-merged fills out, at 30 fps on level 5 with the frame time printed. This is the phase that either validates S1 at full scale or sends us back to it.</p>
+      <p class="meta"><span class="pill ok">Done</span> No physics. The renderer, standalone.</p>
+      <p>Wall arrays in, camera position in, run-merged fills out. <code>Bas/thrust.bas</code> decodes a level's RLE at load, draws the cave, and flies the camera about with the arrow keys; N and P change level and S writes a screenshot.</p>
+      <p><strong>Drawing the cave beats drawing the walls.</strong> The plan assumed two fills per run, one for each wall. Filling the whole playfield with rock and then punching the cave out of it in black is strictly cheaper, because the two walls rarely change on the same scanline and a run only breaks when either does: the worst frame drops from 149 boxes to 112, and the typical frame by a quarter. It also replaces "clear, then draw two walls" with "one fill, then one box per run".</p>
+      <div class="tablewrap">
+      <table>
+        <tr><th>Level</th><th class="num">Frames swept</th><th class="num">Boxes avg</th><th class="num">Boxes max</th><th class="num">ms avg</th><th class="num">ms max</th><th class="num">fps</th></tr>
+        <tr><td>0</td><td class="num">267</td><td class="num">12</td><td class="num">30</td><td class="num">9.0</td><td class="num">12</td><td class="num">111</td></tr>
+        <tr><td>1</td><td class="num">404</td><td class="num">24</td><td class="num">62</td><td class="num">10.5</td><td class="num">16</td><td class="num">94</td></tr>
+        <tr><td>2</td><td class="num">490</td><td class="num">11</td><td class="num">44</td><td class="num">9.1</td><td class="num">13</td><td class="num">109</td></tr>
+        <tr><td>3</td><td class="num">815</td><td class="num">24</td><td class="num">81</td><td class="num">10.5</td><td class="num">19</td><td class="num">94</td></tr>
+        <tr><td>4</td><td class="num">755</td><td class="num">26</td><td class="num">63</td><td class="num">10.8</td><td class="num">16</td><td class="num">92</td></tr>
+        <tr class="rec"><td>5</td><td class="num">881</td><td class="num">19</td><td class="num">93</td><td class="num">12.2</td><td class="num">20</td><td class="num">82</td></tr>
+      </table>
+      </div>
+      <p class="ref">Measured by the <code>Benchmark</code> routine, which runs at startup so these numbers are never guessed at. It flies the camera down every scanline of every level, drawing exactly as the game will, and prints the table above on the board itself.</p>
     </div>
   </div>
 
@@ -345,7 +358,7 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
   <div class="tablewrap">
   <table>
     <tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr>
-    <tr><td>Terrain redraw does not fit the frame</td><td><span class="pill ok">Low</span></td><td>Already quantified at 158 worst-case fills. Fallbacks in order: striped half-resolution, coarser run merging, a CSUB for the fill loop. Spike S1 settles it in a day.</td></tr>
+    <tr><td>Terrain redraw does not fit the frame</td><td><span class="pill ok">Closed</span></td><td>Measured on the board in phase 2: 20 ms in the worst frame of the worst level, 9 to 12 ms typically, copy included. Thirteen milliseconds of the budget are left for everything else, which is what S2 has to fit into.</td></tr>
     <tr><td>64 moving things against Chuckie Egg's nine</td><td><span class="pill warn">Medium</span></td><td>Particles are single pixels, not sprites. The 32-slot pool is rarely full — it peaks only during debris explosions, which are also the moments when a dropped frame is least visible.</td></tr>
     <tr><td>The flight model does not feel like Thrust</td><td><span class="pill warn">Medium</span></td><td>The likeliest cause would be substituting trigonometry for the elliptical angle tables, or rescaling the tick gating to 30 Hz. Both are explicitly ruled out above. Phase 3 exists to catch it early.</td></tr>
     <tr><td>Letterbox versus full screen changes difficulty</td><td><span class="pill acc">Certain</span></td><td>It is a design decision, not a bug. Spike S3 makes it deliberately.</td></tr>
