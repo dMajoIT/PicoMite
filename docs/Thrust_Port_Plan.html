@@ -274,7 +274,7 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
       <p class="meta">A day. Nothing here ships.</p>
       <ul>
         <li><strong>S1 — fill rate.</strong> <span class="pill ok">Passed</span> Measured on the PC3 by flying the camera down all six levels a scanline at a time: 9.0 to 12.2 ms average and 20 ms in the worst frame, including the <code>FRAMEBUFFER COPY</code>. Standalone that is 82 to 111 fps. The striped half-resolution fallback is not needed.</li>
-        <li><strong>S2 — entity cost.</strong> <span class="pill warn">Next</span> Time one sprite plus 19 object sprites plus 32 <code>PIXEL</code> particles moved and drawn. <em>Accept if under 8 ms.</em></li>
+        <li><strong>S2 — entity cost.</strong> <span class="pill warn">Phase 5</span> Time one sprite plus 19 object sprites plus 32 <code>PIXEL</code> particles moved and drawn. <em>Accept if under 8 ms.</em></li>
         <li><strong>S3 — the letterbox.</strong> Put a static cave on screen at 320&times;176 and at full 320&times;240 and decide which reads as Thrust.</li>
       </ul>
     </div>
@@ -338,8 +338,21 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
     <div class="num">4<small>Pod</small></div>
     <div>
       <h3>The tractor beam and the pendulum</h3>
-      <p class="meta">The part everyone remembers.</p>
-      <p>Two-stage attachment on Manhattan distance ($75 to start the beam, $84 to lock). Midpoint as the average of the two positions, force vector halved for the doubled mass, initial angular velocity from the cross product of force and displacement. The 7-level binary search for the starting tether angle can be replaced by <code>ATAN2(y, x)</code> — one of the few places where having a maths library is simply better.</p>
+      <p class="meta"><span class="pill ok">Done</span> The part everyone remembers.</p>
+      <p><strong>The two thresholds are not a near and a nearer.</strong> $75 starts the beam and $84 attaches, and $84 is the <em>larger</em> of the two: you hold the tractor key, fly down until the beam appears, and then <em>pull away</em>, and the pod lifts off its stand as the line goes taut. Both numbers straddle the tether's own length, which is what makes that feel like lifting rather than snapping. The distance metric is the smaller axis plus three times the larger, in pixels.</p>
+      <p><strong>The tether is a circle of 20 pixels' radius</strong>, which is not visible in the tables at all. The delta is four times the angle table, so five columns by ten scanlines — and a column is four pixels against a scanline's two, so both come to twenty. <code>attach_pod_to_ship</code> scales its search vector by 4 in X and 2 in Y for exactly that reason, and once you see it the seven-pass binary search is just <code>ATAN2</code> on a circle.</p>
+      <p>Measured on the board: beam on at 8 columns with the key held, attached on pulling out to 12, separation 40.0 pixels exactly, midpoint dead between the two.</p>
+      <div class="tablewrap">
+      <table>
+        <tr><th>48 steps, pod attached</th><th class="num">tether angle</th><th class="num">angular vel</th><th>What it shows</th></tr>
+        <tr><td>coasting</td><td class="num">0.000</td><td class="num">0.00000</td><td>gravity moves the midpoint and does not twist the tether</td></tr>
+        <tr><td>thrust along the tether</td><td class="num">0.000</td><td class="num">0.00000</td><td>no torque on axis; &Delta;y &minus;25.02 against &minus;58.37 without the pod, so thrust is exactly halved</td></tr>
+        <tr class="rec"><td>thrust across it</td><td class="num">9.410</td><td class="num">0.28150</td><td>a hundred degrees of swing in a second</td></tr>
+        <tr><td>then 160 steps coasting</td><td class="num">15.975</td><td class="num">0.28150</td><td>the swing does not decay</td></tr>
+      </table>
+      </div>
+      <p>That last row is correct and worth knowing. The damping term sits <em>inside</em> the thrust branch in the 6502 — the no-thrust path jumps past both the torque and the damping — so a swinging pod keeps swinging until you thrust again. Physically that is right: both masses are in free fall together, so there is no restoring force and the tether simply rotates. It is also why a careless grab has the pod whirling round the ship, which is the game.</p>
+      <p>Crashing while carrying the pod respawns with it attached hanging straight below, as <code>level_reset_with_pod_flag</code> does.</p>
     </div>
   </div>
 
