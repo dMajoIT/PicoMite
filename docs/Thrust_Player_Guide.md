@@ -6,6 +6,11 @@ original's own numbers, taken out of the published disassembly, so it should
 fly exactly as it did in 1986. **This is a test build and we would like to
 know where it does not.**
 
+![Thrust on the PicoMite](Thrust_screenshot.png)
+
+*Mission 3: the pod under tow on its tether, a limpet gun on the ledge above,
+and a fuel cell waiting.*
+
 ## What you need
 
 - A PicoMite running **MODE 2** — 320 × 240, 16 colours. Any VGA or HDMI
