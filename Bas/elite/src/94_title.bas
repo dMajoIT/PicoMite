@@ -29,8 +29,8 @@ END FUNCTION
 
 SUB DrawTitle
   CLS
-  IF DIR$(TITLEPIC, FILE) <> "" THEN
-    LOAD JPG TITLEPIC
+  IF DIR$(titlePic$, FILE) <> "" THEN
+    LOAD JPG titlePic$
   ELSE
     ' No picture to hand, so say it in words.
     TEXT VCX, 40, "E L I T E", "CT", 1, 4, cWhite

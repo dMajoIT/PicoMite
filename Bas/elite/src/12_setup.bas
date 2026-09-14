@@ -2,9 +2,21 @@
 '  Screen, camera, view and object-pool set up
 ' =====================================================================
 SUB SetupScreen
+  ' MODE 2 is what an HDMI or VGA screen wants and what this was written for.
+  ' A PicoCalc has no modes at all and the command is an error there, so it is
+  ' allowed to fail: whatever the display already is, is what we get.
+  ON ERROR SKIP 1
   MODE 2
+  ON ERROR CLEAR
   FRAMEBUFFER CREATE
   FRAMEBUFFER WRITE F
+  ' Beside the program, wherever that was loaded from.  A program that was
+  ' typed in rather than loaded has no path and MM.INFO says so, and then the
+  ' root of the A: drive is as good a guess as any.
+  homeDir$ = MM.INFO(PATH)
+  IF homeDir$ = "NONE" THEN homeDir$ = "A:/"
+  cmdrFile$ = homeDir$ + "cmdr.txt"
+  titlePic$ = homeDir$ + "title.jpg"
   ' Draw3D's own centre is (W/2, H/2-1); pany lifts it to the space
   ' view's centre so ships sit above the dashboard, not behind it.
   Draw3D CAMERA 1, VPLANE, 0, 0, 0, PANY

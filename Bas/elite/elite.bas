@@ -1,7 +1,7 @@
 ' Elite for the PicoMite, built by elite_tools/build.py from src/*.bas.
 ' Comments and indentation are stripped to fit program memory - read src/.
-LIBRARY LOAD "A:/elite_lib.bas"
-OPTION TRACECACHE ON 80
+LIBRARY LOAD MM.INFO(PATH) + "elite_lib.bas"
+OPTION TRACECACHE ON 100
 OPTION CACHE DEBUG ON
 OPTION CACHE SUB DrawStardust, DrawScanner
 OPTION EXPLICIT
@@ -118,7 +118,7 @@ SpawnTraffic
 DockCheck
 prof(5) = prof(5) + TIMER - tStage
 DrawFrame
-FRAMEBUFFER COPY F, N, B
+FRAMEBUFFER COPY F, N
 mcnt = (mcnt + 1) AND 255
 frames = frames + 1
 IF frames = 40 OR frames = 80 OR frames = 120 OR frames = 250 THEN SaveShot frames
@@ -380,9 +380,15 @@ ENDIF
 qC(4) = 1
 END SUB
 SUB SetupScreen
+ON ERROR SKIP 1
 MODE 2
+ON ERROR CLEAR
 FRAMEBUFFER CREATE
 FRAMEBUFFER WRITE F
+homeDir$ = MM.INFO(PATH)
+IF homeDir$ = "NONE" THEN homeDir$ = "A:/"
+cmdrFile$ = homeDir$ + "cmdr.txt"
+titlePic$ = homeDir$ + "title.jpg"
 Draw3D CAMERA 1, VPLANE, 0, 0, 0, PANY
 col(C_WHITE) = RGB(WHITE) : col(C_CYAN) = RGB(CYAN)
 col(C_YELLOW) = RGB(YELLOW) : col(C_RED) = RGB(RED)
@@ -2869,7 +2875,7 @@ BOX VCX - r * 1.25, VCY - r, r * 2.5, r * 2, 1, cWhite, -1
 NEXT k
 DrawDash
 ViewName
-FRAMEBUFFER COPY F, N, B
+FRAMEBUFFER COPY F, N
 NEXT i
 END SUB
 SUB HyperTunnel
@@ -2885,7 +2891,7 @@ CIRCLE VCX, VCY, r, 1, 1.25, c, -1
 NEXT k
 DrawDash
 ViewName
-FRAMEBUFFER COPY F, N, B
+FRAMEBUFFER COPY F, N
 NEXT i
 END SUB
 SUB StationPolice
@@ -3878,8 +3884,8 @@ LOOP
 END FUNCTION
 SUB DrawTitle
 CLS
-IF DIR$(TITLEPIC, FILE) <> "" THEN
-LOAD JPG TITLEPIC
+IF DIR$(titlePic$, FILE) <> "" THEN
+LOAD JPG titlePic$
 ELSE
 TEXT VCX, 40, "E L I T E", "CT", 1, 4, cWhite
 LINE 24, 100, SCRW - 25, 100, 1, cCyan
@@ -4016,7 +4022,7 @@ ENDIF
 prof(5) = prof(5) + TIMER - tStage
 DrawFrame
 IF demoMode THEN DemoCaption
-FRAMEBUFFER COPY F, N, B
+FRAMEBUFFER COPY F, N
 IF kPause THEN PauseGame
 frames = frames + 1
 SoundService
@@ -4038,7 +4044,7 @@ tick = 0
 DrawFrame
 FRAMEBUFFER COPY F, N
 shotNo = shotNo + 1
-SAVE IMAGE "A:/SCREEN" + STR$(shotNo) + ".BMP"
+SAVE IMAGE homeDir$ + "SCREEN" + STR$(shotNo) + ".BMP"
 LOOP
 ResetTick
 END SUB
@@ -4124,10 +4130,10 @@ ELSEIF dscreen = SCR_LONG OR dscreen = SCR_SHORT THEN
 FindByName
 ENDIF
 CASE 83, 115
-SaveCommander CMDRFILE
+SaveCommander cmdrFile$
 dscreen = SCR_STATUS
 CASE 76, 108
-IF LoadCommander(CMDRFILE) THEN dscreen = SCR_STATUS
+IF LoadCommander(cmdrFile$) THEN dscreen = SCR_STATUS
 CASE ELSE
 dirty = 0
 END SELECT

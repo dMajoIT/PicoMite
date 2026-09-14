@@ -137,7 +137,7 @@ ELSE
     DockCheck
     prof(5) = prof(5) + TIMER - tStage
     DrawFrame
-    FRAMEBUFFER COPY F, N, B
+    FRAMEBUFFER COPY F, N
     mcnt = (mcnt + 1) AND 255
     frames = frames + 1
     IF frames = 40 OR frames = 80 OR frames = 120 OR frames = 250 THEN SaveShot frames

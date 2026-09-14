@@ -111,7 +111,14 @@ SUB RunFlight
     prof(5) = prof(5) + TIMER - tStage
     DrawFrame
     IF demoMode THEN DemoCaption
-    FRAMEBUFFER COPY F, N, B
+    ' Not COPY F, N, B.  The background form hands the copy to the other core
+    ' and returns at once, and the next thing this loop does is clear the
+    ' framebuffer for the following frame - so on a display slow enough for
+    ' the copy to still be running, the screen is shown a frame that is being
+    ' blanked underneath it, which reads as flashing.  On HDMI the display
+    ' type does not qualify for the background copy and the B did nothing
+    ' anyway; on a PicoCalc it did, and it flickered.
+    FRAMEBUFFER COPY F, N
     IF kPause THEN PauseGame
     frames = frames + 1
     SoundService
@@ -143,7 +150,7 @@ SUB PauseGame
     DrawFrame
     FRAMEBUFFER COPY F, N
     shotNo = shotNo + 1
-    SAVE IMAGE "A:/SCREEN" + STR$(shotNo) + ".BMP"
+    SAVE IMAGE homeDir$ + "SCREEN" + STR$(shotNo) + ".BMP"
   LOOP
   ResetTick
 END SUB
@@ -255,10 +262,10 @@ SUB RunDocked
           FindByName
         ENDIF
       CASE 83, 115                             ' S: save the commander
-        SaveCommander CMDRFILE
+        SaveCommander cmdrFile$
         dscreen = SCR_STATUS
       CASE 76, 108                             ' L: load one back
-        IF LoadCommander(CMDRFILE) THEN dscreen = SCR_STATUS
+        IF LoadCommander(cmdrFile$) THEN dscreen = SCR_STATUS
       CASE ELSE
         dirty = 0
     END SELECT

@@ -26,7 +26,9 @@
 ' OPTION EXPLICIT and the DIMs, because those invalidate its entries.  The
 ' two named SUBs are the per-particle and per-contact loops, where the same
 ' handful of statements run hundreds of times a frame.
-OPTION TRACECACHE ON 80             ' rounded up to 128 slots by the firmware
+' Rounded up to 128 slots by the firmware.  100 rather than 80 because the
+' PicoCalc needs the extra: DrawStardust alone fills a smaller cache.
+OPTION TRACECACHE ON 100
 OPTION CACHE DEBUG ON
 'OPTION PROFILING ON                ' [PERF] report of the hottest statements
 OPTION CACHE SUB DrawStardust, DrawScanner
@@ -462,7 +464,11 @@ DIM FLOAT chT0(4), chT1(4)
 ' screen's action key does.
 CONST SCR_STATUS = 0, SCR_INVENT = 1, SCR_MARKET = 2, SCR_EQUIP = 3
 CONST SCR_LONG = 4, SCR_SHORT = 5, SCR_DATA = 6
-CONST CMDRFILE = "A:/cmdr.txt"
+' Where the commander is saved and where the title picture is looked for.
+' Both are set at start up from the directory the program was loaded out of,
+' so nothing here is tied to one drive letter.
+DIM homeDir$ LENGTH 48
+DIM cmdrFile$ LENGTH 64
 DIM INTEGER quitGame, dscreen, dsel, dbuy, titleKey
 ' How far one press moves the chart cursor: one notch, or eight with shift.
 CONST CHARTFAST = 8
@@ -473,7 +479,7 @@ DIM INTEGER chartStep
 ' the keyboard rather than replacing any of the game, so any key at all
 ' hands the controls back to whoever pressed it.
 CONST DEMOPLAY = 1                 ' 1 lets an idle title screen start the demo
-CONST TITLEPIC = "A:/title.jpg"    ' drawn by elite_tools/titlescreen.py
+DIM titlePic$ LENGTH 64            ' drawn by elite_tools/titlescreen.py
 CONST TITLEWAIT = 20000            ' idle this long on the title and the demo runs
 CONST DEMOLOOP = 1                 ' and the demo starts over when it ends
 CONST HANGWAIT = 900             ' the hangar, 44/50 of a second as the BBC

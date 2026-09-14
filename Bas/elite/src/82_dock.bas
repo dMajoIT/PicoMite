@@ -167,7 +167,7 @@ SUB LaunchTunnel
     NEXT k
     DrawDash
     ViewName
-    FRAMEBUFFER COPY F, N, B
+    FRAMEBUFFER COPY F, N
   NEXT i
 END SUB
 
@@ -187,7 +187,7 @@ SUB HyperTunnel
     NEXT k
     DrawDash
     ViewName
-    FRAMEBUFFER COPY F, N, B
+    FRAMEBUFFER COPY F, N
   NEXT i
 END SUB
 

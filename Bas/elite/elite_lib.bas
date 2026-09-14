@@ -201,12 +201,13 @@ DIM INTEGER chWv(4), chF0(4), chF1(4), chVol(4), chWb(4), chLast(4)
 DIM FLOAT chT0(4), chT1(4)
 CONST SCR_STATUS = 0, SCR_INVENT = 1, SCR_MARKET = 2, SCR_EQUIP = 3
 CONST SCR_LONG = 4, SCR_SHORT = 5, SCR_DATA = 6
-CONST CMDRFILE = "A:/cmdr.txt"
+DIM homeDir$ LENGTH 48
+DIM cmdrFile$ LENGTH 64
 DIM INTEGER quitGame, dscreen, dsel, dbuy, titleKey
 CONST CHARTFAST = 8
 DIM INTEGER chartStep
 CONST DEMOPLAY = 1
-CONST TITLEPIC = "A:/title.jpg"    ' drawn by elite_tools/titlescreen.py
+DIM titlePic$ LENGTH 64
 CONST TITLEWAIT = 20000
 CONST DEMOLOOP = 1
 CONST HANGWAIT = 900

@@ -6,7 +6,8 @@ come from the published 6502 source, so Lave is the Lave you remember.
 
 ## Getting it running
 
-You need a PicoMite HDMI build and a screen, and the firmware must be
+You need a PicoMite with a screen - an HDMI or VGA build is what it was written
+for, and it also runs on a PicoCalc - and the firmware must be
 **version 6.03.02b5 or above**. `PRINT MM.VER` at the prompt: it must report
 6.030205 or more. b5 is where `LIBRARY LOAD` arrived, and the program's first
 line is one, so nothing earlier will get past it. Earlier firmware would not
@@ -18,7 +19,9 @@ rather than assuming, so it runs on whatever it is given.
 
 It was written and timed on a PC3 running PicoMiteHDMIWEB at 378 MHz, where it
 holds about 18 ms a frame; it will run slower on a slower clock. The program
-sets `MODE 2` itself.
+asks for `MODE 2` itself, and lets the request fail rather than stopping if
+the display has no modes to choose from, as a PicoCalc's has not - whatever
+the screen already is, is what the game draws on.
 
 Elite comes in two files. `elite_lib.bas` holds the declarations - every
 constant, every variable and the ship blueprints - and is installed as the
@@ -26,24 +29,29 @@ PicoMite's library; `elite.bas` is the code. One MMBasic program cannot be more
 than 144 KB and this is heading past it, so the declarations are kept in the
 library instead, where they cost the program nothing.
 
-Copy both to the drive:
+There is a third file, `data/title.jpg`, which is the title screen. Without it
+the title screen draws the words instead, so nothing is broken if you skip it.
+
+Copy all three to the drive, keeping them together:
 
 ```
 python Bas/elite_tools/pc3.py put Bas/elite/elite_lib.bas A:/elite_lib.bas
 python Bas/elite_tools/pc3.py put Bas/elite/elite.bas     A:/elite.bas
+python Bas/elite_tools/pc3.py put Bas/elite/data/title.jpg A:/title.jpg
 LOAD "A:/elite.bas"
 RUN
 ```
+
+Together is the only thing that matters. The program asks `MM.INFO(PATH)`
+where it was loaded from and looks for the library, the picture and your saved
+commander beside itself, so a directory of your own on the A: drive or a B:
+drive works just as well as the root - use the same directory in all four
+lines above and it will find everything.
 
 The first `RUN` installs the library and starts again by itself - that takes a
 second or two. Every run after that finds the library already matches and goes
 straight into the game. Nothing else to do: the program's first line is
 `LIBRARY LOAD`, so it looks after its own library.
-
-The title screen is a picture file. Copy `Bas/elite/data/title.jpg` to the
-drive as `A:/title.jpg` - `pc3.py put Bas/elite/data/title.jpg A:/title.jpg`
-will do it. Without the file the title screen draws the words instead, so
-nothing is broken if you skip this.
 
 ## Starting
 

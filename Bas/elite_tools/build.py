@@ -47,7 +47,11 @@ OUTLIB = os.path.normpath(os.path.join(HERE, "..", "elite", "elite_lib.bas"))
 # Where the library is looked for at run time, and how the variable pool is
 # split.  128 locals leaves 608 globals; Elite declares 374 and no call chain
 # comes near 128 locals deep.
-LIBPATH = "A:/elite_lib.bas"
+# The library is looked for beside the program rather than in the root of a
+# particular drive, so the two files can live anywhere as long as they live
+# together.  MM.INFO(PATH) is the directory the running program was loaded
+# from, with its trailing slash.
+LIBNAME = "elite_lib.bas"
 LOCALVARS = 128
 
 # The declarations live here, and nothing else does.
@@ -411,7 +415,7 @@ def main():
         "' " + os.path.basename(OUTLIB) + ", which this installs as the library on",
         "' its first run; after that the command finds the library already matches",
         "' and does nothing.  It must be the first statement in the program.",
-        "LIBRARY LOAD " + chr(34) + LIBPATH + chr(34),
+        "LIBRARY LOAD MM.INFO(PATH) + " + chr(34) + LIBNAME + chr(34),
         "",
     ]
     if moved:
