@@ -772,6 +772,13 @@ SUB TitleScreen
   DO WHILE INKEY$ <> "" : LOOP
   DO
     ky$ = INKEY$
+    ' S is the screenshot key everywhere else, so it is here too - and it
+    ' waits for the release, or it would start the game as well.
+    IF ky$ = "s" OR ky$ = "S" THEN
+      SAVE IMAGE "A:/thrust.bmp"
+      ky$ = ""
+      DO WHILE KEYDOWN(0) > 0 : LOOP
+    ENDIF
     t = KEYDOWN(0)
   LOOP UNTIL ky$ <> "" OR t > 0
 END SUB
