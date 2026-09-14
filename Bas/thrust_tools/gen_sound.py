@@ -80,6 +80,11 @@ def data_lines():
     out += ENVELOPE_2_NOTE.strip('\n').split('\n')
     out.append("' " + '=' * 70)
     out.append('SUB SndInit')
+    out.append("  ' PLAY BBC arrived in V6.03.02b6.  On anything older these")
+    out.append("  ' four fail, sndOK stays 0, and the game runs without sound")
+    out.append("  ' rather than stopping with an error a player cannot read.")
+    out.append('  sndOK = 0')
+    out.append('  ON ERROR SKIP 4')
     for n in (1, 2, 3, 4):
         e = envelope(n)
         raw = ' '.join('%02X' % v for v in td.label('envelope_%d' % n))
@@ -89,6 +94,8 @@ def data_lines():
         else:
             out.append("  ' %s" % raw)
         out.append('  PLAY BBC ENVELOPE ' + ', '.join(str(v) for v in e))
+    out.append('  IF MM.ERRNO = 0 THEN sndOK = 1')
+    out.append('  ON ERROR CLEAR')
     out.append('END SUB')
     out.append('')
     out += td.bar('The nine sound blocks')
@@ -108,6 +115,7 @@ def data_lines():
                                                ', '.join(bits)))
         out.append("'   %s" % what)
         out.append('SUB Snd%s' % ''.join(p.title() for p in name.split('_')))
+        out.append('  IF sndOK = 0 THEN EXIT SUB')
         out.append('  PLAY BBC SOUND %s, %d, %d, %d' % (ch, amp, pitch, dur))
         out.append('END SUB')
         out.append('')
