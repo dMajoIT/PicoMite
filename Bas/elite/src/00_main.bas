@@ -26,10 +26,22 @@
 ' OPTION EXPLICIT and the DIMs, because those invalidate its entries.  The
 ' two named SUBs are the per-particle and per-contact loops, where the same
 ' handful of statements run hundreds of times a frame.
-' Rounded up to 128 slots by the firmware.  100 rather than 80 because the
-' PicoCalc needs the extra: DrawStardust alone fills a smaller cache.
-OPTION TRACECACHE ON 100
-OPTION CACHE DEBUG ON
+' The size is rounded up to a power of two, so 128 and 256 are the only two
+' settings in this range and anything between them is simply 128 - the 100
+' that used to be here was the same as the 80 before it.
+'
+' The slab is about 216 bytes a slot, so 128 costs 27 KB and 256 costs 54 KB,
+' and it comes out of the same heap the ship meshes do.  It is also taken
+' lazily, at the first statement that wants a slot, which is after
+' ProbeObjects has counted the meshes - so the bigger cache is only asked for
+' where there is PSRAM to absorb it.
+'
+' Measured over the same 300 frames of DEMOSCENE 1.  With PSRAM, 256 slots
+' take DrawStardust's missed lookups from 18618 a run to 757 and the frame
+' from 41.9 to 37.7 ms.  512 takes the misses to none and the frame to 37.1,
+' which is not worth another 54 KB for two thirds of a millisecond.
+IF MM.INFO(PSRAM SIZE) > 0 THEN OPTION TRACECACHE ON 256 ELSE OPTION TRACECACHE ON 128
+'OPTION CACHE DEBUG ON              ' names every LET that will not compile
 'OPTION PROFILING ON                ' [PERF] report of the hottest statements
 OPTION CACHE SUB DrawStardust, DrawScanner
 

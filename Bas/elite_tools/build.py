@@ -64,6 +64,13 @@ LIB_SOURCES = ("00_main.bas",)
 # stay behind - the variable split and the array base - and the rest move to the
 # program, where they belong.
 LIB_OPTIONS = ("OPTION BASE",)
+
+# These configure the trace cache, and they belong in the program head
+# whatever shape the line is.  The size depends on the machine now, so the
+# statement can be the tail of an IF rather than the start of its line, and
+# a mover that only recognised lines beginning with OPTION would carry the
+# statement away and leave the IF behind.
+PROG_OPTIONS = ("OPTION TRACECACHE", "OPTION CACHE")
 NL = chr(10)
 
 # Two lists, because the two cases differ.  A keyword or a no-argument
@@ -319,7 +326,7 @@ def check_split(lib, prog):
     # the main program; neither may be in the library.
     for i, ln in enumerate(lib.split(NL), 1):
         t = ln.strip().upper()
-        if t.startswith("OPTION TRACECACHE") or t.startswith("OPTION CACHE"):
+        if not t.startswith(chr(39)) and any(k in t for k in PROG_OPTIONS):
             problems.append("library line %d: %s belongs in the main program"
                             % (i, ln.strip()))
 
@@ -394,8 +401,12 @@ def main():
         outlines = []
         for ln in part.split(NL):
             t = ln.strip()
-            if t.upper().startswith("OPTION ") and not any(
-                    t.upper().startswith(k) for k in LIB_OPTIONS):
+            u = t.upper()
+            move = u.startswith("OPTION ") and not any(
+                    u.startswith(k) for k in LIB_OPTIONS)
+            if not move and not t.startswith(chr(39)):
+                move = any(k in u for k in PROG_OPTIONS)
+            if move:
                 moved.append(t)
                 continue
             outlines.append(ln)
