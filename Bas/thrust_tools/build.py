@@ -12,8 +12,16 @@ PY = sys.executable
 OUT = os.path.join(HERE, 'out')
 DEST = os.path.abspath(os.path.join(HERE, os.pardir, 'thrust.bas'))
 
-# in the order they are appended; sound.bas is SUBs, the rest is DATA
-GENERATED = ['terrain.bas', 'objects.bas', 'sprites.bas', 'sound.bas']
+GENERATORS = ['gen_terrain.py', 'gen_objects.py', 'gen_sprites.py',
+              'gen_physics.py', 'gen_sound.py']
+
+# appended after the program, in this order; sound.bas is SUBs, the rest DATA
+GENERATED = ['terrain.bas', 'objects.bas', 'sprites.bas', 'physics.bas',
+             'sound.bas']
+
+# CONST executes where it stands, and everything above is appended after the
+# program's END, so generated constants are spliced in at this marker instead.
+MARKER = "' <<<GENERATED CONSTANTS>>>"
 
 
 def run(script):
@@ -21,20 +29,26 @@ def run(script):
                        capture_output=True, text=True, cwd=HERE)
     if r.returncode:
         sys.exit(script + ' failed:\n' + r.stdout + r.stderr)
-    return r
 
 
-for s in ('gen_terrain.py', 'gen_objects.py', 'gen_sprites.py',
-          'gen_sound.py'):
+def read(path):
+    return open(path, encoding='utf-8').read().rstrip('\n')
+
+
+for s in GENERATORS:
     run(s)
 
-parts = [open(os.path.join(HERE, 'thrust_code.bas'),
-              encoding='utf-8').read().rstrip('\n')]
+code = read(os.path.join(HERE, 'thrust_code.bas'))
+if MARKER not in code:
+    sys.exit('thrust_code.bas has lost its ' + MARKER + ' line')
+code = code.replace(MARKER, read(os.path.join(OUT, 'consts.bas')), 1)
+
+parts = [code]
 for name in GENERATED:
     p = os.path.join(OUT, name)
     if not os.path.exists(p):
         sys.exit('missing generated fragment: ' + p)
-    parts.append(open(p, encoding='utf-8').read().rstrip('\n'))
+    parts.append(read(p))
 
 open(DEST, 'w', encoding='utf-8', newline='\n').write('\n\n'.join(parts) + '\n')
 n = sum(1 for _ in open(DEST, encoding='utf-8'))

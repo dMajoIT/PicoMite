@@ -172,6 +172,12 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
     </div>
   </div>
   <div class="note">One transcription check to do before trusting the sound data: envelope&nbsp;1, 3 and 4 are 14 bytes each in the listing, as an ENVELOPE block should be, but envelope&nbsp;2 groups to 13. Read it out of the binary rather than the source.</div>
+  <h3>Where the disassembly's notes are wrong</h3>
+  <p>The three reference documents are the best thing about that repository and they are what made this port cheap, but they are notes rather than a specification, and two claims in <code>ship-physics.md</code> do not match the 6502 beside them. Both were caught by reading the assembly when the behaviour looked odd, and both would have been silent bugs.</p>
+  <ul>
+    <li><strong>"The result is negated (thrust opposes the facing direction)."</strong> It is not. The sequence after the shifts is <code>AND #$01 / EOR #$FF / ADC #$01</code>, which sign-extends the integer byte that the rotates have shifted the sign out of, and the accumulate is <code>ADC</code>. The table already points the way the ship flies: heading 0 is up and its Y entry is &minus;2.5. Negating it drives the ship backwards.</li>
+    <li><strong>"Rotation rate: 3 out of 4 frames, ~8.4 steps/second at 50fps."</strong> Three in four of 50 is 37.5, and <code>ship_input_rotate</code> is exactly <code>AND #$03 / BEQ return</code>. A full turn takes a little under a second.</li>
+  </ul>
 </section>
 
 <section id="terrain">
@@ -310,8 +316,21 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
     <div class="num">3<small>Flight</small></div>
     <div>
       <h3>The ship, gravity, thrust, and hitting the walls</h3>
-      <p class="meta">The whole game's soul. Do not move on until it feels right.</p>
-      <p>Port the force pipeline in the original's order: rotate, integrate, derive position, compute next frame's force. Gravity, the angle tables, the two drags, the tick gating, fuel burn. Terrain collision by hull points. If this phase is not fun on its own, the port has failed and the rest is decoration.</p>
+      <p class="meta"><span class="pill ok">Done</span> The whole game's soul.</p>
+      <p>The force pipeline is in the original's order &mdash; rotate, integrate, derive position, compute next frame's force &mdash; with its constants: gravity per level, the angle tables verbatim, thrust over 16, X drag 63/64 and Y drag 255/256, the six active ticks in sixteen, rotation on three frames in four. The simulation runs at a fixed 50 Hz off an accumulator under the 30 Hz draw, so the irregular tick pattern survives. Collision is eight hull points against the wall arrays.</p>
+      <p><strong>Checked by driving <code>SimStep</code> from the board's command prompt</strong> rather than by eye: 48 steps of full thrust from rest in open sky, at each of the four cardinal headings.</p>
+      <div class="tablewrap">
+      <table>
+        <tr><th>Heading</th><th class="num">&Delta;y</th><th class="num">&Delta;x</th><th>Expected</th></tr>
+        <tr><td>0, up</td><td class="num">&minus;58.37</td><td class="num">0.00</td><td>lifts against gravity</td></tr>
+        <tr><td>8, right</td><td class="num">+8.34</td><td class="num">+30.93</td><td>free-fall Y, thrust X</td></tr>
+        <tr><td>24, left</td><td class="num">+8.34</td><td class="num">&minus;30.93</td><td>exact mirror of right</td></tr>
+        <tr><td>16, down</td><td class="num">+75.05</td><td class="num">0.00</td><td>+66.7 either side of free fall, symmetric with up</td></tr>
+        <tr><td>no thrust</td><td class="num">+8.34</td><td class="num">0.00</td><td>gravity alone, no fuel spent</td></tr>
+      </table>
+      </div>
+      <p>Up and down are symmetric to the second decimal about free fall, left and right are exact mirrors, and fuel came off at 18 units in 48 steps &mdash; six in sixteen, as the tick gate says. The vertical response is 2.16&times; the horizontal, which is the table's 2:1 ellipse plus X drag being four times stronger: that asymmetry <em>is</em> the feel of Thrust, and it comes out of the data without being asked for.</p>
+      <p class="ref">Still to come here: the exhaust flame, the explosion animation, and a proper look at whether the ship turns at the right rate to fly by.</p>
     </div>
   </div>
 

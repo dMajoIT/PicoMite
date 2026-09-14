@@ -2,10 +2,26 @@
 '  T H R U S T        PicoMite MMBasic
 '  after the 1986 BBC Micro game by Jeremy C. Smith for Superior Software
 '
-'  Phase 2 of the port (see docs/Thrust_Port_Plan.html): the landscape
-'  on its own.  There is no physics and no ship yet - the cursor keys
-'  fly the camera around a cave, N and P change level, and the panel
-'  says what a frame costs.
+'  Phase 3 of the port (see docs/Thrust_Port_Plan.html): the flight
+'  model.  There is no pod and there are no objects yet - this is the
+'  ship, gravity, thrust, and hitting the walls, which is the part the
+'  whole port stands or falls on.
+'
+'  The physics is the original's, in its order and with its constants,
+'  but in floating point rather than Q7.8: on this interpreter a float
+'  costs what an integer costs, so there is nothing to be gained by
+'  reproducing the fixed point, and a good deal of clarity to lose.
+'  What does have to be copied exactly is the pair of angle tables.
+'  They are an ellipse, 2.5 in Y against 1.25 in X, because MODE 1's
+'  pixels were not square; work out SIN and COS instead and that
+'  compensation is thrown away and the ship stops feeling right.
+'
+'  Timing is two clocks.  The original integrates position every frame
+'  at 50 Hz and updates forces on six ticks in sixteen, and both of
+'  those cadences are part of the feel, so the simulation runs at a
+'  fixed 50 Hz off an accumulator while the screen is drawn at the 33 ms
+'  we pace at.  Rescaling the constants to 30 Hz would not survive the
+'  irregular tick pattern.
 '
 '  The cave is two numbers per scanline: the X of the left wall and the
 '  X of the right, with open ground between.  So a frame is one fill of
@@ -14,15 +30,17 @@
 '  box, which is what makes this affordable - punching out the cave
 '  costs fewer boxes than drawing the two walls separately, because the
 '  walls rarely change on the same scanline.  Measured over all six
-'  levels: 112 boxes in the worst frame, and nearer thirty typically.
+'  levels: 93 boxes in the worst frame, and nearer twenty typically.
 '
 '  Units are the BBC's own throughout.  One terrain column is four
 '  pixels across and one terrain scanline two pixels down; the game's
 '  arithmetic stays in those units and only the drawing scales, which
-'  keeps the original's geometry and, later, its angle tables.
+'  is what keeps the angle tables correct.
 '
-'  Keys      Camera ......... arrow keys
+'  Keys      Turn ........... left / right arrows
+'            Thrust ......... up arrow, or SPACE
 '            Level .......... N, P
+'            Restart ........ R
 '            Screenshot ..... S  (to A:/thrust.bmp)
 '            Quit ........... ESC
 ' =====================================================================
@@ -50,40 +68,75 @@ CONST FRAMEMS = 33                ' about 30 frames a second
 CONST WORLDC = 184
 CONST MAXROW = 1400               ' the deepest level is 1262 scanlines
 CONST NLEVEL = 6
+'  The window Y in the original's level reset table sits 73 scanlines
+'  above the top of the visible area - the $49 that landscape_draw adds.
+CONST VIEWOFF = 73
 
+' -------------------------------------------------------- flight model
+CONST NANG = 32                   ' 32 headings, 11.25 degrees apart
+CONST SIMPF = 50.0 / 30.30        ' simulation steps per drawn frame
+CONST ROTMASK = 3                 ' rotate on three frames in four
+CONST THRDIV = 16                 ' thrust is the table value over 16
+CONST DRAGX = 64                  ' velX -= velX / 64   per active tick
+CONST DRAGY = 256                 ' velY -= velY / 256  - weaker, because
+                                  ' gravity is always adding to it
+CONST NHULL = 8                   ' hull points tested against the walls
+CONST HULLRX = 1.6                ' in columns
+CONST HULLRY = 3.2                ' in scanlines
+CONST FUEL0 = 999                 ' placeholder: the real economy is the
+                                  ' tractor beam's, and arrives in phase 5
+
+' ------------------------------------------------------------ sprites
+CONST S_SHIP = 1                  ' buffers 1..17 are headings 0..16
+' <<<GENERATED CONSTANTS>>>
+
+' ======================================================================
+'  globals
+' ======================================================================
 DIM INTEGER wallL(MAXROW), wallR(MAXROW)
 DIM INTEGER depth, level, colLand, colObj, colBack
 DIM FLOAT camX
 DIM INTEGER camY
 DIM INTEGER pal(15)
-DIM INTEGER kUp, kDown, kLeft, kRight, kNext, kPrev, kQuit, kShot
+DIM INTEGER img(1023)
+DIM hexd$ LENGTH 20
+
+DIM FLOAT angX(NANG - 1), angY(NANG - 1)
+DIM INTEGER actTick(15)
+DIM FLOAT gravY, startX, startY
+DIM INTEGER startCamY
+DIM FLOAT shipX, shipY, velX, velY, simAcc
+DIM FLOAT hullX(NHULL - 1), hullY(NHULL - 1)
+DIM INTEGER shipAng, tick, fuel, crashed, deaths
+DIM INTEGER kLeft, kRight, kThrust, kNext, kPrev, kQuit, kShot, kReset
 DIM INTEGER nBox, drawMs
-DIM INTEGER nextFrame, t0
-DIM INTEGER caveTop
+DIM INTEGER nextFrame, t0, caveTop
 
 ' ======================================================================
 '  main
 ' ======================================================================
 Setup
-Benchmark
-LoadLevel 4
+LoadLevel 0
 nextFrame = TIMER + FRAMEMS
 DO
   ReadKeys
   IF kQuit <> 0 THEN EXIT DO
   IF kNext <> 0 THEN LoadLevel((level + 1) MOD NLEVEL)
   IF kPrev <> 0 THEN LoadLevel((level + NLEVEL - 1) MOD NLEVEL)
+  IF kReset <> 0 THEN StartShip
   IF kShot <> 0 THEN SAVE IMAGE "A:/thrust.bmp"
 
-
-  IF kLeft <> 0 THEN camX = camX - 1.5
-  IF kRight <> 0 THEN camX = camX + 1.5
-  IF kUp <> 0 THEN camY = camY - 3
-  IF kDown <> 0 THEN camY = camY + 3
-  ClampCamera
+  ' The simulation runs at 50 Hz whatever the frame rate is.
+  simAcc = simAcc + SIMPF
+  DO WHILE simAcc >= 1
+    SimStep
+    simAcc = simAcc - 1
+  LOOP
+  FollowCamera
 
   t0 = TIMER
   DrawWorld
+  DrawShip
   DrawPanel
   FRAMEBUFFER COPY F, N
   drawMs = TIMER - t0
@@ -93,13 +146,16 @@ DO
 LOOP
 FRAMEBUFFER WRITE N
 CLS RGB(BLACK)
-PRINT "Thrust phase 2 - landscape only."
+PRINT "Thrust phase 3 - flight model."
 END
 
 ' ======================================================================
 '  one-time set-up
 ' ======================================================================
 SUB Setup
+  LOCAL INTEGER i, j
+  LOCAL FLOAT a
+
   IF MM.HRES <> 320 OR MM.VRES <> 240 THEN
     ON ERROR SKIP 1
     MODE 2
@@ -118,12 +174,70 @@ SUB Setup
   pal(3) = RGB(YELLOW)  : pal(4) = RGB(BLUE)    : pal(5) = RGB(MAGENTA)
   pal(6) = RGB(CYAN)    : pal(7) = RGB(WHITE)
   colBack = RGB(BLACK)
+  hexd$ = "0123456789ABCDEF"
 
+  RESTORE angdata
+  FOR i = 0 TO NANG - 1 : READ angX(i) : NEXT i
+  FOR i = 0 TO NANG - 1 : READ angY(i) : NEXT i
+  RESTORE tickdata
+  FOR i = 0 TO 15 : actTick(i) = 0 : NEXT i
+  FOR i = 0 TO 5
+    READ j
+    actTick(j) = 1
+  NEXT i
+
+  ' An octagon standing in for the ship's outline.  The real shape turns
+  ' with the heading, but a ring this size is close enough to fly by and
+  ' costs eight comparisons instead of a per-pixel test.
+  FOR i = 0 TO NHULL - 1
+    a = i * 2 * PI / NHULL
+    hullX(i) = HULLRX * SIN(a)
+    hullY(i) = -HULLRY * COS(a)
+  NEXT i
+
+  SPRITE CLOSE ALL
+  LoadSprites
   ON ERROR SKIP 1
   FRAMEBUFFER CREATE
   ON ERROR CLEAR
   FRAMEBUFFER WRITE F
   CLS RGB(BLACK)
+  SndInit
+  deaths = 0
+END SUB
+
+' ----------------------------------------------------------------------
+'  Sprites.  Two bits a pixel, one hex digit to two pixels, logical
+'  colour 0 to 3; 1 is the ship's yellow.  Only the seventeen ship
+'  headings are wanted yet - the objects come in phase 5 and need
+'  reloading per level anyway, because 2 and 3 are level colours.
+' ----------------------------------------------------------------------
+SUB LoadSprites
+  LOCAL INTEGER n, w, h, j, i, d, k, c
+  LOCAL nm$ LENGTH 20
+  LOCAL bits$ LENGTH 40
+  RESTORE sprdata
+  n = 0
+  DO
+    READ nm$, w, h
+    IF nm$ = "" THEN EXIT DO
+    n = n + 1
+    IF n <= 17 THEN
+      k = 0
+      FOR j = 0 TO h - 1
+        READ bits$
+        FOR i = 0 TO w - 1
+          d = INSTR(hexd$, MID$(bits$, i \ 2 + 1, 1)) - 1
+          IF (i AND 1) = 0 THEN c = d \ 4 ELSE c = d AND 3
+          IF c = 1 THEN img(k) = pal(3) ELSE img(k) = 0
+          k = k + 1
+        NEXT i
+      NEXT j
+      SPRITE LOADARRAY n, w, h, img()
+    ELSE
+      FOR j = 0 TO h - 1 : READ bits$ : NEXT j
+    ENDIF
+  LOOP
 END SUB
 
 ' ======================================================================
@@ -184,7 +298,12 @@ SUB LoadLevel(lv AS INTEGER)
   colLand = pal(j)
   colObj = pal(k)
 
-  ' start looking at the top of the cave
+  RESTORE lvldata
+  FOR i = 0 TO lv
+    READ gravY, startX, startY, j, k
+  NEXT i
+  startCamY = k + VIEWOFF
+
   caveTop = 0
   FOR i = 1 TO depth - 1
     IF wallL(i) <> wallL(0) OR wallR(i) <> wallR(0) THEN
@@ -192,57 +311,112 @@ SUB LoadLevel(lv AS INTEGER)
       EXIT FOR
     ENDIF
   NEXT i
-  camY = caveTop - 8
-  camX = (wallL(camY + VIEWR \ 2) + wallR(camY + VIEWR \ 2)) / 2 - VIEWC \ 2
-  ClampCamera
+  StartShip
 END SUB
 
-' ======================================================================
-'  Spike S1, run at startup so the numbers are never guessed at.
-'
-'  Fly the camera down every level a scanline at a time, drawing every
-'  frame exactly as the game will, and report what it cost.  The plan
-'  predicted a worst frame of 112 boxes from the terrain data alone; this
-'  is the same question asked of the board.
-' ======================================================================
-SUB Benchmark
-  LOCAL INTEGER lv, y, n, tot, mx, t, ms, msMax, msTot
-  FRAMEBUFFER WRITE N
-  CLS RGB(BLACK)
-  PRINT "Thrust phase 2 - landscape renderer"
-  PRINT
-  PRINT "lvl  frames   box avg  max    ms avg  max   fps"
-  FOR lv = 0 TO NLEVEL - 1
-    LoadLevel lv
-    FRAMEBUFFER WRITE F
-    n = 0 : tot = 0 : mx = 0 : msTot = 0 : msMax = 0
-    FOR y = caveTop - VIEWR TO depth - VIEWR
-      IF y >= 0 THEN
-        camY = y
-        t = TIMER
-        DrawWorld
-        FRAMEBUFFER COPY F, N
-        ms = TIMER - t
-        n = n + 1 : tot = tot + nBox : msTot = msTot + ms
-        IF nBox > mx THEN mx = nBox
-        IF ms > msMax THEN msMax = ms
-      ENDIF
-    NEXT y
-    FRAMEBUFFER WRITE N
-    PRINT STR$(lv, 3); STR$(n, 8); STR$(tot \ n, 10); STR$(mx, 5);
-    PRINT STR$(msTot / n, 10, 1); STR$(msMax, 5); STR$(n * 1000 \ msTot, 6)
-  NEXT lv
-  PRINT
-  PRINT "any key for the camera"
-  DO WHILE INKEY$ = "" : LOOP
-  FRAMEBUFFER WRITE F
+SUB StartShip
+  shipX = startX : shipY = startY
+  velX = 0 : velY = 0
+  shipAng = 0 : tick = 0 : simAcc = 0
+  fuel = FUEL0 : crashed = 0
+  camY = startCamY
+  camX = shipX - VIEWC \ 2
+  ClampCamera
 END SUB
 
 SUB ClampCamera
   IF camY < 0 THEN camY = 0
   IF camY > depth - VIEWR THEN camY = depth - VIEWR
-  IF camX < -VIEWC THEN camX = -VIEWC
-  IF camX > WORLDC + VIEWC THEN camX = WORLDC + VIEWC
+END SUB
+
+' ======================================================================
+'  the flight model
+'
+'  ship_input_rotate, midpoint_add_force_vector and then
+'  ship_input_thrust_calculate_force, in that order: the force computed
+'  at the end of one step is integrated at the start of the next, which
+'  is the original's one-step-behind Euler.
+' ======================================================================
+SUB SimStep
+  LOCAL INTEGER t
+
+  IF crashed <> 0 THEN
+    crashed = crashed - 1
+    IF crashed = 0 THEN StartShip
+    EXIT SUB
+  ENDIF
+
+  ' 1. rotation, rate limited to three frames in four.  That is 37.5
+  '    steps a second and a full turn in under a second - the
+  '    disassembly's notes say 8.4, but its own code is AND #3 / BEQ.
+  IF (tick AND ROTMASK) <> 0 THEN
+    IF kLeft <> 0 THEN shipAng = (shipAng + NANG - 1) AND (NANG - 1)
+    IF kRight <> 0 THEN shipAng = (shipAng + 1) AND (NANG - 1)
+  ENDIF
+
+  ' 2. integrate - every step, not just the active ones
+  shipX = shipX + velX
+  shipY = shipY + velY
+
+  ' 3. gravity, thrust and drag, on six ticks in sixteen
+  t = tick AND 15
+  IF actTick(t) <> 0 THEN
+    velY = velY + gravY
+    IF (kThrust <> 0) AND (fuel > 0) THEN
+      ' The table's sign is the direction of flight: heading 0 is up and
+      ' its Y entry is -2.5, and the 6502 adds it.  (The disassembly's
+      ' own notes say the thrust is negated; the ADC says otherwise, and
+      ' negating it would drive the ship backwards.)
+      velX = velX + angX(shipAng) / THRDIV
+      velY = velY + angY(shipAng) / THRDIV
+      fuel = fuel - 1
+      SndEngine
+    ENDIF
+    velX = velX - velX / DRAGX
+    velY = velY - velY / DRAGY
+  ENDIF
+  tick = tick + 1
+
+  IF HitWall() <> 0 THEN
+    crashed = 40
+    deaths = deaths + 1
+    SndExplosion1
+    SndExplosion2
+  ENDIF
+END SUB
+
+' ----------------------------------------------------------------------
+'  Collision.  The original got this free from XOR plotting and only
+'  noticed a hit on the frame after it happened; eight points against
+'  the wall arrays is both cheaper here and better behaved.
+' ----------------------------------------------------------------------
+FUNCTION HitWall() AS INTEGER
+  LOCAL INTEGER i, wy
+  LOCAL FLOAT wx
+  HitWall = 1
+  FOR i = 0 TO NHULL - 1
+    wy = INT(shipY + hullY(i))
+    IF wy < 0 OR wy >= depth THEN EXIT FUNCTION
+    wx = shipX + hullX(i)
+    IF wx < wallL(wy) THEN EXIT FUNCTION
+    IF wx >= wallR(wy) THEN EXIT FUNCTION
+  NEXT i
+  HitWall = 0
+END FUNCTION
+
+' ----------------------------------------------------------------------
+'  The camera keeps the ship inside a band rather than centred, which is
+'  what the original's damped scroll amounts to once it settles.
+' ----------------------------------------------------------------------
+SUB FollowCamera
+  LOCAL FLOAT r, c
+  r = shipY - camY
+  IF r > 80 THEN camY = camY + INT(r - 80)
+  IF r < 47 THEN camY = camY + INT(r - 47)
+  c = shipX - camX
+  IF c > 46 THEN camX = camX + (c - 46)
+  IF c < 34 THEN camX = camX + (c - 34)
+  ClampCamera
 END SUB
 
 ' ======================================================================
@@ -283,13 +457,35 @@ SUB DrawWorld
   NEXT row
 END SUB
 
+' ----------------------------------------------------------------------
+'  Headings 0 to 16 are their own sprite; 17 to 31 are 32-n drawn with
+'  the horizontal mirror, which is exact because the shapes share a box
+'  centred on the point the ship turns about.  Rotation 0 and 1 keep
+'  transparency; 4 to 7 are the same mirrors without it.
+' ----------------------------------------------------------------------
+SUB DrawShip
+  LOCAL INTEGER sx, sy, n, rot
+  IF crashed <> 0 THEN
+    IF (crashed AND 2) = 0 THEN EXIT SUB
+  ENDIF
+  sx = INT((shipX - camX) * COLPX) - SHIPCX
+  sy = PLAYTOP + INT((shipY - camY) * ROWPX) - SHIPCY
+  IF sx < -SHIPW OR sx > SCRW OR sy < PLAYTOP - SHIPH OR sy > SCRH THEN EXIT SUB
+  IF shipAng <= 16 THEN
+    n = S_SHIP + shipAng : rot = 0
+  ELSE
+    n = S_SHIP + NANG - shipAng : rot = 1
+  ENDIF
+  SPRITE WRITE n, sx, sy, rot
+END SUB
+
 SUB DrawPanel
   LOCAL s$ LENGTH 48
   BOX 0, 0, SCRW, PANELH, 0, RGB(BLACK), RGB(BLACK)
-  s$ = "LEVEL " + STR$(level) + "  X" + STR$(INT(camX)) + " Y" + STR$(camY)
+  s$ = "LEVEL " + STR$(level + 1) + "  FUEL " + STR$(fuel)
+  IF deaths > 0 THEN s$ = s$ + "  CRASH " + STR$(deaths)
   TEXT 2, 4, s$, "LT", FONTN, 1, colLand, RGB(BLACK)
   s$ = STR$(nBox) + " BOX " + STR$(drawMs) + "MS"
-  IF drawMs > 0 THEN s$ = s$ + " " + STR$(1000 \ drawMs) + "FPS"
   TEXT SCRW - 2, 4, s$, "RT", FONTN, 1, RGB(WHITE), RGB(BLACK)
 END SUB
 
@@ -303,24 +499,26 @@ END SUB
 SUB ReadKeys
   LOCAL INTEGER i, k
   LOCAL ky$ LENGTH 2
-  kUp = 0 : kDown = 0 : kLeft = 0 : kRight = 0
-  kNext = 0 : kPrev = 0 : kQuit = 0 : kShot = 0
+  kLeft = 0 : kRight = 0 : kThrust = 0
+  kNext = 0 : kPrev = 0 : kQuit = 0 : kShot = 0 : kReset = 0
   ky$ = INKEY$
   IF ky$ = CHR$(27) THEN kQuit = 1
   IF ky$ = "n" OR ky$ = "N" THEN kNext = 1
   IF ky$ = "p" OR ky$ = "P" THEN kPrev = 1
   IF ky$ = "s" OR ky$ = "S" THEN kShot = 1
+  IF ky$ = "r" OR ky$ = "R" THEN kReset = 1
+  IF ky$ = " " THEN kThrust = 1
   FOR i = 1 TO 6
     k = KEYDOWN(i)
     SELECT CASE k
-      CASE 128 : kUp = 1
-      CASE 129 : kDown = 1
-      CASE 130 : kLeft = 1
-      CASE 131 : kRight = 1
-      CASE 110, 78 : kNext = 1
-      CASE 112, 80 : kPrev = 1
-      CASE 115, 83 : kShot = 1
-      CASE 27 : kQuit = 1
+      CASE 130, 122, 90  : kLeft = 1        ' left, Z
+      CASE 131, 120, 88  : kRight = 1       ' right, X
+      CASE 128, 32       : kThrust = 1      ' up, space
+      CASE 110, 78       : kNext = 1
+      CASE 112, 80       : kPrev = 1
+      CASE 115, 83       : kShot = 1
+      CASE 114, 82       : kReset = 1
+      CASE 27            : kQuit = 1
     END SELECT
   NEXT i
 END SUB

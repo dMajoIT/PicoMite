@@ -110,10 +110,22 @@ def grid(px, box):
             for y in range(y0, y1 + 1)]
 
 
+# The ship turns about (16, 9.5) in the original's sprite coordinates:
+# headings 0 and 16 are mirror-symmetric about x=16, heading 8 about y=9,
+# and mirroring heading 0's rows about y=9.5 lands exactly on heading 16.
+# Headings 17-31 are drawn as 32-n with SPRITE's horizontal mirror, and
+# that is only exact if the box is symmetric about x=16 - otherwise the
+# ship jumps sideways every time it turns through vertical.
+SHIP_CX = 16
+SHIP_CY = 9.5
+
+
 def all_shapes():
-    """(name, grid, box) for everything, ships sharing one common box."""
+    """(name, grid, box) for everything, ships sharing one symmetric box."""
     ships = ship_shapes()
-    sbox = bbox(ships)
+    x0, y0, x1, y1 = bbox(ships)
+    r = max(SHIP_CX - x0, x1 - SHIP_CX)
+    sbox = (SHIP_CX - r, y0, SHIP_CX + r, y1)
     out = [(n, grid(px, sbox), sbox) for n, px in ships]
     for n, px in other_shapes():
         b = bbox([(n, px)])
@@ -130,9 +142,10 @@ def data_lines():
         "'  pixels, leftmost pixel first.  Colour 1 is the ship's yellow, 2",
         "'  the landscape colour and 3 the object colour; the last two are",
         "'  set per level from the palette table below.",
-        "'  Ship shapes 0 to 16 are headings 0 to 16 and share one box, so",
-        "'  they can be swapped without the ship shifting; headings 17 to 31",
-        "'  are shape 32-n mirrored."]
+        "'  Ship shapes 0 to 16 are headings 0 to 16 and share one box that",
+        "'  is symmetric about the ship's centre of rotation, so headings 17",
+        "'  to 31 are shape 32-n drawn with SPRITE's horizontal mirror and do",
+        "'  not shift.  The centre sits at SHIPCX, SHIPCY within that box."]
     out.append('sprdata:')
     for name, g, box in all_shapes():
         h = len(g)
@@ -205,3 +218,14 @@ if __name__ == '__main__':
         art()
     else:
         td.emit(data_lines(), 'sprites.bas')
+        # CONST runs where it stands, and the sprite DATA is appended after
+        # the program's END - so these go into a fragment build.py splices
+        # into the code instead.
+        sbox = all_shapes()[0][2]
+        td.emit(["' where the ship's centre of rotation sits in its sprite",
+                 "' box, in pixels - see gen_sprites.py",
+                 'CONST SHIPCX = %d' % (SHIP_CX - sbox[0]),
+                 'CONST SHIPCY = %.1f' % (SHIP_CY - sbox[1]),
+                 'CONST SHIPW = %d' % (sbox[2] - sbox[0] + 1),
+                 'CONST SHIPH = %d' % (sbox[3] - sbox[1] + 1)],
+                'consts.bas')
