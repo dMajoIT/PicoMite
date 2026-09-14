@@ -5,6 +5,8 @@ CONST SCRW = 320, SCRH = 240
 CONST VIEWH = 176
 CONST VCX = 160, VCY = 88
 CONST DASHY = 176
+CONST DASHWORDS = (SCRH - DASHY) * SCRW \ 16
+DIM INTEGER dashStore(DASHWORDS - 1)
 CONST VPLANE = 256
 CONST DEMOFRAMES = 0
 CONST DEMOSCENE = 1
@@ -62,7 +64,8 @@ DIM INTEGER shpCol(NTYPE), scaCol(NTYPE)
 CONST C_WHITE = 0, C_CYAN = 1, C_YELLOW = 2, C_RED = 3
 DIM INTEGER cGreen, cYellow, cWhite, cBlack, cCyan, cDim, cRed, cSel
 DIM INTEGER cMagenta, cBlue
-DIM INTEGER maxObj, objOwn(35)
+DIM INTEGER maxObj, objOwn(35), objCost
+CONST HEAPKEEP = 16384
 DIM FLOAT qA(4), qB(4), qC(4), qV(4), qP(4), vwQ(4, 3)
 DIM INTEGER kRollL, kRollR, kUp, kDn, kFaster, kSlower, kFire, kQuit
 DIM INTEGER kView, kPause, kTarget, kMissile, kECM, kDock, kJump, kChart

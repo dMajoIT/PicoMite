@@ -23,6 +23,24 @@ asks for `MODE 2` itself, and lets the request fail rather than stopping if
 the display has no modes to choose from, as a PicoCalc's has not - whatever
 the screen already is, is what the game draws on.
 
+How many ships are drawn as solid shapes rather than scanner dashes depends
+on how much heap the machine has, so the game works it out at start up
+rather than assuming: it prices one mesh by making one, sees what is left,
+and keeps 16 KB back for everything still to come. A mesh costs 4 KB.
+
+Measured: a PC3 has 6 MB of heap and gets the firmware's full thirty-two. A
+PicoCalc gets twenty-eight. The same PicoCalc running a buffered display
+driver, which keeps a screen of its own, has 30 KB left and gets three - and
+still plays, with the rest of the bubble staying as dashes until something
+nearer gives an object back.
+
+Do not be tempted to find this limit by creating objects until one fails.
+Taking the heap to nothing takes the interpreter with it, and the error then
+comes out of whatever statement runs next rather than the create, where no
+ON ERROR SKIP can catch it. Should a mesh not be had despite the sum, the
+ship simply keeps its dash and the cap comes down, rather than the game
+stopping.
+
 A screen taller than 240 rows is told it is 240 for as long as the game is
 running, and told the truth again on the way out. That is not cosmetic: the
 framebuffer is `HRES * VRES / 2` bytes, so a PicoCalc's 320x320 panel would

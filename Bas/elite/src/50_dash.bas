@@ -29,12 +29,10 @@
 ' fadd caches the write buffer's address, so this holds only while the
 ' framebuffer stays the write target - which it does for the whole game.
 SUB DashStatic
-  STATIC INTEGER wordcount = (SCRH - DASHY) * SCRW \ 16
-  STATIC INTEGER store(wordcount - 1)
   STATIC INTEGER addr = 0, fadd = 0
   IF fadd = 0 THEN
     LOCAL INTEGER i
-    addr = PEEK(VARADDR store())
+    addr = PEEK(VARADDR dashStore())
     fadd = MM.INFO(WRITEBUFF) + DASHY * SCRW / 2
     BOX 0, DASHY, SCRW, SCRH - DASHY, 0, cBlack, cBlack
     LINE 0, DASHY, SCRW - 1, DASHY, 1, cCyan
@@ -49,9 +47,9 @@ SUB DashStatic
       BOX DR, DRY(i) - 1, DW + 2, 5, 1, cDim, -1
     NEXT i
     CIRCLE CPX, CPY, CPR + 2, 1, 1.25, cDim, -1
-    MEMORY COPY INTEGER fadd, addr, wordcount
+    MEMORY COPY INTEGER fadd, addr, DASHWORDS
   ELSE
-    MEMORY COPY INTEGER addr, fadd, wordcount
+    MEMORY COPY INTEGER addr, fadd, DASHWORDS
   ENDIF
 END SUB
 

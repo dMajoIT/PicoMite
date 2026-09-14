@@ -255,10 +255,22 @@ SUB GetObject(n AS INTEGER)
       IF STNSOLID THEN
         IF b = BP_CORIOLIS OR b = BP_DODO THEN faces = 1
       ENDIF
+      ' The probe counts what fits in an empty heap, and by the time a ship
+      ' wants an object the title screen's picture has been and gone and the
+      ' bubble is full.  So the create is allowed to fail: this ship keeps
+      ' its dash for now and the cap comes down to what the machine really
+      ' has, rather than the program stopping with a heap error.
       IF faces THEN
+        ON ERROR SKIP 1
         Draw3D CREATE o, bNv(b), bNf(b), 1, mV(), mFc(), mF(), col(), mEc(), mFl()
       ELSE
+        ON ERROR SKIP 1
         Draw3D CREATE o, bNv(b), bNf(b), 1, mV(), mFc(), mF(), col(), mEc()
+      ENDIF
+      IF MM.ERRNO <> 0 THEN
+        ON ERROR CLEAR
+        maxObj = o - 1
+        EXIT SUB
       ENDIF
       objOwn(o) = n
       sObj(n) = o

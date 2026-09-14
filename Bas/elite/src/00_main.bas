@@ -42,6 +42,15 @@ CONST SCRW = 320, SCRH = 240
 CONST VIEWH = 176                  ' space view occupies rows 0..VIEWH-1
 CONST VCX = 160, VCY = 88          ' space view centre
 CONST DASHY = 176                  ' first dashboard row
+' The dashboard is drawn once and then put back with a memory copy, so it
+' needs somewhere to keep those 64 rows: 10 KB of it.  It lives here, with
+' every other declaration, rather than as a STATIC inside DashStatic, so it
+' is claimed at start up while the heap is still empty.  Lazily, on the
+' first dashboard of a flight, it has the title screen's picture and a
+' bubble full of ships in front of it, and on a PicoCalc there was no
+' longer a 10 KB hole to put it in - which is exactly where the game died.
+CONST DASHWORDS = (SCRH - DASHY) * SCRW \ 16
+DIM INTEGER dashStore(DASHWORDS - 1)
 CONST VPLANE = 256                 ' focal length in pixels, as the BBC
 CONST DEMOFRAMES = 0               ' >0 runs a scripted demo and exits; 0 plays
 CONST DEMOSCENE = 1                ' 1 flight and combat, 2 docking, 3 the docked
@@ -163,7 +172,11 @@ DIM INTEGER cGreen, cYellow, cWhite, cBlack, cCyan, cDim, cRed, cSel
 DIM INTEGER cMagenta, cBlue
 
 ' Draw3D object pool.  objOwn(n) is the slot that owns object n, or -1.
-DIM INTEGER maxObj, objOwn(35)
+' What ProbeObjects found one mesh costs, and what it keeps back from the
+' heap for the title picture and the rest of the game before it works out
+' how many meshes there is room for.
+DIM INTEGER maxObj, objOwn(35), objCost
+CONST HEAPKEEP = 16384
 
 ' Quaternion scratch.  Draw3D and MATH both want a 5 element float array.
 DIM FLOAT qA(4), qB(4), qC(4), qV(4), qP(4), vwQ(4, 3)

@@ -345,9 +345,16 @@ IF STNSOLID THEN
 IF b = BP_CORIOLIS OR b = BP_DODO THEN faces = 1
 ENDIF
 IF faces THEN
+ON ERROR SKIP 1
 Draw3D CREATE o, bNv(b), bNf(b), 1, mV(), mFc(), mF(), col(), mEc(), mFl()
 ELSE
+ON ERROR SKIP 1
 Draw3D CREATE o, bNv(b), bNf(b), 1, mV(), mFc(), mF(), col(), mEc()
+ENDIF
+IF MM.ERRNO <> 0 THEN
+ON ERROR CLEAR
+maxObj = o - 1
+EXIT SUB
 ENDIF
 objOwn(o) = n
 sObj(n) = o
@@ -452,7 +459,7 @@ MATH Q_CREATE RAD(90), 0, 1, 0, qA()  : FOR i = 0 TO 4 : vwQ(i, 2) = qA(i) : NEX
 MATH Q_CREATE RAD(-90), 0, 1, 0, qA() : FOR i = 0 TO 4 : vwQ(i, 3) = qA(i) : NEXT i
 END SUB
 SUB ProbeObjects
-LOCAL INTEGER n
+LOCAL INTEGER n, h0, cost, room
 LoadMesh 0
 maxObj = 8
 FOR n = 9 TO 35
@@ -463,6 +470,16 @@ Draw3D CLOSE n
 maxObj = n
 NEXT n
 ON ERROR CLEAR
+h0 = MM.INFO(HEAP)
+Draw3D CREATE 1, bNv(0), bNf(0), 1, mV(), mFc(), mF(), col(), mEc()
+cost = h0 - MM.INFO(HEAP)
+Draw3D CLOSE 1
+IF cost > 0 THEN
+room = (h0 - HEAPKEEP) \ cost
+IF room < maxObj THEN maxObj = room
+ENDIF
+IF maxObj < 1 THEN maxObj = 1
+objCost = cost
 FOR n = 0 TO 35 : objOwn(n) = -1 : NEXT n
 END SUB
 SUB CloseAll
@@ -1045,12 +1062,10 @@ Message "ENERGY LOW"
 Sfx SFX_BEEP
 END SUB
 SUB DashStatic
-STATIC INTEGER wordcount = (SCRH - DASHY) * SCRW \ 16
-STATIC INTEGER store(wordcount - 1)
 STATIC INTEGER addr = 0, fadd = 0
 IF fadd = 0 THEN
 LOCAL INTEGER i
-addr = PEEK(VARADDR store())
+addr = PEEK(VARADDR dashStore())
 fadd = MM.INFO(WRITEBUFF) + DASHY * SCRW / 2
 BOX 0, DASHY, SCRW, SCRH - DASHY, 0, cBlack, cBlack
 LINE 0, DASHY, SCRW - 1, DASHY, 1, cCyan
@@ -1063,9 +1078,9 @@ TEXT 303, DRY(i) - 1, RLAB$(i), "LT", 7, 1, cWhite
 BOX DR, DRY(i) - 1, DW + 2, 5, 1, cDim, -1
 NEXT i
 CIRCLE CPX, CPY, CPR + 2, 1, 1.25, cDim, -1
-MEMORY COPY INTEGER fadd, addr, wordcount
+MEMORY COPY INTEGER fadd, addr, DASHWORDS
 ELSE
-MEMORY COPY INTEGER addr, fadd, wordcount
+MEMORY COPY INTEGER addr, fadd, DASHWORDS
 ENDIF
 END SUB
 SUB DrawDash

@@ -132,11 +132,23 @@ SUB SetupViews
   MATH Q_CREATE RAD(-90), 0, 1, 0, qA() : FOR i = 0 TO 4 : vwQ(i, 3) = qA(i) : NEXT i
 END SUB
 
-' How many Draw3D objects does this firmware allow?  MAX3D was 8 and is
-' 12 in the current build; creating one past the limit raises an error,
-' so ask rather than assume.
+' How many Draw3D objects may we hold at once?  Two different limits, and
+' the smaller wins.
+'
+' MAX3D is the firmware's, it was 8 and is 32 in the current build, and
+' asking for one past it raises an error - so ask, one at a time, which
+' cannot exhaust anything.
+'
+' The heap is the other, and on a machine without PSRAM it is much the
+' tighter: thirty-two meshes do not fit in a PicoCalc at all.  Do NOT probe
+' that one by creating objects until it breaks.  Driving the heap to nothing
+' takes the interpreter down with it - the error comes out of whatever
+' statement runs next rather than the create, and ON ERROR SKIP on the
+' create does not catch it.  So one object is created and closed to price
+' it, and the count is arithmetic on what is left, keeping HEAPKEEP back for
+' the title picture and everything else that is still to come.
 SUB ProbeObjects
-  LOCAL INTEGER n
+  LOCAL INTEGER n, h0, cost, room
   LoadMesh 0
   maxObj = 8
   FOR n = 9 TO 35
@@ -147,6 +159,16 @@ SUB ProbeObjects
     maxObj = n
   NEXT n
   ON ERROR CLEAR
+  h0 = MM.INFO(HEAP)
+  Draw3D CREATE 1, bNv(0), bNf(0), 1, mV(), mFc(), mF(), col(), mEc()
+  cost = h0 - MM.INFO(HEAP)
+  Draw3D CLOSE 1
+  IF cost > 0 THEN
+    room = (h0 - HEAPKEEP) \ cost
+    IF room < maxObj THEN maxObj = room
+  ENDIF
+  IF maxObj < 1 THEN maxObj = 1
+  objCost = cost
   FOR n = 0 TO 35 : objOwn(n) = -1 : NEXT n
 END SUB
 
