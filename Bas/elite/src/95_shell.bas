@@ -121,7 +121,6 @@ SUB RunFlight
     FRAMEBUFFER COPY F, N
     IF kPause THEN PauseGame
     frames = frames + 1
-    SoundService
   LOOP UNTIL dead OR docked
   tFlight = tFlight + TIMER - t0
   ' Inside at last.  The hangar goes here rather than in DoDock because one

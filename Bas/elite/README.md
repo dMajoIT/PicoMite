@@ -8,9 +8,12 @@ come from the published 6502 source, so Lave is the Lave you remember.
 
 You need a PicoMite with a screen - an HDMI or VGA build is what it was written
 for, and it also runs on a PicoCalc - and the firmware must be
-**version 6.03.02b5 or above**. `PRINT MM.VER` at the prompt: it must report
-6.030205 or more. b5 is where `LIBRARY LOAD` arrived, and the program's first
-line is one, so nothing earlier will get past it. Earlier firmware would not
+**version 6.03.02b6 or above**. `PRINT MM.VER` at the prompt: it must report
+6.030206 or more. b5 is where `LIBRARY LOAD` arrived, and the program's first
+line is one, so nothing earlier will get past it at all; b6 is where
+`PLAY BBC SOUND` arrived, which is what the sound is made of now, and where
+the noise channel learned the BBC's tuned settings, which is what the
+explosion is made of. Earlier firmware would not
 do anyway - b3 and before had `MAX3D` set to 8, where the bubble wants one
 object for the station and one for every ship that is close enough to be drawn
 as a mesh, and the `DRAW3D` and `FRAMEBUFFER CLOSE` fixes this leans on all
@@ -500,11 +503,21 @@ filling it costs about eight tenths of a millisecond a frame at docking range
 and does not move the frame rate, which is paced by the display rather than by
 the drawing.
 
-The sound is the original's ten effects, converted from the SFX table in its
-source. Five of the ten are its exact numbers; the other five ask for sound
-envelopes that the cassette *loader* defined rather than the game, so those are
-approximated by a pitch sweep and are marked as approximated in the table and
-in `tests/sfxtest.bas`, which plays all ten by name so they can be judged.
+The sound is the original's ten effects, and it is now the original's own
+numbers rather than a conversion of them. `PLAY BBC SOUND` is the BBC's `SOUND`
+statement, so each effect is the four bytes the 6502 source holds it as - a
+channel word, an amplitude or envelope number, a pitch and a duration - handed
+over as they stand. Five of the ten ask for envelopes 1 to 4, which the
+cassette *loader* set up rather than the game; those are the four blocks of
+fourteen bytes at `E%` in it, and they are defined here exactly as it defines
+them, so nothing is approximated any more.
+
+Envelope 3 is worth a note. Its amplitude never rises above 1 out of 126, so it
+is not shaping a tone at all - what it is for is the pitch, which it sweeps
+down over 177 steps, and the explosion's noise is clocked by that channel
+rather than at a fixed rate. The crash is the noise following the sweep. It
+needs a firmware whose noise channel does the BBC's tuned settings, which is
+the other reason this wants b6.
 
 What is left:
 

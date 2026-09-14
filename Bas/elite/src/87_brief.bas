@@ -87,7 +87,7 @@ SUB BriefIncoming
   CLS
   TEXT VCX, 80, "INCOMING MESSAGE", "CT", 7, 1, cWhite
   FRAMEBUFFER COPY F, N
-  HoldFor 2000
+  PAUSE 2000
   BriefPage
 END SUB
 
@@ -132,7 +132,7 @@ END SUB
 SUB BriefShot
   shotNo = shotNo + 1
   SAVE IMAGE "A:/brief" + STR$(shotNo) + ".bmp"
-  HoldFor 400
+  PAUSE 400
 END SUB
 
 ' A briefing, start to finish: the message, the ship flying in, and then the

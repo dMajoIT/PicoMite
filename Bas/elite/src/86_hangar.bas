@@ -93,7 +93,6 @@ SUB HangarHold
   ENDIF
   t = TIMER + HANGWAIT
   DO
-    SoundService
     kb$ = INKEY$
     IF kb$ <> "" THEN EXIT SUB
   LOOP UNTIL TIMER > t

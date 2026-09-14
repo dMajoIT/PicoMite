@@ -199,7 +199,7 @@ SUB ECMService
       pEnergy = pEnergy - 1
       IF pEnergy < 0 THEN pEnergy = 0
     ENDIF
-    IF ecmActive = 0 THEN SfxStop SFX_ECM
+    IF ecmActive = 0 THEN Sfx SFX_ECMOFF
   ENDIF
 END SUB
 

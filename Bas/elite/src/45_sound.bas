@@ -1,9 +1,9 @@
 ' =====================================================================
-'  Sound: the original's ten effects
+'  Sound: the original's ten effects, played the way it played them
 '
-'  The 6502 source carries them as an SFX table, each entry being what the
-'  BBC's SOUND statement was handed - a channel, an amplitude or envelope
-'  number, a pitch and a duration:
+'  The 6502 source carries them as an SFX table, each entry being the four
+'  bytes the BBC's SOUND statement was handed - a channel word, an
+'  amplitude or an envelope number, a pitch and a duration:
 '
 '    0   &12,&01,&00,&10   lasers fired by us
 '    8   &12,&02,&2C,&08   we are being hit by lasers
@@ -16,32 +16,31 @@
 '    64  &13,&04,&C2,&FF   E.C.M. on
 '    72  &13,&00,&00,&00   E.C.M. off
 '
-'  Two conversions.  BBC pitch is quarter-semitones with 53 as middle C, so
-'  a pitch p is 261.63 * 2^((p - 53) / 48) hertz; duration is in twentieths
-'  of a second.  Channel 0 is the noise channel, where the pitch chooses the
-'  kind of noise rather than a note - 0 to 3 periodic, 4 to 7 white - and
-'  channels 1 to 3 are the square wave tones of the BBC's sound chip, which
-'  is why every tone here is type Q.
+'  PLAY BBC SOUND takes those four numbers as they stand, so the table at
+'  the end of this file is the 6502 table transcribed and nothing more.
+'  There is no conversion to hertz and milliseconds any more, and nothing
+'  is approximated: what this used to do was slide a PLAY SOUND channel by
+'  hand from a frequency to another frequency, because five of the ten ask
+'  for envelopes 1 to 4 and those are set up by the cassette loader rather
+'  than by the game, so they were in nothing we had.  They are in the
+'  loader: four blocks of fourteen bytes at E%, handed to OSWORD 8 by its
+'  FNE macro, and they are now defined below exactly as it defines them.
 '
-'  What cannot be converted is the envelopes.  Five of the ten ask for
-'  envelopes 1 to 4, and those were defined by the cassette loader rather
-'  than by the game, so they are in nothing we have.  An envelope sweeps
-'  pitch across the life of a note, so each of those five is approximated
-'  by a sweep between two frequencies and marked as such below.  The other
-'  five are exactly the original's numbers.
+'  Envelope 3 is the one worth knowing about.  Its amplitude never rises
+'  above 1 out of a possible 126, so it is not shaping a tone at all - what
+'  it is for is the pitch, which it sweeps down over 177 steps.  SFX 24
+'  asks for noise 7, and noise 7 is clocked by channel 1 rather than at a
+'  fixed rate, so the explosion is the noise following that sweep down.
+'  That is the whole sound, and it needs a firmware whose noise channel
+'  does the BBC's tuned settings - which is why this now wants b6.
 '
-'  Two traps in PLAY SOUND.  Its arguments are channel, position, type - the
-'  manual's summary line has the last two the other way round.  And for type
-'  N the frequency is not a pitch at all: it is the number of output samples
-'  each random value is held for, so at 44100 a 2 is a bright hiss and an 800
-'  is fifty rattles a second.  Only the wavetable types - Q, T, W, S, P, U -
-'  take a frequency in hertz.
-'
-'  Nothing here blocks.  Sfx starts an effect; SoundService slides the pitch
-'  and switches the channel off when its time is up - and it has to be called
-'  from EVERY wait, not only the frame loop, or an effect started just before
-'  a blocking one plays until something else replaces it.  The frame loop, the
-'  two tunnels, both key waits and HoldFor all call it.
+'  Nothing blocks.  Nine of the ten entries carry the flush bit, and a
+'  flush empties the queue before the queue is tested for room, so it can
+'  never wait; the tenth is the short beep, which can only ever queue
+'  behind something already on channel 3 - which is what it did on a BBC
+'  too.  The firmware sequences the notes itself, so there is no longer
+'  anything to service from the frame loop, and no longer any way to break
+'  the sound by forgetting to service it from somewhere else.
 ' =====================================================================
 
 ' How much of one of the original's iterations this frame is worth.  A long
@@ -73,126 +72,43 @@ END SUB
 
 SUB LoadSounds
   LOCAL INTEGER i
+  IF SOUNDON = 0 THEN EXIT SUB
+  ' The four envelopes, as the loader's E% table has them.  The first
+  ' number is the envelope, then T, the three pitch steps, the three
+  ' pitch section lengths, attack, decay, sustain and release, and the
+  ' levels the attack rises to and the decay falls to.
+  PLAY BBC ENVELOPE 1, 1,  0, 111, -8,  4,  1,   8,  8, -2, 0,   -1, 112,  44
+  PLAY BBC ENVELOPE 2, 1, 14, -18, -1, 44, 32,  50,  6,  1, 0,   -2, 120, 126
+  PLAY BBC ENVELOPE 3, 1,  1,  -1, -3, 17, 32, 128,  1,  0, 0,   -1,   1,   1
+  PLAY BBC ENVELOPE 4, 1,  4,  -8, 44,  4,  6,   8, 22,  0, 0, -127, 126,   0
   RESTORE dat_sfx
   FOR i = 0 TO NSFX - 1
-    READ sfxCh(i), sfxWv(i), sfxF0(i), sfxF1(i), sfxMs(i), sfxVol(i), sfxWb(i)
+    READ sfxCh(i), sfxAmp(i), sfxPit(i), sfxDur(i)
   NEXT i
-  FOR i = 1 TO 4 : chT1(i) = 0 : chLast(i) = -1 : NEXT i
 END SUB
 
 SUB Sfx(n AS INTEGER)
-  LOCAL INTEGER c
   IF SOUNDON = 0 THEN EXIT SUB
-  c = sfxCh(n)
-  chWv(c) = sfxWv(n)
-  chF0(c) = sfxF0(n) : chF1(c) = sfxF1(n)
-  chVol(c) = sfxVol(n) : chWb(c) = sfxWb(n)
-  chT0(c) = TIMER
-  chT1(c) = TIMER + sfxMs(n)
-  chLast(c) = chF0(c)
-  PlayCh c, chWv(c), chF0(c), chVol(c)
-END SUB
-
-' Stop one effect early.  The E.C.M. is the only one that needs it: the
-' original gives it a duration of 255, which on the BBC means play until
-' told otherwise.
-SUB SfxStop(n AS INTEGER)
-  LOCAL INTEGER c
-  IF SOUNDON = 0 THEN EXIT SUB
-  c = sfxCh(n)
-  IF chT1(c) = 0 THEN EXIT SUB
-  chT1(c) = 0
-  PLAY SOUND c, B, O
-END SUB
-
-' Called often rather than on a schedule, so it works off the clock rather
-' than counting frames, and only touches a channel when the pitch it wants
-' has actually moved.
-SUB SoundService
-  LOCAL INTEGER c, f
-  LOCAL FLOAT t, k
-  IF SOUNDON = 0 THEN EXIT SUB
-  t = TIMER
-  FOR c = 1 TO 4
-    IF chT1(c) > 0 THEN
-      IF t >= chT1(c) THEN
-        chT1(c) = 0
-        PLAY SOUND c, B, O
-      ELSE
-        k = (t - chT0(c)) / (chT1(c) - chT0(c))
-        f = chF0(c) + (chF1(c) - chF0(c)) * k
-        ' The E.C.M.'s envelope is a warble rather than a slide.
-        IF chWb(c) THEN
-          IF (INT(t / 45) AND 1) = 1 THEN f = f * 3 \ 4
-        ENDIF
-        IF f < 1 THEN f = 1
-        IF f <> chLast(c) THEN
-          PlayCh c, chWv(c), f, chVol(c)
-          chLast(c) = f
-        ENDIF
-      ENDIF
-    ENDIF
-  NEXT c
-END SUB
-
-SUB PlayCh(c AS INTEGER, w AS INTEGER, f AS INTEGER, v AS INTEGER)
-  SELECT CASE w
-    CASE 0 : PLAY SOUND c, B, Q, f, v      ' square, as the BBC's tone channels
-    CASE 1 : PLAY SOUND c, B, N, f, v      ' white noise
-    CASE ELSE : PLAY SOUND c, B, P, f, v   ' periodic noise
-  END SELECT
-END SUB
-
-' A pause that still lets the sound finish, for the places that want one.
-SUB HoldFor(ms AS INTEGER)
-  LOCAL FLOAT t
-  t = TIMER + ms
-  DO
-    SoundService
-  LOOP UNTIL TIMER > t
+  PLAY BBC SOUND sfxCh(n), sfxAmp(n), sfxPit(n), sfxDur(n)
 END SUB
 
 SUB SoundOff
-  LOCAL INTEGER c
-  FOR c = 1 TO 4
-    chT1(c) = 0
-    PLAY SOUND c, B, O
-  NEXT c
   PLAY STOP
 END SUB
 
 dat_sfx:
-' channel, waveform (0 square, 1 white noise, 2 periodic noise),
-' start frequency, end frequency, milliseconds, volume, warble
+' The table above, in the order the SFX_ constants are numbered and in
+' decimal because that is what PLAY BBC SOUND wants: &F1 is -15 and &F4
+' is -12, an amplitude of 1 to 4 is an envelope, and 0 is silence.
 '
-' SFX 0: laser.  Envelope 1, so the sweep is a guess; the original's 0.8
-' seconds is longer than a pulse laser's repeat, and each shot restarts the
-' sound as the BBC's flush control did, so what is heard is the top of the
-' sweep over and over - which is the zap.
-DATA 1, 0, 900, 122, 800, 12, 0
-' SFX 8: hit by lasers.  Pitch 44 is 230 Hz; envelope 2 approximated.
-DATA 1, 0, 230, 150, 400, 15, 0
-' SFX 24: the noise half of an explosion.  White noise at the brightest the
-' PicoMite makes, held constant, because the original gives this one a fixed
-' amplitude and no envelope.  For type N the frequency is not a pitch: it is
-' the number of output samples each random value is held for, so 2 at 44100
-' is a hiss and 800 would be about fifty rattles a second.
-DATA 2, 1, 2, 2, 1300, 18, 0
-' SFX 16: the tone half.  Pitch 240 is 3891 Hz; envelope 3 is approximated by
-' dropping it hard and quickly, so it reads as a crack rather than a whistle,
-' and the noise above carries the rest of the second.
-DATA 3, 0, 3891, 150, 400, 10, 0
-' SFX 32: short high beep.  Pitch 188, one twentieth of a second.  Exact.
-DATA 3, 0, 1839, 1839, 50, 15, 0
-' SFX 40: long low beep.  Pitch 12, four twentieths.  Exact.
-DATA 3, 0, 145, 145, 400, 18, 0
-' SFX 48: missile away, or our own launch.  The original asks for the noise
-' channel's low setting rather than its brightest, so a longer dwell - and
-' constant, again because there is no envelope on this one.
-DATA 2, 1, 12, 12, 600, 15, 0
-' SFX 56: hyperspace.  The noise channel with envelope 2; pitch 96 lands on
-' periodic noise.  Rising, because it is a drive spinning up.
-DATA 2, 2, 200, 2400, 800, 15, 0
-' SFX 64: E.C.M.  Pitch 194 is 1997 Hz, envelope 4 approximated as a warble,
-' and it runs for as long as the burst does rather than for a fixed time.
-DATA 4, 0, 1997, 1997, 1200, 12, 1
+'     channel  amp  pitch  duration
+DATA      18,    1,     0,       16   ' our lasers
+DATA      18,    2,    44,        8   ' being hit by lasers
+DATA      16,  -15,     7,       26   ' explosion, the noise half
+DATA      17,    3,   240,       24   ' explosion, the tone that sweeps it
+DATA       3,  -15,   188,        1   ' short, high beep
+DATA      19,  -12,    12,        8   ' long, low beep
+DATA      16,  -15,     6,       12   ' missile away, or our own launch
+DATA      16,    2,    96,       16   ' hyperspace drive
+DATA      19,    4,   194,      255   ' E.C.M. on, until it is flushed
+DATA      19,    0,     0,        0   ' E.C.M. off, which is that flush

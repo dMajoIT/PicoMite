@@ -159,7 +159,6 @@ SUB LaunchTunnel
   LOCAL INTEGER i, k, r
   Sfx SFX_LAUNCH
   FOR i = 0 TO 23
-    SoundService
     CLS
     FOR k = 0 TO 5
       r = ((i + k * 4) MOD 24) * 7 + 8
@@ -177,7 +176,6 @@ END SUB
 SUB HyperTunnel
   LOCAL INTEGER i, k, r, c
   FOR i = 0 TO 31
-    SoundService
     CLS
     FOR k = 0 TO 6
       r = ((i + k * 5) MOD 35) * 5 + 4

@@ -102,9 +102,6 @@ FUNCTION DemoHold(ms AS INTEGER, k AS INTEGER) AS INTEGER
   LOCAL kb$ LENGTH 2
   t = TIMER + ms
   DO
-    ' Without this the whole docked half of the demo is a blocking wait, and
-    ' anything started during it plays until the next effect replaces it.
-    SoundService
     kb$ = INKEY$
     IF kb$ <> "" THEN
       demoStop = 1

@@ -1,127 +1,75 @@
 ' Play each of Elite's ten sounds in turn, named, so they can be judged by
-' ear.  Standalone: it carries its own copy of the table from 45_sound.bas.
+' ear.  Standalone: it carries its own copy of the SFX table from
+' 45_sound.bas and of the four envelopes from the cassette loader's E%.
 '
-' For PLAY SOUND type N the frequency is NOT a pitch - it is how many output
-' samples each random value is held for, so at 44100 a 2 is a bright hiss and
-' an 800 is about fifty rattles a second.  Only the wavetable types take hertz.
+' Nothing here is approximated.  Each effect is the four bytes the 6502
+' source holds it as, handed straight to PLAY BBC SOUND, and the envelopes
+' are the loader's own numbers.
 '
-' The four marked "approximated" ask for one of the BBC's sound envelopes,
-' which the cassette loader defined and the game's source does not carry, so
-' those are a sweep between two frequencies rather than the real thing.  Tell
-' me which ones are wrong and what they should sound like.
+' Needs firmware 6.03.02b6 or above.  The explosion's noise is pitch 7,
+' which is clocked by channel 1 rather than at a fixed rate, and earlier
+' firmware has no tuned noise setting to clock it with - it would come out
+' as a flat hiss instead of a crash.
 '
-'   RUN, and press a key between each.  ESC to stop.
+'   RUN, and press a key between each.  ESC stops.
 
 OPTION EXPLICIT
 OPTION DEFAULT NONE
 
-CONST NSFX = 9
-DIM INTEGER sfxCh(NSFX-1), sfxWv(NSFX-1), sfxF0(NSFX-1), sfxF1(NSFX-1)
-DIM INTEGER sfxMs(NSFX-1), sfxVol(NSFX-1), sfxWb(NSFX-1)
-DIM nm$(NSFX-1) LENGTH 40
-DIM INTEGER chWv(4), chF0(4), chF1(4), chVol(4), chWb(4), chLast(4)
-DIM FLOAT chT0(4), chT1(4)
-DIM INTEGER i
-DIM ky$ LENGTH 2
+CONST TXN = 10
+DIM INTEGER txCh(TXN-1), txAmp(TXN-1), txPit(TXN-1), txDur(TXN-1)
+DIM txNm$(TXN-1) LENGTH 44
+DIM INTEGER txI
 
-RESTORE dat_sfx
-FOR i = 0 TO NSFX - 1
-  READ nm$(i), sfxCh(i), sfxWv(i), sfxF0(i), sfxF1(i), sfxMs(i), sfxVol(i), sfxWb(i)
-NEXT i
-FOR i = 1 TO 4 : chT1(i) = 0 : chLast(i) = -1 : NEXT i
+' envelope, T, three pitch steps, three section lengths, ADSR, two levels
+PLAY BBC ENVELOPE 1, 1,  0, 111, -8,  4,  1,   8,  8, -2, 0,   -1, 112,  44
+PLAY BBC ENVELOPE 2, 1, 14, -18, -1, 44, 32,  50,  6,  1, 0,   -2, 120, 126
+PLAY BBC ENVELOPE 3, 1,  1,  -1, -3, 17, 32, 128,  1,  0, 0,   -1,   1,   1
+PLAY BBC ENVELOPE 4, 1,  4,  -8, 44,  4,  6,   8, 22,  0, 0, -127, 126,   0
+
+RESTORE dat_tx
+FOR txI = 0 TO TXN - 1
+  READ txNm$(txI), txCh(txI), txAmp(txI), txPit(txI), txDur(txI)
+NEXT txI
 
 CLS
-PRINT "Elite sounds - a key plays the next one, ESC stops"
+PRINT "Elite's sounds - a key plays the next, ESC stops"
 PRINT
-FOR i = 0 TO NSFX - 1
-  PRINT i; "  "; nm$(i)
-  Sfx i
-  ' Let it run its course, servicing the sweep as the game does.
-  DO
-    SoundService
-  LOOP UNTIL chT1(sfxCh(i)) = 0
-  ' The E.C.M. runs until stopped, so stop it.
-  SfxStop i
-  PAUSE 400
-  DO
-    ky$ = INKEY$
-  LOOP UNTIL ky$ <> ""
-  IF ky$ = CHR$(27) THEN EXIT FOR
-NEXT i
-SoundOff
+FOR txI = 0 TO TXN - 1
+  PRINT txI; "  "; txNm$(txI)
+  PLAY BBC SOUND txCh(txI), txAmp(txI), txPit(txI), txDur(txI)
+  IF TxKey() = 27 THEN PLAY STOP : END
+NEXT txI
+
+' The two halves of a kill are fired together by the game, and they belong
+' together: the tone on channel 1 sweeps down under envelope 3 and the noise
+' is clocked by it.  Heard apart, neither is the sound.
 PRINT
+PRINT "and the two halves of an explosion together, as the game plays them"
+PLAY BBC SOUND txCh(3), txAmp(3), txPit(3), txDur(3)
+PLAY BBC SOUND txCh(2), txAmp(2), txPit(2), txDur(2)
+IF TxKey() = 27 THEN PLAY STOP : END
+PLAY STOP
 PRINT "done"
 END
 
-SUB Sfx(n AS INTEGER)
-  LOCAL INTEGER c
-  c = sfxCh(n)
-  chWv(c) = sfxWv(n)
-  chF0(c) = sfxF0(n) : chF1(c) = sfxF1(n)
-  chVol(c) = sfxVol(n) : chWb(c) = sfxWb(n)
-  chT0(c) = TIMER
-  chT1(c) = TIMER + sfxMs(n)
-  chLast(c) = chF0(c)
-  PlayCh c, chWv(c), chF0(c), chVol(c)
-END SUB
+FUNCTION TxKey() AS INTEGER
+  LOCAL k$ LENGTH 2
+  DO
+    k$ = INKEY$
+  LOOP UNTIL k$ <> ""
+  TxKey = ASC(k$)
+END FUNCTION
 
-SUB SfxStop(n AS INTEGER)
-  LOCAL INTEGER c
-  c = sfxCh(n)
-  IF chT1(c) = 0 THEN EXIT SUB
-  chT1(c) = 0
-  PLAY SOUND c, B, O
-END SUB
-
-SUB SoundService
-  LOCAL INTEGER c, f
-  LOCAL FLOAT t, kk
-  t = TIMER
-  FOR c = 1 TO 4
-    IF chT1(c) > 0 THEN
-      IF t >= chT1(c) THEN
-        chT1(c) = 0
-        PLAY SOUND c, B, O
-      ELSE
-        kk = (t - chT0(c)) / (chT1(c) - chT0(c))
-        f = chF0(c) + (chF1(c) - chF0(c)) * kk
-        IF chWb(c) THEN
-          IF (INT(t / 45) AND 1) = 1 THEN f = f * 3 \ 4
-        ENDIF
-        IF f < 1 THEN f = 1
-        IF f <> chLast(c) THEN
-          PlayCh c, chWv(c), f, chVol(c)
-          chLast(c) = f
-        ENDIF
-      ENDIF
-    ENDIF
-  NEXT c
-END SUB
-
-SUB PlayCh(c AS INTEGER, w AS INTEGER, f AS INTEGER, v AS INTEGER)
-  SELECT CASE w
-    CASE 0 : PLAY SOUND c, B, Q, f, v
-    CASE 1 : PLAY SOUND c, B, N, f, v
-    CASE ELSE : PLAY SOUND c, B, P, f, v
-  END SELECT
-END SUB
-
-SUB SoundOff
-  LOCAL INTEGER c
-  FOR c = 1 TO 4
-    chT1(c) = 0
-    PLAY SOUND c, B, O
-  NEXT c
-  PLAY STOP
-END SUB
-
-dat_sfx:
-DATA "laser, ours (approximated)",      1, 0, 900, 122, 800, 12, 0
-DATA "hit by lasers (approximated)",    1, 0, 230, 150, 400, 15, 0
-DATA "explosion, noise half (exact)",   2, 1, 2, 2, 1300, 18, 0
-DATA "explosion, tone half (approx)",   3, 0, 3891, 150, 400, 10, 0
-DATA "short high beep (exact)",         3, 0, 1839, 1839, 50, 15, 0
-DATA "long low beep (exact)",           3, 0, 145, 145, 400, 18, 0
-DATA "missile away / launch (exact)",   2, 1, 12, 12, 600, 15, 0
-DATA "hyperspace (approximated)",       2, 2, 200, 2400, 800, 15, 0
-DATA "E.C.M. (approximated)",           4, 0, 1997, 1997, 1200, 12, 1
+dat_tx:
+'      name                              channel  amp  pitch  duration
+DATA "our lasers",                            18,    1,     0,  16
+DATA "being hit by lasers",                   18,    2,    44,   8
+DATA "explosion, the noise half",             16,  -15,     7,  26
+DATA "explosion, the tone that sweeps it",    17,    3,   240,  24
+DATA "short, high beep",                       3,  -15,   188,   1
+DATA "long, low beep",                        19,  -12,    12,   8
+DATA "missile away, or our own launch",       16,  -15,     6,  12
+DATA "hyperspace drive",                      16,    2,    96,  16
+DATA "E.C.M. on, until it is flushed",        19,    4,   194, 255
+DATA "E.C.M. off, which is that flush",       19,    0,     0,   0

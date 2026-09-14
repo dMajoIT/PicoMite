@@ -125,7 +125,7 @@ IF frames >= DEMOFRAMES THEN EXIT DO
 LOOP
 tFlight = TIMER - tFrame
 ENDIF
-IF dead THEN DeathScreen : HoldFor 1500
+IF dead THEN DeathScreen : PAUSE 1500
 SoundOff
 CloseAll
 FRAMEBUFFER CLOSE
@@ -959,89 +959,34 @@ tickWhole = 0
 END SUB
 SUB LoadSounds
 LOCAL INTEGER i
+IF SOUNDON = 0 THEN EXIT SUB
+PLAY BBC ENVELOPE 1, 1,  0, 111, -8,  4,  1,   8,  8, -2, 0,   -1, 112,  44
+PLAY BBC ENVELOPE 2, 1, 14, -18, -1, 44, 32,  50,  6,  1, 0,   -2, 120, 126
+PLAY BBC ENVELOPE 3, 1,  1,  -1, -3, 17, 32, 128,  1,  0, 0,   -1,   1,   1
+PLAY BBC ENVELOPE 4, 1,  4,  -8, 44,  4,  6,   8, 22,  0, 0, -127, 126,   0
 RESTORE dat_sfx
 FOR i = 0 TO NSFX - 1
-READ sfxCh(i), sfxWv(i), sfxF0(i), sfxF1(i), sfxMs(i), sfxVol(i), sfxWb(i)
+READ sfxCh(i), sfxAmp(i), sfxPit(i), sfxDur(i)
 NEXT i
-FOR i = 1 TO 4 : chT1(i) = 0 : chLast(i) = -1 : NEXT i
 END SUB
 SUB Sfx(n AS INTEGER)
-LOCAL INTEGER c
 IF SOUNDON = 0 THEN EXIT SUB
-c = sfxCh(n)
-chWv(c) = sfxWv(n)
-chF0(c) = sfxF0(n) : chF1(c) = sfxF1(n)
-chVol(c) = sfxVol(n) : chWb(c) = sfxWb(n)
-chT0(c) = TIMER
-chT1(c) = TIMER + sfxMs(n)
-chLast(c) = chF0(c)
-PlayCh c, chWv(c), chF0(c), chVol(c)
-END SUB
-SUB SfxStop(n AS INTEGER)
-LOCAL INTEGER c
-IF SOUNDON = 0 THEN EXIT SUB
-c = sfxCh(n)
-IF chT1(c) = 0 THEN EXIT SUB
-chT1(c) = 0
-PLAY SOUND c, B, O
-END SUB
-SUB SoundService
-LOCAL INTEGER c, f
-LOCAL FLOAT t, k
-IF SOUNDON = 0 THEN EXIT SUB
-t = TIMER
-FOR c = 1 TO 4
-IF chT1(c) > 0 THEN
-IF t >= chT1(c) THEN
-chT1(c) = 0
-PLAY SOUND c, B, O
-ELSE
-k = (t - chT0(c)) / (chT1(c) - chT0(c))
-f = chF0(c) + (chF1(c) - chF0(c)) * k
-IF chWb(c) THEN
-IF (INT(t / 45) AND 1) = 1 THEN f = f * 3 \ 4
-ENDIF
-IF f < 1 THEN f = 1
-IF f <> chLast(c) THEN
-PlayCh c, chWv(c), f, chVol(c)
-chLast(c) = f
-ENDIF
-ENDIF
-ENDIF
-NEXT c
-END SUB
-SUB PlayCh(c AS INTEGER, w AS INTEGER, f AS INTEGER, v AS INTEGER)
-SELECT CASE w
-CASE 0 : PLAY SOUND c, B, Q, f, v
-CASE 1 : PLAY SOUND c, B, N, f, v
-CASE ELSE : PLAY SOUND c, B, P, f, v
-END SELECT
-END SUB
-SUB HoldFor(ms AS INTEGER)
-LOCAL FLOAT t
-t = TIMER + ms
-DO
-SoundService
-LOOP UNTIL TIMER > t
+PLAY BBC SOUND sfxCh(n), sfxAmp(n), sfxPit(n), sfxDur(n)
 END SUB
 SUB SoundOff
-LOCAL INTEGER c
-FOR c = 1 TO 4
-chT1(c) = 0
-PLAY SOUND c, B, O
-NEXT c
 PLAY STOP
 END SUB
 dat_sfx:
-DATA 1, 0, 900, 122, 800, 12, 0
-DATA 1, 0, 230, 150, 400, 15, 0
-DATA 2, 1, 2, 2, 1300, 18, 0
-DATA 3, 0, 3891, 150, 400, 10, 0
-DATA 3, 0, 1839, 1839, 50, 15, 0
-DATA 3, 0, 145, 145, 400, 18, 0
-DATA 2, 1, 12, 12, 600, 15, 0
-DATA 2, 2, 200, 2400, 800, 15, 0
-DATA 4, 0, 1997, 1997, 1200, 12, 1
+DATA      18,    1,     0,       16
+DATA      18,    2,    44,        8
+DATA      16,  -15,     7,       26
+DATA      17,    3,   240,       24
+DATA       3,  -15,   188,        1
+DATA      19,  -12,    12,        8
+DATA      16,  -15,     6,       12
+DATA      16,    2,    96,       16
+DATA      19,    4,   194,      255
+DATA      19,    0,     0,        0
 SUB Message(t$)
 msgText$ = t$
 msgUntil = TIMER + MSGTIME
@@ -2766,7 +2711,7 @@ IF ecmMine THEN
 pEnergy = pEnergy - 1
 IF pEnergy < 0 THEN pEnergy = 0
 ENDIF
-IF ecmActive = 0 THEN SfxStop SFX_ECM
+IF ecmActive = 0 THEN Sfx SFX_ECMOFF
 ENDIF
 END SUB
 SUB EjectCargo(n AS INTEGER)
@@ -2889,7 +2834,6 @@ SUB LaunchTunnel
 LOCAL INTEGER i, k, r
 Sfx SFX_LAUNCH
 FOR i = 0 TO 23
-SoundService
 CLS
 FOR k = 0 TO 5
 r = ((i + k * 4) MOD 24) * 7 + 8
@@ -2903,7 +2847,6 @@ END SUB
 SUB HyperTunnel
 LOCAL INTEGER i, k, r, c
 FOR i = 0 TO 31
-SoundService
 CLS
 FOR k = 0 TO 6
 r = ((i + k * 5) MOD 35) * 5 + 4
@@ -3348,7 +3291,6 @@ EXIT SUB
 ENDIF
 t = TIMER + HANGWAIT
 DO
-SoundService
 kb$ = INKEY$
 IF kb$ <> "" THEN EXIT SUB
 LOOP UNTIL TIMER > t
@@ -3422,7 +3364,7 @@ SUB BriefIncoming
 CLS
 TEXT VCX, 80, "INCOMING MESSAGE", "CT", 7, 1, cWhite
 FRAMEBUFFER COPY F, N
-HoldFor 2000
+PAUSE 2000
 BriefPage
 END SUB
 SUB BriefShip
@@ -3455,7 +3397,7 @@ END SUB
 SUB BriefShot
 shotNo = shotNo + 1
 SAVE IMAGE "A:/brief" + STR$(shotNo) + ".bmp"
-HoldFor 400
+PAUSE 400
 END SUB
 SUB MissionBrief(tok AS INTEGER, t AS INTEGER)
 LOCAL INTEGER i
@@ -3965,7 +3907,6 @@ LOCAL FLOAT t
 LOCAL k$ LENGTH 2
 t = TIMER + ms
 DO
-SoundService
 k$ = INKEY$
 IF k$ <> "" THEN WaitKey = ASC(k$) : EXIT FUNCTION
 LOOP UNTIL ms > 0 AND TIMER > t
@@ -4047,7 +3988,6 @@ IF demoMode THEN DemoCaption
 FRAMEBUFFER COPY F, N
 IF kPause THEN PauseGame
 frames = frames + 1
-SoundService
 LOOP UNTIL dead OR docked
 tFlight = tFlight + TIMER - t0
 IF docked THEN
@@ -4381,7 +4321,6 @@ LOCAL FLOAT t
 LOCAL kb$ LENGTH 2
 t = TIMER + ms
 DO
-SoundService
 kb$ = INKEY$
 IF kb$ <> "" THEN
 demoStop = 1
