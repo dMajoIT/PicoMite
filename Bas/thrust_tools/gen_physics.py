@@ -53,8 +53,13 @@ def starts():
             raise SystemExit('level %d reset data is %d bytes, expected %d'
                              % (lvl, len(d), n * 6))
         f = [d[i * n] for i in range(6)]           # checkpoint 0 of each field
-        out.append({'midY': f[0] * 256 + f[1], 'winX': f[2],
-                    'winY': f[3] * 256 + f[4], 'midX': f[5],
+        # The original's positions are sprite plot origins; PLAYER_CENTRE_X
+        # and _Y say the ship's middle is 4 columns and 5 scanlines further
+        # on, which is also where this port's shipX,shipY sits.  Apply it
+        # here and the ship starts exactly above the first fuel cell, which
+        # is the whole reason a game begins with an empty tank.
+        out.append({'midY': f[0] * 256 + f[1] + 5, 'winX': f[2],
+                    'winY': f[3] * 256 + f[4], 'midX': f[5] + 4,
                     'checkpoints': n})
     return out
 

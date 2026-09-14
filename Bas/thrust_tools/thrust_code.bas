@@ -2,8 +2,9 @@
 '  T H R U S T        PicoMite MMBasic
 '  after the 1986 BBC Micro game by Jeremy C. Smith for Superior Software
 '
-'  Phase 4 of the port (see docs/Thrust_Port_Plan.html): the flight
-'  model and the pod.  There are no guns, fuel cells or reactor yet.
+'  Phase 5 of the port (see docs/Thrust_Port_Plan.html): the flight
+'  model, the pod, and the rest of the world - fuel, limpet guns,
+'  bullets and the reactor.
 '
 '  The physics is the original's, in its order and with its constants,
 '  but in floating point rather than Q7.8: on this interpreter a float
@@ -37,14 +38,15 @@
 '
 '  Keys      Turn ........... left / right arrows
 '            Thrust ......... up arrow, or SPACE
-'            Tractor beam ... RETURN, or A
+'            Tractor beam ... RETURN, or A  (also refuels)
+'            Fire ........... down arrow, or F
 '            Level .......... N, P
 '            Restart ........ R
 '            Screenshot ..... S  (to A:/thrust.bmp)
 '
-'  For testing: N and P change level, and G puts the ship beside the pod
-'  with it already attached, which saves flying down there to look at
-'  something.
+'  For testing: N and P change level, G puts the ship beside the pod with
+'  it already attached, and B runs the entity benchmark - a full particle
+'  pool and every object on the level, drawn and simulated flat out.
 '            Quit ........... ESC
 ' =====================================================================
 
@@ -86,8 +88,37 @@ CONST DRAGY = 256                 ' velY -= velY / 256  - weaker, because
 CONST NHULL = 8                   ' hull points tested against the walls
 CONST HULLRX = 1.6                ' in columns
 CONST HULLRY = 3.2                ' in scanlines
-CONST FUEL0 = 999                 ' placeholder: the real economy is the
-                                  ' tractor beam's, and arrives in phase 5
+'  You start a game with an empty tank, which looks like a bug until you
+'  notice where the ship is put down: directly above the first fuel cell.
+'  You fall onto it, hold the tractor key, and fly off with a full tank.
+'  add_fuel puts on $11 BCD a frame while the beam is on; use_fuel takes
+'  one off per active tick, so a second of hovering buys half a minute.
+CONST FUEL0 = 0
+CONST FUELADD = 11                ' $11 BCD, per frame on the beam
+CONST FUELMAX = 9999
+
+' ------------------------------------------------------- the world
+CONST MAXOBJ = 20                 ' nineteen is the most any level has
+CONST OBJ_FUEL = 4
+CONST OBJ_POD = 5
+CONST OBJ_REACTOR = 6
+CONST RHP0 = 50              ' $32, generator_total_damage
+CONST CDOWN0 = 500             ' ten seconds at 50 Hz
+CONST SCOREGUN = 75               ' obj_type_score_value, $75 BCD
+CONST SCOREFUEL = 15
+
+' --------------------------------------------------------- particles
+'  Bullets and debris share one pool of 32 slots, as the original's does.
+'  A bullet's velocity is the angle table itself, unscaled - five pixels
+'  a step either way, which is quick.
+CONST MAXPART = 32
+CONST PT_PLAYER = 0
+CONST PT_HOSTILE = 3
+CONST PT_DEBRIS = 4
+CONST PARTLIFE = 40               ' $28 ticks
+CONST BULLETADV = 2               ' steps of head start, to clear the ship
+CONST GUNPROB = 2                 ' in 256, per gun per step
+CONST FGAP = 12                ' steps between the player's shots
 
 ' ------------------------------------------------------- the pod
 '  The tether is a circle of radius 20 pixels.  That is not obvious from
@@ -116,6 +147,7 @@ CONST S_SHIP = 1                  ' buffers 1..17 are headings 0..16
 CONST S_POD = 18                  ' then the pod and the shield
 CONST S_SHIELD = 19
 CONST NSPRLOAD = 19
+CONST S_OBJ = 20                  ' and the nine object shapes, 20..28
 ' <<<GENERATED CONSTANTS>>>
 
 ' ======================================================================
@@ -138,9 +170,17 @@ DIM FLOAT hullX(NHULL - 1), hullY(NHULL - 1)
 DIM FLOAT midX, midY, podX, podY, podHomeX, podHomeY
 DIM FLOAT tethAng, tethVel
 DIM INTEGER podAtt, beamOn, hasPod, keepPod
+DIM INTEGER nObj
+DIM FLOAT objX(MAXOBJ - 1), objY(MAXOBJ - 1)
+DIM INTEGER objT(MAXOBJ - 1), objG(MAXOBJ - 1), objLive(MAXOBJ - 1)
+DIM INTEGER objW(8), objH(8)
+DIM FLOAT paX(MAXPART - 1), paY(MAXPART - 1)
+DIM FLOAT paDX(MAXPART - 1), paDY(MAXPART - 1)
+DIM INTEGER paLife(MAXPART - 1), paType(MAXPART - 1)
+DIM INTEGER score, reactorHP, countdown, fuelBeam, fireGap, nPart
 DIM INTEGER shipAng, tick, fuel, crashed, deaths
 DIM INTEGER kLeft, kRight, kThrust, kTract
-DIM INTEGER kNext, kPrev, kQuit, kShot, kReset, kGrab
+DIM INTEGER kNext, kPrev, kQuit, kShot, kReset, kGrab, kFire, kBench
 DIM INTEGER nBox, drawMs
 DIM INTEGER nextFrame, t0, caveTop
 
@@ -157,6 +197,7 @@ DO
   IF kPrev <> 0 THEN LoadLevel((level + NLEVEL - 1) MOD NLEVEL)
   IF kReset <> 0 THEN keepPod = 0 : StartShip
   IF kGrab <> 0 THEN GrabPod
+  IF kBench <> 0 THEN Benchmark
   IF kShot <> 0 THEN SAVE IMAGE "A:/thrust.bmp"
 
   ' The simulation runs at 50 Hz whatever the frame rate is.
@@ -169,8 +210,10 @@ DO
 
   t0 = TIMER
   DrawWorld
+  DrawObjects
   DrawPod
   DrawShip
+  DrawParticles
   DrawPanel
   FRAMEBUFFER COPY F, N
   drawMs = TIMER - t0
@@ -230,7 +273,7 @@ SUB Setup
   NEXT i
 
   SPRITE CLOSE ALL
-  LoadSprites
+  LoadSprites 1, NSPRLOAD
   ON ERROR SKIP 1
   FRAMEBUFFER CREATE
   ON ERROR CLEAR
@@ -246,7 +289,11 @@ END SUB
 '  headings are wanted yet - the objects come in phase 5 and need
 '  reloading per level anyway, because 2 and 3 are level colours.
 ' ----------------------------------------------------------------------
-SUB LoadSprites
+' Load the sprites.  first = 1 loads the ship, pod and shield, which are
+' all the ship's yellow and never change; first = NSPRLOAD + 1 loads the
+' nine object shapes, which are genuinely four-coloured and have to come
+' back whenever the level's palette does.
+SUB LoadSprites(first AS INTEGER, last AS INTEGER)
   LOCAL INTEGER n, w, h, j, i, d, k, c
   LOCAL nm$ LENGTH 20
   LOCAL bits$ LENGTH 40
@@ -256,17 +303,25 @@ SUB LoadSprites
     READ nm$, w, h
     IF nm$ = "" THEN EXIT DO
     n = n + 1
-    IF n <= NSPRLOAD THEN
+    IF n >= first AND n <= last THEN
       k = 0
       FOR j = 0 TO h - 1
         READ bits$
         FOR i = 0 TO w - 1
           d = INSTR(hexd$, MID$(bits$, i \ 2 + 1, 1)) - 1
           IF (i AND 1) = 0 THEN c = d \ 4 ELSE c = d AND 3
-          IF c = 1 THEN img(k) = pal(3) ELSE img(k) = 0
+          SELECT CASE c
+            CASE 1 : img(k) = pal(3)      ' the ship's yellow
+            CASE 2 : img(k) = colLand     ' this level's rock
+            CASE 3 : img(k) = colObj      ' and its objects
+            CASE ELSE : img(k) = 0
+          END SELECT
           k = k + 1
         NEXT i
       NEXT j
+      ON ERROR SKIP 1
+      SPRITE CLOSE n
+      ON ERROR CLEAR
       SPRITE LOADARRAY n, w, h, img()
     ELSE
       FOR j = 0 TO h - 1 : READ bits$ : NEXT j
@@ -339,21 +394,33 @@ SUB LoadLevel(lv AS INTEGER)
   NEXT i
   startCamY = k + VIEWOFF
 
-  ' where this level's pod stands.  Its sphere sits at pixel (9, 5) in
-  ' the pod_stand shape, which is 2.25 columns and 2.5 scanlines in.
+  ' The objects.  Their x and y are the sprite's plot origin, so they are
+  ' kept as they come and the drawing does not shift them.  The pod is the
+  ' exception: its sphere sits at pixel (9, 5) inside the pod_stand shape,
+  ' which is 2.25 columns and 2.5 scanlines in, and that is where the
+  ' tether has to reach.
   hasPod = 0
+  nObj = 0
   RESTORE objdata
   FOR i = 0 TO lv
     READ n
     FOR j = 1 TO n
       READ c, inc, k, x
-      IF i = lv AND k = 5 THEN
-        podHomeX = c + 2.25
-        podHomeY = inc + 2.5
-        hasPod = 1
+      IF i = lv AND nObj < MAXOBJ THEN
+        objX(nObj) = c : objY(nObj) = inc
+        objT(nObj) = k : objG(nObj) = x : objLive(nObj) = 1
+        IF k = OBJ_POD THEN
+          podHomeX = c + 2.25
+          podHomeY = inc + 2.5
+          hasPod = 1
+        ENDIF
+        nObj = nObj + 1
       ENDIF
     NEXT j
   NEXT i
+  RESTORE objsize
+  FOR i = 0 TO 8 : READ objW(i), objH(i) : NEXT i
+  LoadSprites NSPRLOAD + 1, NSPRLOAD + 9
 
   caveTop = 0
   FOR i = 1 TO depth - 1
@@ -362,6 +429,7 @@ SUB LoadLevel(lv AS INTEGER)
       EXIT FOR
     ENDIF
   NEXT i
+  reactorHP = RHP0
   StartShip
 END SUB
 
@@ -373,6 +441,9 @@ SUB StartShip
   fuel = FUEL0 : crashed = 0
   podAtt = 0 : beamOn = 0 : tethAng = 0 : tethVel = 0
   podX = podHomeX : podY = podHomeY
+  countdown = 0 : fuelBeam = 0 : fireGap = 0
+  FOR nPart = 0 TO MAXPART - 1 : paLife(nPart) = 0 : NEXT nPart
+  nPart = 0
   ' Crash while carrying the pod and you get it back, hanging straight
   ' below - level_reset_with_pod_flag, and angle $01 for normal gravity.
   IF keepPod <> 0 THEN
@@ -383,6 +454,72 @@ SUB StartShip
   camY = startCamY
   camX = shipX - VIEWC \ 2
   ClampCamera
+END SUB
+
+' ======================================================================
+'  Spike S2: what a busy frame costs.
+'
+'  Every level in turn, with the pod on the tether, every object alive and
+'  the particle pool completely full - 32 bullets and pieces of debris,
+'  which in play only happens for a moment when something large explodes.
+'  The simulation and the drawing are timed apart, because only one of
+'  them can be moved off the frame if it comes to that.
+' ======================================================================
+SUB Benchmark
+  LOCAL INTEGER lv, np
+  FRAMEBUFFER WRITE N
+  CLS RGB(BLACK)
+  PRINT "Thrust S2 - the entity budget"
+  PRINT
+  PRINT "lvl  obj  part    sim ms   draw ms   total   fps"
+  FOR lv = 0 TO NLEVEL - 1
+    LoadLevel lv
+    GrabPod
+    BenchRun lv, 6
+    BenchRun lv, MAXPART
+  NEXT lv
+  PRINT
+  PRINT "6 particles is a busy moment; "; STR$(MAXPART, 2);
+  PRINT " is the instant after an explosion."
+  PRINT "sim is scaled to the "; STR$(SIMPF, 4, 2); " steps a drawn frame"
+  PRINT "any key"
+  DO WHILE INKEY$ = "" : LOOP
+  FRAMEBUFFER WRITE F
+  LoadLevel level
+END SUB
+
+SUB BenchRun(lv AS INTEGER, np AS INTEGER)
+  LOCAL INTEGER bq, n, t
+  LOCAL FLOAT sim, drw
+  FRAMEBUFFER WRITE F
+  sim = 0 : drw = 0
+  FOR bq = 1 TO 40
+    FOR n = 0 TO MAXPART - 1
+      IF n < np THEN paLife(n) = 60 ELSE paLife(n) = 0
+      paType(n) = n AND 3
+      paX(n) = camX + 8 + (n MOD 8) * 8
+      paY(n) = camY + 12 + (n \ 8) * 24
+      paDX(n) = 0.2 : paDY(n) = 0.15
+    NEXT n
+    crashed = 0
+    t = TIMER
+    SimStep
+    sim = sim + (TIMER - t)
+    t = TIMER
+    DrawWorld
+    DrawObjects
+    DrawPod
+    DrawShip
+    DrawParticles
+    DrawPanel
+    FRAMEBUFFER COPY F, N
+    drw = drw + (TIMER - t)
+  NEXT bq
+  FRAMEBUFFER WRITE N
+  sim = sim / 40 * SIMPF : drw = drw / 40
+  PRINT STR$(lv, 3); STR$(nObj, 5); STR$(np, 6);
+  PRINT STR$(sim, 9, 2); STR$(drw, 10, 2); STR$(sim + drw, 8, 2);
+  PRINT STR$(1000 / (sim + drw), 6, 0)
 END SUB
 
 ' Testing only: stand the ship beside the pod with the tether taut, so
@@ -475,14 +612,18 @@ SUB SimStep
   ENDIF
   tick = tick + 1
   Tractor
-
-  IF HitWall() <> 0 THEN
-    crashed = 40
-    keepPod = podAtt
-    deaths = deaths + 1
-    SndExplosion1
-    SndExplosion2
+  Refuel
+  UpdateGuns
+  UpdateParticles
+  IF kFire <> 0 AND fireGap = 0 THEN FirePlayer
+  IF fireGap > 0 THEN fireGap = fireGap - 1
+  IF countdown > 0 THEN
+    countdown = countdown - 1
+    IF (countdown AND 15) = 0 THEN SndCountdown
+    IF countdown = 0 THEN crashed = 40 : deaths = deaths + 1
   ENDIF
+
+  IF HitWall() <> 0 THEN Explode
 END SUB
 
 ' ----------------------------------------------------------------------
@@ -567,6 +708,192 @@ SUB Tractor
   SndCollect1
   SndCollect2
   DeriveShip
+END SUB
+
+' ----------------------------------------------------------------------
+'  Fuel.  A fuel cell is not towed like the pod - hold the beam on it and
+'  the tank fills where it stands, which is what tick_fuel_pickup_draw_beams
+'  does.  The beam reaches as far as the tractor beam's first threshold.
+' ----------------------------------------------------------------------
+SUB Refuel
+  LOCAL INTEGER fi
+  LOCAL FLOAT fa, fb, fr
+  fuelBeam = -1
+  IF kTract = 0 OR crashed <> 0 THEN EXIT SUB
+  FOR fi = 0 TO nObj - 1
+    IF objLive(fi) <> 0 AND objT(fi) = OBJ_FUEL THEN
+      fa = ABS(shipX - objX(fi) - 2) * COLPX
+      fb = ABS(shipY - objY(fi) - 5) * ROWPX
+      IF fa > fb THEN fr = fb + 3 * fa ELSE fr = fa + 3 * fb
+      IF fr < BEAMDIST THEN
+        fuelBeam = fi
+        fuel = fuel + FUELADD
+        IF fuel > FUELMAX THEN fuel = FUELMAX
+        EXIT SUB
+      ENDIF
+    ENDIF
+  NEXT fi
+END SUB
+
+' ----------------------------------------------------------------------
+'  The limpet guns.  gun_param is two fields: bits 2-4 are the angle the
+'  gun points, in the same 32-step scale, and bits 0-1 index a spread
+'  mask of 1, 3, 7 or 15.  A shot goes out at the base angle plus a
+'  random value under the mask plus another 0 to 3, so a wide-mask gun
+'  sprays and a narrow one aims.
+' ----------------------------------------------------------------------
+SUB UpdateGuns
+  LOCAL INTEGER gi, base, mask, ga, gp
+  IF crashed <> 0 OR nObj = 0 THEN EXIT SUB
+  ' The original rolls once per gun per frame at a probability of 2 in
+  ' 256.  Rolling once for the whole level and then picking a gun gives
+  ' the same firing rate for the same expected number of shots, and costs
+  ' two statements instead of nineteen array scans and nineteen function
+  ' calls - which is most of what the entity benchmark was measuring.
+  IF RND * 256 >= GUNPROB * nObj THEN EXIT SUB
+  gi = INT(RND * nObj)
+  IF objLive(gi) = 0 THEN EXIT SUB
+  IF objT(gi) >= OBJ_FUEL THEN EXIT SUB
+  IF OnScreen(objX(gi), objY(gi)) = 0 THEN EXIT SUB
+  base = objG(gi) AND &H1C
+  SELECT CASE objG(gi) AND 3
+    CASE 0 : mask = 1
+    CASE 1 : mask = 3
+    CASE 2 : mask = 7
+    CASE ELSE : mask = 15
+  END SELECT
+  ga = (base + (INT(RND * 256) AND mask) + INT(RND * 4)) AND (NANG - 1)
+  gp = FreePart()
+  IF gp < 0 THEN EXIT SUB
+  paType(gp) = PT_HOSTILE : paLife(gp) = PARTLIFE
+  paX(gp) = objX(gi) + 2 : paY(gp) = objY(gi) + 4
+  paDX(gp) = angX(ga) : paDY(gp) = angY(ga)
+  SndHostileGun
+END SUB
+
+' SPRITE WRITE takes -10 to 240 in each axis and errors outside it, so
+' anything drawn has to be tested where it lands, not where it lives.
+FUNCTION Offscreen(x AS INTEGER, y AS INTEGER) AS INTEGER
+  Offscreen = 1
+  IF x < -10 OR x > SCRW - 1 THEN EXIT FUNCTION
+  IF y < -10 OR y > SCRH - 1 THEN EXIT FUNCTION
+  Offscreen = 0
+END FUNCTION
+
+FUNCTION OnScreen(x AS FLOAT, y AS FLOAT) AS INTEGER
+  OnScreen = 0
+  IF x < camX - 6 OR x > camX + VIEWC + 6 THEN EXIT FUNCTION
+  IF y < camY - 12 OR y > camY + VIEWR + 12 THEN EXIT FUNCTION
+  OnScreen = 1
+END FUNCTION
+
+FUNCTION FreePart() AS INTEGER
+  LOCAL INTEGER i
+  FOR i = 0 TO MAXPART - 1
+    IF paLife(i) = 0 THEN
+      FreePart = i
+      EXIT FUNCTION
+    ENDIF
+  NEXT i
+  FreePart = -1
+END FUNCTION
+
+' The player's shot leaves the ship's centre with the angle table's own
+' velocity and no inheritance from the ship, then is stepped twice at
+' once so it clears the nose - create_new_player_bullet's LDY #$02 loop.
+SUB FirePlayer
+  LOCAL INTEGER p
+  IF crashed <> 0 THEN EXIT SUB
+  p = FreePart()
+  IF p < 0 THEN EXIT SUB
+  paType(p) = PT_PLAYER : paLife(p) = PARTLIFE
+  paDX(p) = angX(shipAng) : paDY(p) = angY(shipAng)
+  paX(p) = shipX + paDX(p) * BULLETADV
+  paY(p) = shipY + paDY(p) * BULLETADV
+  fireGap = FGAP
+  SndOwnGun
+END SUB
+
+SUB UpdateParticles
+  LOCAL INTEGER i, j, wy, t
+  LOCAL FLOAT x, y
+  FOR i = 0 TO MAXPART - 1
+    IF paLife(i) > 0 THEN
+      paLife(i) = paLife(i) - 1
+      paX(i) = paX(i) + paDX(i)
+      paY(i) = paY(i) + paDY(i)
+      x = paX(i) : y = paY(i) : t = paType(i)
+      wy = INT(y)
+      IF wy < 0 OR wy >= depth THEN
+        paLife(i) = 0
+      ELSEIF x < wallL(wy) OR x >= wallR(wy) THEN
+        paLife(i) = 0                          ' into the rock
+      ELSEIF t = PT_HOSTILE THEN
+        IF crashed = 0 THEN
+          IF ABS(x - shipX) < HULLRX AND ABS(y - shipY) < HULLRY THEN
+            paLife(i) = 0
+            Explode
+          ENDIF
+        ENDIF
+      ELSEIF t = PT_PLAYER THEN
+        FOR j = 0 TO nObj - 1
+          IF objLive(j) <> 0 AND objT(j) <> OBJ_POD THEN
+            IF x >= objX(j) AND x < objX(j) + objW(objT(j)) THEN
+              IF y >= objY(j) AND y < objY(j) + objH(objT(j)) THEN
+                paLife(i) = 0
+                HitObject j
+                EXIT FOR
+              ENDIF
+            ENDIF
+          ENDIF
+        NEXT j
+      ENDIF
+    ENDIF
+  NEXT i
+END SUB
+
+' Only guns and fuel can be destroyed; the reactor takes fifty hits and
+' then the planet goes, which starts the ten seconds to get clear.
+SUB HitObject(j AS INTEGER)
+  IF objT(j) = OBJ_REACTOR THEN
+    reactorHP = reactorHP - 1
+    SndExplosion2
+    IF reactorHP <= 0 THEN
+      objLive(j) = 0
+      countdown = CDOWN0
+      Debris objX(j) + 2, objY(j) + 5, 8
+      SndExplosion1
+      SndExplosion2
+    ENDIF
+    EXIT SUB
+  ENDIF
+  objLive(j) = 0
+  IF objT(j) = OBJ_FUEL THEN score = score + SCOREFUEL ELSE score = score + SCOREGUN
+  Debris objX(j) + 2, objY(j) + 4, 6
+  SndExplosion1
+  SndExplosion2
+END SUB
+
+SUB Debris(x AS FLOAT, y AS FLOAT, n AS INTEGER)
+  LOCAL INTEGER i, p, a
+  FOR i = 1 TO n
+    p = FreePart()
+    IF p < 0 THEN EXIT SUB
+    a = INT(RND * NANG)
+    paType(p) = PT_DEBRIS : paLife(p) = PARTLIFE \ 2 + INT(RND * 20)
+    paX(p) = x : paY(p) = y
+    paDX(p) = angX(a) * 0.5 : paDY(p) = angY(a) * 0.5
+  NEXT i
+END SUB
+
+SUB Explode
+  IF crashed <> 0 THEN EXIT SUB
+  crashed = 40
+  keepPod = podAtt
+  deaths = deaths + 1
+  Debris shipX, shipY, 8
+  SndExplosion1
+  SndExplosion2
 END SUB
 
 ' ----------------------------------------------------------------------
@@ -664,7 +991,7 @@ SUB DrawShip
   ENDIF
   sx = INT((shipX - camX) * COLPX) - SHIPCX
   sy = PLAYTOP + INT((shipY - camY) * ROWPX) - SHIPCY
-  IF sx < -SHIPW OR sx > SCRW OR sy < PLAYTOP - SHIPH OR sy > SCRH THEN EXIT SUB
+  IF Offscreen(sx, sy) <> 0 THEN EXIT SUB
   IF shipAng <= 16 THEN
     n = S_SHIP + shipAng : rot = 0
   ELSE
@@ -685,17 +1012,50 @@ SUB DrawPod
     ty = PLAYTOP + INT((shipY - camY) * ROWPX)
     LINE tx, ty, sx, sy, 1, colObj
   ENDIF
-  IF sx < -16 OR sx > SCRW + 16 THEN EXIT SUB
-  IF sy < PLAYTOP - 16 OR sy > SCRH + 16 THEN EXIT SUB
+  IF Offscreen(sx - 5, sy - 5) <> 0 THEN EXIT SUB
   SPRITE WRITE S_POD, sx - 5, sy - 5, 0
+END SUB
+
+SUB DrawObjects
+  LOCAL INTEGER i, sx, sy
+  FOR i = 0 TO nObj - 1
+    IF objLive(i) <> 0 THEN
+      IF objT(i) <> OBJ_POD OR podAtt = 0 THEN
+        sx = INT((objX(i) - camX) * COLPX)
+        sy = PLAYTOP + INT((objY(i) - camY) * ROWPX)
+        IF Offscreen(sx, sy) = 0 THEN SPRITE WRITE S_OBJ + objT(i), sx, sy, 0
+      ENDIF
+    ENDIF
+  NEXT i
+  IF fuelBeam >= 0 THEN
+    sx = INT((shipX - camX) * COLPX)
+    sy = PLAYTOP + INT((shipY - camY) * ROWPX)
+    i = INT((objX(fuelBeam) + 2 - camX) * COLPX)
+    LINE sx, sy, i, PLAYTOP + INT((objY(fuelBeam) + 5 - camY) * ROWPX), 1, colObj
+  ENDIF
+END SUB
+
+SUB DrawParticles
+  LOCAL INTEGER i, sx, sy, c
+  FOR i = 0 TO MAXPART - 1
+    IF paLife(i) > 0 THEN
+      sx = INT((paX(i) - camX) * COLPX)
+      sy = PLAYTOP + INT((paY(i) - camY) * ROWPX)
+      IF sx >= 0 AND sx < SCRW AND sy >= PLAYTOP AND sy < SCRH THEN
+        IF paType(i) = PT_PLAYER THEN c = pal(3) ELSE c = colObj
+        PIXEL sx, sy, c
+        PIXEL sx + 1, sy, c
+      ENDIF
+    ENDIF
+  NEXT i
 END SUB
 
 SUB DrawPanel
   LOCAL s$ LENGTH 48
   BOX 0, 0, SCRW, PANELH, 0, RGB(BLACK), RGB(BLACK)
-  s$ = "LEVEL " + STR$(level + 1) + "  FUEL " + STR$(fuel)
-  IF podAtt <> 0 THEN s$ = s$ + "  POD"
-  IF deaths > 0 THEN s$ = s$ + "  CRASH " + STR$(deaths)
+  s$ = "L" + STR$(level + 1) + " FUEL " + STR$(fuel) + " SC " + STR$(score)
+  IF podAtt <> 0 THEN s$ = s$ + " POD"
+  IF countdown > 0 THEN s$ = s$ + " GO " + STR$(countdown \ 50 + 1)
   TEXT 2, 4, s$, "LT", FONTN, 1, colLand, RGB(BLACK)
   s$ = STR$(nBox) + " BOX " + STR$(drawMs) + "MS"
   TEXT SCRW - 2, 4, s$, "RT", FONTN, 1, RGB(WHITE), RGB(BLACK)
@@ -711,8 +1071,9 @@ END SUB
 SUB ReadKeys
   LOCAL INTEGER i, k
   LOCAL ky$ LENGTH 2
-  kLeft = 0 : kRight = 0 : kThrust = 0 : kTract = 0
+  kLeft = 0 : kRight = 0 : kThrust = 0 : kTract = 0 : kFire = 0
   kNext = 0 : kPrev = 0 : kQuit = 0 : kShot = 0 : kReset = 0 : kGrab = 0
+  kBench = 0
   ky$ = INKEY$
   IF ky$ = CHR$(27) THEN kQuit = 1
   IF ky$ = "n" OR ky$ = "N" THEN kNext = 1
@@ -720,8 +1081,10 @@ SUB ReadKeys
   IF ky$ = "s" OR ky$ = "S" THEN kShot = 1
   IF ky$ = "r" OR ky$ = "R" THEN kReset = 1
   IF ky$ = "g" OR ky$ = "G" THEN kGrab = 1
+  IF ky$ = "b" OR ky$ = "B" THEN kBench = 1
   IF ky$ = " " THEN kThrust = 1
   IF ky$ = CHR$(13) OR ky$ = "a" OR ky$ = "A" THEN kTract = 1
+  IF ky$ = "f" OR ky$ = "F" THEN kFire = 1
   FOR i = 1 TO 6
     k = KEYDOWN(i)
     SELECT CASE k
@@ -729,11 +1092,13 @@ SUB ReadKeys
       CASE 131, 120, 88  : kRight = 1       ' right, X
       CASE 128, 32       : kThrust = 1      ' up, space
       CASE 13, 97, 65    : kTract = 1       ' RETURN, A
+      CASE 129, 102, 70  : kFire = 1        ' down, F
       CASE 110, 78       : kNext = 1
       CASE 112, 80       : kPrev = 1
       CASE 115, 83       : kShot = 1
       CASE 114, 82       : kReset = 1
       CASE 103, 71       : kGrab = 1
+      CASE 98, 66        : kBench = 1
       CASE 27            : kQuit = 1
     END SELECT
   NEXT i
