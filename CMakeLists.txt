@@ -79,6 +79,7 @@ set(COMMON_SOURCES
 	graphics/BmpDecoder.c
 	io/GPS.c
 	io/Audio.c
+	io/AudioBBC.c
 	core/CFunction.c
 	third_party_mod/picojpeg.c
 	third_party_mod/lfs.c
@@ -137,6 +138,7 @@ set(OPTIMIZED_SOURCES
 	misc/Editor.c
 	third_party_mod/aes.c
 	misc/XModem.c
+	io/AudioBBC.c
 )
 
 set(FULL_RP2040_VARIANTS

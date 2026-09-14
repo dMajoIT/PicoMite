@@ -890,7 +890,7 @@ uint8_t PSRAMpin;
                 WITH_FRAMEBUFFER_LOCK(SPIatRisk, checkWAVinput());
             }
             else if (CurrentlyPlaying == P_MOD || CurrentlyPlaying == P_ARRAY ||
-                     CurrentlyPlaying == P_SOUND || CurrentlyPlaying == P_TONE
+                     CurrentlyPlaying == P_SOUND || CurrentlyPlaying == P_TONE || CurrentlyPlaying == P_BBC
 #ifdef rp2350
                      || CurrentlyPlaying == P_SAMPLE
 #endif

@@ -1985,6 +1985,9 @@ void MIPS32 __not_in_flash_func(FreeMemory)(void *addr)
 void InitHeap(bool all)
 {
     int i;
+    /* The PLAY BBC engine's state block (AudioBBC.c) lives in this heap:
+       hand it back while the bitmap is still valid, then wipe.          */
+    BBCSoundRelease();
     memset(mmap, 0, sizeof(mmap));
     memset(MMHeap, 0, heap_memory_size + 256);
 #ifdef rp2350

@@ -140,9 +140,9 @@ commands and functions
  ********************************************************************************************************************************************/
 
 // define the PWM output frequency for making a tone
-const char *const PlayingStr[] = {"PAUSED TONE", "PAUSED FLAC", "PAUSED MP3", "PAUSED SOUND", "PAUSED MOD", "PAUSED ARRAY", "PAUSED WAV", "PAUSED SAMPLE", "OFF",
+const char *const PlayingStr[] = {"PAUSED TONE", "PAUSED FLAC", "PAUSED MP3", "PAUSED SOUND", "PAUSED MOD", "PAUSED ARRAY", "PAUSED WAV", "PAUSED SAMPLE", "PAUSED BBC", "OFF",
 								  "OFF", "TONE", "SOUND", "WAV", "FLAC", "MP3",
-								  "MIDI", "", "MOD", "STREAM", "ARRAY", "SAMPLE", ""};
+								  "MIDI", "", "MOD", "STREAM", "ARRAY", "SAMPLE", "", "BBC"};
 volatile unsigned char PWM_count = 0;
 volatile float PhaseM_left, PhaseM_right;
 volatile uint64_t SoundPlay;
@@ -682,6 +682,25 @@ static inline void i2sconvert(int16_t *fbuff, int16_t *sbuff, int count)
 	}
 }
 
+// PLAY BBC: fill swing buffer idx (1 or 2) from the BBC engine (AudioBBC.c) and
+// shape it for the output, as the PLAY TONE branches do inline.  One copy of the
+// converters for the three call sites (the priming and both refill paths).
+static void MIPS16 __attribute__((noinline)) fillBBCSwing(int idx)
+{
+	char *sb = (idx == 1) ? sbuff1 : sbuff2;
+	if (AUDIO_USES_VS1053)
+		bcount[idx] = fillBBCBuffer(sb, BBC_BUFFER_SIZE) * 2; // bytes for VS1053
+	else
+	{
+		bcount[idx] = fillBBCBuffer(sb, BBC_BUFFER_SIZE);
+		if (Option.audio_i2s_bclk)
+			i2sconvert((int16_t *)sb, (int16_t *)sb, bcount[idx]);
+		else
+			iconvert((uint16_t *)sb, (int16_t *)sb, bcount[idx]);
+	}
+	wav_filesize = bcount[idx];
+}
+
 size_t __not_in_flash_func(onRead)(void *userdata, char *pBufferOut, size_t bytesToRead)
 {
 	unsigned int nbr;
@@ -753,6 +772,7 @@ void CloseAudio(int all)
 	if (PSRAMsize && (was_playing == P_MOD || was_playing == P_PAUSE_MOD))
 		FreeMemorySafe((void **)&modbuff);
 #endif
+	BBCSoundReset();
 	int i;
 	for (i = 0; i < MAXSOUNDS; i++)
 	{
@@ -1576,6 +1596,8 @@ void MIPS16 cmd_play(void)
 		else if (CurrentlyPlaying == P_SAMPLE)
 			CurrentlyPlaying = P_PAUSE_SAMPLE;
 #endif
+		else if (CurrentlyPlaying == P_BBC)
+			CurrentlyPlaying = P_PAUSE_BBC;
 		else
 			error("Nothing playing");
 		return;
@@ -1600,6 +1622,8 @@ void MIPS16 cmd_play(void)
 		else if (CurrentlyPlaying == P_PAUSE_SAMPLE)
 			CurrentlyPlaying = P_SAMPLE;
 #endif
+		else if (CurrentlyPlaying == P_PAUSE_BBC)
+			CurrentlyPlaying = P_BBC;
 		else
 			error("Nothing to resume");
 		return;
@@ -1943,6 +1967,87 @@ void MIPS16 cmd_play(void)
 		return;
 	}
 #endif
+	if ((tp = checkstring(cmdline, (unsigned char *)"BBC SOUND")))
+	{ // PLAY BBC SOUND channel, amplitude, pitch, duration - the BBC Micro's SOUND statement (AudioBBC.c)
+		int chan, amp, pitch, dur;
+		getcsargs(&tp, 7); // this MUST be the first executable line in the function
+		if (argc != 7)
+			StandardError(2);
+		chan = getint(argv[0], 0, 0xFFFF); // &HSFC: sync count, flush bit, channel
+		amp = getint(argv[2], -15, 16);	   // -15..0 volume, 1..16 envelope number
+		pitch = getint(argv[4], 0, 255);
+		dur = getint(argv[6], 0, 255);
+		if (!(CurrentlyPlaying == P_NOTHING || CurrentlyPlaying == P_BBC || CurrentlyPlaying == P_PAUSE_BBC || CurrentlyPlaying == P_STOP || CurrentlyPlaying == P_WAVOPEN))
+			error("Sound output in use for $", PlayingStr[CurrentlyPlaying]);
+		if (CurrentlyPlaying == P_BBC || CurrentlyPlaying == P_PAUSE_BBC)
+		{
+			// The engine is running: queue the note, and if the channel's queue is
+			// full wait for a slot as the BBC did.  routinechecks() keeps the swing
+			// buffers fed so the queue drains; CheckAbort() lets Ctrl-C out.  A
+			// paused engine never drains, so that is an error rather than a hang.
+			while (BBCSoundQueue(chan, amp, pitch, dur))
+			{
+				if (CurrentlyPlaying != P_BBC)
+					error("Sound queue full");
+				CheckAbort();
+				routinechecks();
+			}
+			if (playreadcomplete)
+			{
+				// The engine had run dry and was draining towards a stop: clear the
+				// end-of-stream flag and re-enable the IRQ, as a repeated PLAY TONE does
+				playreadcomplete = 0;
+				wav_filesize = 1;
+				pwm_set_irq0_enabled(AUDIO_SLICE, true);
+			}
+			return;
+		}
+		// Start the engine with this note as its first
+		WAV_fnbr = 0;
+		WAVInterrupt = NULL; // a finished PLAY WAV's handler must not re-fire when this stops
+		BBCSoundReset();
+		BBCSoundQueue(chan, amp, pitch, dur);
+		mono = 0;
+		audiorepeat = 1;
+		setrate(PWM_FREQ);
+		if (AUDIO_USES_VS1053)
+			playimmediatevs1053(P_BBC);
+		FreeMemorySafe((void **)&sbuff1);
+		FreeMemorySafe((void **)&sbuff2);
+		sbuff1 = GetMemory(BBC_BUFFER_SIZE);
+		sbuff2 = GetMemory(BBC_BUFFER_SIZE);
+		ubuff1 = (uint16_t *)sbuff1;
+		ubuff2 = (uint16_t *)sbuff2;
+		g_buff1 = (int16_t *)sbuff1;
+		g_buff2 = (int16_t *)sbuff2;
+		// Prime buffer 1
+		bcount[1] = bcount[2] = 0;
+		ppos = 0;
+		swingbuf = 1;
+		nextbuf = 2;
+		playreadcomplete = 0;
+		fillBBCSwing(1);
+		CurrentlyPlaying = P_BBC;
+		pwm_set_irq0_enabled(AUDIO_SLICE, true);
+		pwm_set_enabled(AUDIO_SLICE, true);
+		return;
+	}
+	if ((tp = checkstring(cmdline, (unsigned char *)"BBC ENVELOPE")))
+	{ // PLAY BBC ENVELOPE n, T, PI1, PI2, PI3, PN1, PN2, PN3, AA, AD, AS, AR, ALA, ALD
+		uint8_t e[14];
+		int i;
+		getcsargs(&tp, 27); // this MUST be the first executable line in the function
+		if (argc != 27)
+			StandardError(2);
+		// Ranges: n 1-16; T 0-255 (bit 7 set = pitch envelope does not repeat); PI1-3
+		// -128..127 pitch change per step; PN1-3 0-255 steps per section; AA, AD, AS,
+		// AR -127..127 amplitude change per step; ALA, ALD 0-126 target levels.
+		static const int16_t lim[14][2] = {{1, 16}, {0, 255}, {-128, 127}, {-128, 127}, {-128, 127}, {0, 255}, {0, 255}, {0, 255}, {-127, 127}, {-127, 127}, {-127, 127}, {-127, 127}, {0, 126}, {0, 126}};
+		for (i = 0; i < 14; i++)
+			e[i] = (uint8_t)getint(argv[i * 2], lim[i][0], lim[i][1]);
+		BBCEnvelope(e);
+		return;
+	}
 	if ((tp = checkstring(cmdline, (unsigned char *)"SOUND")))
 	{ // PLAY SOUND channel, type, position, frequency, volume
 		float f_in, PhaseM;
@@ -3038,7 +3143,7 @@ void StopAudio(void)
 			setrate(PWM_FREQ);
 		}
 		ppos = 0;
-		if (AUDIO_USES_VS1053 && (CurrentlyPlaying == P_TONE || CurrentlyPlaying == P_SOUND))
+		if (AUDIO_USES_VS1053 && (CurrentlyPlaying == P_TONE || CurrentlyPlaying == P_SOUND || CurrentlyPlaying == P_BBC))
 			CurrentlyPlaying = P_WAVOPEN;
 		else
 			CurrentlyPlaying = P_NOTHING;
@@ -3377,6 +3482,11 @@ void checkWAVinput(void)
 				}
 				nextbuf = swingbuf;
 			}
+			else if (CurrentlyPlaying == P_BBC)
+			{
+				fillBBCSwing(swingbuf == 2 ? 1 : 2);
+				nextbuf = swingbuf;
+			}
 		}
 		else
 		{
@@ -3557,6 +3667,11 @@ void checkWAVinput(void)
 				}
 				nextbuf = swingbuf;
 			}
+			else if (CurrentlyPlaying == P_BBC)
+			{
+				fillBBCSwing(swingbuf == 2 ? 1 : 2);
+				nextbuf = swingbuf;
+			}
 		}
 	}
 	if (wav_filesize <= 0 && (CurrentlyPlaying == P_WAV || (CurrentlyPlaying == P_FLAC) || (CurrentlyPlaying == P_MP3) || (CurrentlyPlaying == P_MIDI)))
@@ -3624,7 +3739,7 @@ void audio_checks(void)
 			}
 			else
 				StopAudio();
-			if (wasPlaying != P_ARRAY && wasPlaying != P_SAMPLE && wasPlaying != P_TONE && wasPlaying != P_SOUND)
+			if (wasPlaying != P_ARRAY && wasPlaying != P_SAMPLE && wasPlaying != P_TONE && wasPlaying != P_SOUND && wasPlaying != P_BBC)
 				FileClose(WAV_fnbr);
 			WAVcomplete = true;
 		}

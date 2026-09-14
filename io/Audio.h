@@ -67,6 +67,7 @@ typedef enum
    P_PAUSE_ARRAY,
    P_PAUSE_WAV,
    P_PAUSE_SAMPLE,
+   P_PAUSE_BBC,
    P_STOP,
    P_NOTHING,
    P_TONE,
@@ -80,7 +81,8 @@ typedef enum
    P_STREAM,
    P_ARRAY,
    P_SAMPLE,
-   P_WAVOPEN
+   P_WAVOPEN,
+   P_BBC
 } e_CurrentlyPlaying;
 
 /* ============================================================================
@@ -186,6 +188,16 @@ extern char *streambuffer;
  * External variables - Playlist
  * ============================================================================ */
 extern a_flist *alist;
+
+/* ============================================================================
+ * BBC Micro sound engine (AudioBBC.c) - PLAY BBC SOUND / PLAY BBC ENVELOPE
+ * ============================================================================ */
+#define BBC_BUFFER_SIZE 2048 // ~11.6ms at 44100Hz stereo (512 frames * 2ch * 2 bytes)
+extern int fillBBCBuffer(char *buf, int bufsize);
+extern int BBCSoundQueue(int chan, int amp, int pitch, int dur);
+extern void BBCEnvelope(const uint8_t *e);
+extern void BBCSoundReset(void);
+extern void BBCSoundRelease(void);
 
 #endif /* !defined(INCLUDE_COMMAND_TABLE) && !defined(INCLUDE_TOKEN_TABLE) */
 

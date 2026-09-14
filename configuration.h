@@ -182,7 +182,9 @@ extern "C"
       cliff below which dlmalloc can never grow the arena. */
 #define HEAP_MEMORY_SIZE (96 * 1024)
 #else
-#define FLASH_TARGET_OFFSET (800 * 1024)
+   /* +16 KB (2026-09-14): PLAY BBC SOUND / PLAY BBC ENVELOPE (AudioBBC.c)
+      overran the 800 KB limit by ~0.5 KB. */
+#define FLASH_TARGET_OFFSET (816 * 1024)
 #define HEAP_MEMORY_SIZE (100 * 1024)
 #define MagicKey 0x3193CA54
 #endif
@@ -322,7 +324,7 @@ extern "C"
 
 #ifdef USBKEYBOARD
 #define MagicKey 0xEE897110
-#define FLASH_TARGET_OFFSET (912 * 1024)
+#define FLASH_TARGET_OFFSET (928 * 1024)
    /* -4 KB (2026-09-07): the newlib C heap is the gap between __end__ (top of
       BSS) and __StackLimit, and TinyUSB 0.21 + CFG_TUH_TASK_QUEUE_SZ 64 pushed
       __end__ up until that gap fell well under 4096 bytes - below which
