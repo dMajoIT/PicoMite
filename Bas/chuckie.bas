@@ -43,8 +43,9 @@
 '
 '  The eight floors were traced from screenshots of the real game; Harry,
 '  the hens and the duck are lifted pixel for pixel off its title screen.
-'  Sound is synthesised on the PicoMite's square, triangle and noise
-'  generators in the style of the original.
+'  The sound is the BBC's own: PLAY BBC SOUND and PLAY BBC ENVELOPE take
+'  the parameters of the OSWORD &07 and &08 calls the 1983 game made, so
+'  the three envelopes and four sound blocks below are its bytes exactly.
 ' =====================================================================
 
 OPTION EXPLICIT
@@ -100,11 +101,15 @@ CONST CLOCKFREEZE = 20
 CONST LEDGESNAP = 3
 
 ' ---------------------------------------------------------------- sound
-CONST NSFX = 10
-CONST SFX_EGG = 0, SFX_SEED = 1, SFX_JUMP = 2, SFX_DIE = 3, SFX_CLUCK = 4
-CONST SFX_STEP = 5, SFX_TICK = 6, SFX_EXTRA = 7, SFX_QUACK = 8, SFX_LAND = 9
-CONST MAXSTEP = 20
-CONST NCHAN = 4
+'  A BBC channel word is &SFC: C is the channel, 0 being the noise source,
+'  &10 empties that channel's queue and stops its note before this one, and
+'  &S00 holds a note until S other channels are waiting with it.
+CONST BCH_MOVE = &H13             ' Harry:  channel 3, flushed every time
+CONST BCH_TUNE = &H03             ' the death tune, queued behind him
+CONST BCH_NOISE = &H10            ' eggs, grain, the bonus: channel 0
+CONST BCH_MUSIC = &H01            ' ours: the fanfares, channel 1
+CONST BCH_MUSICF = &H11
+CONST BCH_BIRD = &H12             ' ours: the hens and the duck, channel 2
 
 ' ======================================================================
 '  globals
@@ -129,6 +134,9 @@ DIM INTEGER henBase(7)
 
 DIM FLOAT px, py, pvy
 DIM INTEGER pvx, pState, pFace, pAnim, pGround, pLift, pKilled
+' pAir counts frames off the ground and is the BBC's harry_fall_scaled_vy;
+' pJump says whether he left it on purpose; pMoved is its harry_dx OR dy.
+DIM INTEGER pAir, pJump, pMoved
 DIM INTEGER startX, startY
 
 DIM FLOAT dkX, dkY
@@ -145,12 +153,7 @@ DIM INTEGER gStart
 DIM INTEGER gScore, gHi, gLives, gLevel, gLap, gTime, gBonus, gNextLife
 DIM INTEGER panelCol, eggBuf, eggVal, clockStop
 DIM FLOAT henSpd, dkSpd
-DIM INTEGER sndOK
-
-DIM INTEGER sfxF(NSFX - 1, MAXSTEP - 1), sfxD(NSFX - 1, MAXSTEP - 1)
-DIM INTEGER sfxN(NSFX - 1), sfxV(NSFX - 1), sfxW(NSFX - 1), sfxCh(NSFX - 1)
-DIM INTEGER chSfx(NCHAN - 1), chStep(NCHAN - 1), chLeft(NCHAN - 1)
-DIM INTEGER chPri(NCHAN - 1)
+DIM INTEGER sndOK, sndTick
 
 ' ======================================================================
 '  main
@@ -172,7 +175,7 @@ SUB Setup
     ON ERROR SKIP 1
     MODE 2
   ENDIF
-  IF MM.HRES <> 320 OR MM.VRES < 240 THEN
+  IF MM.HRES <> 320 OR MM.VRES <> 240 THEN
     ON ERROR CLEAR
     PRINT "Chuckie Egg needs a 320 x 240 screen (MODE 2)."
     PRINT "This display is"; MM.HRES; " x"; MM.VRES
@@ -188,7 +191,6 @@ SUB Setup
   pal(15) = RGB(WHITE)
   hexd$ = "0123456789ABCDEF"
 
-  ON ERROR SKIP 1
   SPRITE CLOSE ALL
   ON ERROR SKIP 1
   FRAMEBUFFER CREATE
@@ -217,13 +219,7 @@ SUB Setup
     NEXT j
   NEXT i
 
-  LoadSfx
-  sndOK = 0
-  ON ERROR SKIP 2
-  PLAY SOUND 1, B, Q, 1000, 0
-  PLAY SOUND 1, B, O
-  IF MM.ERRNO = 0 THEN sndOK = 1
-  ON ERROR CLEAR
+  SndInit
 
   gHi = 1000
   gStart = 1
@@ -264,98 +260,166 @@ END SUB
 
 ' ======================================================================
 '  sound
+'
+'  Chuckie Egg made every noise it made out of three OSWORD &08 envelopes
+'  and four OSWORD &07 sound blocks.  PLAY BBC ENVELOPE and PLAY BBC SOUND
+'  take the BBC's own parameters, so what follows is the original's bytes,
+'  read out of the disassembly at github.com/mungre/chuckie:
+'
+'    envelope1  01 01 00 00 00 00 00 00 7E CE 00 00 64 00
+'    envelope2  02 01 00 00 00 00 00 00 7E FE 00 FB 7E 64
+'    envelope3  03 01 00 00 00 00 00 00 32 00 00 E7 64 00
+'
+'    sound1  &0013  env 1  pitch varies  dur 1    Harry moving
+'    sound2  &0003  env 2  pitch varies  dur var  the death tune
+'    sound3  &0010  env 3  pitch 6 or 5  dur 4    an egg, or a pile of grain
+'    sound4  &0010  env 1  pitch 4       dur 1    the bonus counting down
+'
+'  That is the lot: the hens, the duck, the end of a floor and the extra
+'  life were all silent in 1983.  The four sounds this version adds for
+'  them are marked "ours" and share a fourth envelope of our own.
 ' ======================================================================
-SUB LoadSfx
-  LOCAL INTEGER s, n, f, d
-  RESTORE sfxdata
-  FOR s = 0 TO NSFX - 1
-    READ sfxCh(s), sfxW(s), sfxV(s)
-    n = 0
-    DO
-      READ f, d
-      IF f < 0 THEN EXIT DO
-      sfxF(s, n) = f : sfxD(s, n) = d
-      n = n + 1
-    LOOP UNTIL n >= MAXSTEP
-    sfxN(s) = n
-  NEXT s
-  SfxSilence
+SUB SndInit
+  sndOK = 0
+  ON ERROR SKIP 4
+  PLAY BBC ENVELOPE 1, 1, 0, 0, 0, 0, 0, 0, 126, -50, 0, 0, 100, 0
+  PLAY BBC ENVELOPE 2, 1, 0, 0, 0, 0, 0, 0, 126, -2, 0, -5, 126, 100
+  PLAY BBC ENVELOPE 3, 1, 0, 0, 0, 0, 0, 0, 50, 0, 0, -25, 100, 0
+  ' ours: a squawk that falls away, for the hens and the duck.  T carries
+  ' 128 so the pitch slide runs once instead of repeating.
+  PLAY BBC ENVELOPE 4, 129, -4, 0, 0, 8, 0, 0, 126, -6, 0, -30, 110, 50
+  IF MM.ERRNO = 0 THEN sndOK = 1
+  ON ERROR CLEAR
 END SUB
 
-SUB SfxSilence
-  LOCAL INTEGER c
-  FOR c = 0 TO NCHAN - 1
-    chSfx(c) = -1 : chStep(c) = 0 : chLeft(c) = 0 : chPri(c) = 0
-    IF sndOK <> 0 THEN PLAY SOUND c + 1, B, O
-  NEXT c
+' Everything quiet, queues and all.  Envelopes survive PLAY STOP.
+SUB SndStop
+  IF sndOK <> 0 THEN PLAY STOP
 END SUB
 
-SUB SfxPlay(s AS INTEGER, pri AS INTEGER)
-  LOCAL INTEGER c
+' ----------------------------------------------------------------------
+'  .harry_motion_noises - Harry's own noise, and the only sound the BBC
+'  game made while a floor was being played.  It goes out afresh on every
+'  other frame that he is moving, on channel 3 with the queue flushed, and
+'  the pitch says what he is doing: 100 walking or riding a lift, 150 on a
+'  ladder, and either side of that through the air, bending by two quarter
+'  semitones for every frame he has been off the ground.  A lift moving
+'  him is not enough on its own - he has to be walking along it.
+' ----------------------------------------------------------------------
+SUB HarryNoise
+  LOCAL INTEGER p
   IF sndOK = 0 THEN EXIT SUB
-  c = sfxCh(s)
-  IF chSfx(c) >= 0 AND chPri(c) > pri THEN EXIT SUB
-  chSfx(c) = s : chStep(c) = 0 : chLeft(c) = 0 : chPri(c) = pri
-END SUB
-
-' Advance every channel by one frame, so an effect never blocks the game.
-SUB SfxService
-  LOCAL INTEGER c, s
-  IF sndOK = 0 THEN EXIT SUB
-  FOR c = 0 TO NCHAN - 1
-    IF chSfx(c) >= 0 THEN
-      IF chLeft(c) > 0 THEN chLeft(c) = chLeft(c) - 1
-      IF chLeft(c) <= 0 THEN
-        s = chSfx(c)
-        IF chStep(c) >= sfxN(s) THEN
-          chSfx(c) = -1 : chPri(c) = 0
-          SndOut c + 1, 0, 0, 0
-        ELSE
-          SndOut c + 1, sfxW(s), sfxF(s, chStep(c)), sfxV(s)
-          chLeft(c) = sfxD(s, chStep(c))
-          chStep(c) = chStep(c) + 1
-        ENDIF
-      ENDIF
-    ENDIF
-  NEXT c
-END SUB
-
-' PLAY SOUND wants the waveform as a literal, so pick it here.
-SUB SndOut(ch AS INTEGER, wf AS INTEGER, f AS INTEGER, v AS INTEGER)
-  IF sndOK = 0 THEN EXIT SUB
-  IF f <= 0 OR v <= 0 THEN
-    PLAY SOUND ch, B, O
+  IF pState = ST_CLIMB OR pLift <> 0 OR pGround <> 0 THEN
+    pAir = 0 : pJump = 0
   ELSE
-    SELECT CASE wf
-      CASE 0 : PLAY SOUND ch, B, Q, f, v
-      CASE 1 : PLAY SOUND ch, B, T, f, v
-      CASE 2 : PLAY SOUND ch, B, S, f, v
-      CASE ELSE : PLAY SOUND ch, B, N, f, v
-    END SELECT
+    pAir = pAir + 1
   ENDIF
+  sndTick = sndTick + 1
+  IF (sndTick AND 1) <> 0 THEN EXIT SUB
+  IF pMoved = 0 THEN EXIT SUB
+  IF pState = ST_CLIMB THEN
+    p = 150
+  ELSEIF pLift <> 0 THEN
+    IF pvx = 0 THEN EXIT SUB
+    p = 100
+  ELSEIF pGround <> 0 THEN
+    p = 100
+  ELSEIF pJump <> 0 THEN
+    IF pAir < 11 THEN p = 150 + 2 * pAir ELSE p = 190 - 2 * pAir
+  ELSE
+    p = 110 - 2 * pAir
+  ENDIF
+  IF p < 1 THEN p = 1
+  IF p > 255 THEN p = 255
+  PLAY BBC SOUND BCH_MOVE, 1, p, 1
 END SUB
 
-' A short blocking tune, used between lives and floors.
-SUB Tune(which AS INTEGER)
-  LOCAL INTEGER f, d
+' sound3: the same burst of noise at two pitches, 6 for an egg and 5 for
+' a pile of grain, both of them flushing the noise channel.
+SUB SndEgg
+  IF sndOK <> 0 THEN PLAY BBC SOUND BCH_NOISE, 3, 6, 4
+END SUB
+
+SUB SndGrain
+  IF sndOK <> 0 THEN PLAY BBC SOUND BCH_NOISE, 3, 5, 4
+END SUB
+
+' sound4: the bonus counting down, one tick per fifty points.
+SUB SndBonus
+  IF sndOK <> 0 THEN PLAY BBC SOUND BCH_NOISE, 1, 4, 1
+END SUB
+
+' ----------------------------------------------------------------------
+'  .dead_tune - sixteen notes queued on channel 3 through envelope 2.  A
+'  channel holds eight, so the first half goes in without waiting and the
+'  second half follows the fall animation; only the last note or two waits
+'  for a slot, which is what the BBC's SOUND statement did here as well.
+'  The first note flushes, to cut off whatever Harry was doing.
+' ----------------------------------------------------------------------
+SUB SndDie(half AS INTEGER)
+  LOCAL INTEGER i, p, d, ch
   IF sndOK = 0 THEN EXIT SUB
-  SfxSilence
+  ch = BCH_MOVE
+  IF half <> 0 THEN ch = BCH_TUNE
+  RESTORE deadtune
+  FOR i = 0 TO 15
+    READ p, d
+    IF (i \ 8) = half THEN
+      PLAY BBC SOUND ch, 2, p, d
+      ch = BCH_TUNE
+    ENDIF
+  NEXT i
+END SUB
+
+' ----------------------------------------------------------------------
+'  Ours: the three short fanfares the BBC game did without.  They are
+'  queued on channel 1 through the death tune's envelope and then waited
+'  out, so they hold the game up exactly where they used to.
+' ----------------------------------------------------------------------
+SUB Tune(which AS INTEGER)
+  LOCAL INTEGER p, d, tot, ch
+  IF sndOK = 0 THEN EXIT SUB
   SELECT CASE which
     CASE 0 : RESTORE tune0            ' new floor
     CASE 1 : RESTORE tune1            ' floor cleared
     CASE ELSE : RESTORE tune2         ' game over
   END SELECT
+  tot = 0 : ch = BCH_MUSICF
   DO
-    READ f, d
-    IF f < 0 THEN EXIT DO
-    IF f = 0 THEN
-      PLAY SOUND 1, B, O
+    READ p, d
+    IF p < 0 THEN EXIT DO
+    IF p = 0 THEN
+      PLAY BBC SOUND ch, 0, 0, d      ' a rest: amplitude 0
     ELSE
-      PLAY SOUND 1, B, Q, f, 18
+      PLAY BBC SOUND ch, 2, p, d
     ENDIF
-    PAUSE d
+    ch = BCH_MUSIC
+    tot = tot + d
   LOOP
-  PLAY SOUND 1, B, O
+  PAUSE tot * 50
+END SUB
+
+' ours: ten thousand points.  Six notes fit the queue, so it never waits.
+SUB SndExtra
+  LOCAL INTEGER p, d, ch
+  IF sndOK = 0 THEN EXIT SUB
+  ch = BCH_MUSICF
+  RESTORE extratune
+  DO
+    READ p, d
+    IF p < 0 THEN EXIT DO
+    PLAY BBC SOUND ch, 2, p, d
+    ch = BCH_MUSIC
+  LOOP
+END SUB
+
+' ours: a hen finding the grain, and the duck
+SUB SndCluck
+  IF sndOK <> 0 THEN PLAY BBC SOUND BCH_BIRD, 4, 161, 2
+END SUB
+
+SUB SndQuack
+  IF sndOK <> 0 THEN PLAY BBC SOUND BCH_BIRD, 4, 73, 4
 END SUB
 
 ' ======================================================================
@@ -615,27 +679,29 @@ END SUB
 '  Harry
 ' ======================================================================
 SUB UpdatePlayer
-  LOCAL INTEGER cx, fy0, fy1, r, rEnd, ytop, ybot, landed, oldAnim, i
+  LOCAL INTEGER cx, fy0, fy1, r, rEnd, ytop, ybot, landed, i
   LOCAL FLOAT ny
 
   cx = INT(px) + HW \ 2
-  oldAnim = pAnim \ 6
+  pMoved = 0
 
   ' ---------------------------------------------------------- on a ladder
   IF pState = ST_CLIMB THEN
     IF kJump <> 0 THEN
       pState = ST_WALK : pvy = JUMPV : pGround = 0
-      SfxPlay SFX_JUMP, 2
+      pJump = 1 : pAir = 0 : pMoved = 1
     ELSE
       IF kUp <> 0 THEN
         IF (CellFlag(cx, INT(py) + HH - 1) AND C_LADDER) <> 0 THEN
           py = py - CLIMBSPD
           pAnim = pAnim + 1
+          pMoved = 1
         ENDIF
       ELSEIF kDown <> 0 THEN
         IF (CellFlag(cx, INT(py) + HH + 1) AND C_LADDER) <> 0 THEN
           py = py + CLIMBSPD
           pAnim = pAnim + 1
+          pMoved = 1
         ENDIF
       ENDIF
       IF kLeft <> 0 OR kRight <> 0 THEN
@@ -664,7 +730,6 @@ SUB UpdatePlayer
       ENDIF
     ENDIF
     IF py < PLAYTOP THEN py = PLAYTOP
-    IF (pAnim \ 6) <> oldAnim THEN SfxPlay SFX_STEP, 0
     EXIT SUB
   ENDIF
 
@@ -692,12 +757,12 @@ SUB UpdatePlayer
     IF px < 0 THEN px = 0
     IF px > SCRW - HW THEN px = SCRW - HW
     pAnim = pAnim + 1
-    IF pGround <> 0 AND (pAnim \ 6) <> oldAnim THEN SfxPlay SFX_STEP, 0
+    pMoved = 1
   ENDIF
 
   IF kJump <> 0 AND pGround <> 0 THEN
     pvy = JUMPV : pGround = 0 : pLift = 0
-    SfxPlay SFX_JUMP, 2
+    pJump = 1 : pAir = 0 : pMoved = 1
   ENDIF
 
   ' ----------------------------------------------------- riding the lift
@@ -706,7 +771,7 @@ SUB UpdatePlayer
     IF (INT(px) + HW - 2 <= lfX) OR (INT(px) + 2 >= lfX + LW) THEN
       pLift = 0
     ELSE
-      py = lfY(i) - HH : pvy = 0 : pGround = 1
+      py = lfY(i) - HH : pvy = 0 : pGround = 1 : pMoved = 1
       IF py < PLAYTOP THEN py = PLAYTOP
       EXIT SUB
     ENDIF
@@ -739,8 +804,7 @@ SUB UpdatePlayer
         IF ytop >= fy0 AND ytop <= fy1 THEN
           IF RowSolid(r, INT(px), HW) <> 0 THEN
             py = ytop - HH : pvy = 0 : landed = 1
-            IF pGround = 0 THEN SfxPlay SFX_LAND, 1
-            pGround = 1 : pLift = 0
+            pGround = 1 : pLift = 0 : pMoved = 1
             EXIT DO
           ENDIF
         ENDIF
@@ -748,7 +812,7 @@ SUB UpdatePlayer
       LOOP
     ENDIF
     IF landed = 0 THEN
-      py = ny : pGround = 0 : pLift = 0
+      py = ny : pGround = 0 : pLift = 0 : pMoved = 1
     ENDIF
   ELSE
     fy0 = INT(py)
@@ -1010,6 +1074,7 @@ FUNCTION RunLevel() AS INTEGER
     ENDIF
 
     UpdatePlayer
+    HarryNoise
     FOR i = 0 TO nHen - 1
       UpdateHen i
     NEXT i
@@ -1050,7 +1115,7 @@ FUNCTION RunLevel() AS INTEGER
       IF dkX < px - 8 THEN dkFace = 0
       dkAnim = dkAnim + 1
       dkQuack = dkQuack + 1
-      IF dkQuack > 60 THEN dkQuack = 0 : SfxPlay SFX_QUACK, 1
+      IF dkQuack > 60 THEN dkQuack = 0 : SndQuack
     ENDIF
 
     ' ------------------------------------------------------- collecting
@@ -1062,7 +1127,7 @@ FUNCTION RunLevel() AS INTEGER
             egOn(i) = 0 : eggLeft = eggLeft - 1
             AddScore eggVal
             EraseBg egX(i), egY(i), 12, 6
-            SfxPlay SFX_EGG, 3
+            SndEgg
           ENDIF
         ENDIF
       ENDIF
@@ -1075,7 +1140,7 @@ FUNCTION RunLevel() AS INTEGER
             AddScore 50
             clockStop = CLOCKFREEZE    ' set, never added to
             EraseBg sdX(i), sdY(i), 14, 4
-            SfxPlay SFX_SEED, 2
+            SndGrain
           ENDIF
         ENDIF
       ENDIF
@@ -1091,7 +1156,7 @@ FUNCTION RunLevel() AS INTEGER
                 henPeck(e) = PECKFRAMES
                 sdOn(i) = 0
                 EraseBg sdX(i), sdY(i), 14, 4
-                SfxPlay SFX_CLUCK, 1
+                SndCluck
               ENDIF
             ENDIF
           ENDIF
@@ -1134,7 +1199,6 @@ FUNCTION RunLevel() AS INTEGER
     ShowEnts
     DrawHud
     FRAMEBUFFER COPY F, N
-    SfxService
 
     ' ------------------------------------------------------------ clock
     tickAcc = tickAcc + 1
@@ -1242,7 +1306,7 @@ SUB AddScore(n AS INTEGER)
   IF gScore >= gNextLife THEN
     gNextLife = gNextLife + 10000
     gLives = gLives + 1
-    SfxPlay SFX_EXTRA, 4
+    SndExtra
   ENDIF
 END SUB
 
@@ -1251,8 +1315,7 @@ END SUB
 ' ======================================================================
 SUB Died
   LOCAL INTEGER i, e, y
-  SfxSilence
-  SfxPlay SFX_DIE, 5
+  SndDie 0
   FOR i = 0 TO 24
     IF (i AND 1) = 0 THEN e = S_STAND ELSE e = S_CLIMB1
     y = INT(py) - i \ 3
@@ -1260,10 +1323,9 @@ SUB Died
     SetEnt 0, e, INT(px), y, 3, 0
     ShowEnts
     FRAMEBUFFER COPY F, N
-    SfxService
     PAUSE 40
   NEXT i
-  SfxSilence
+  SndDie 1
   gLives = gLives - 1
 END SUB
 
@@ -1289,11 +1351,10 @@ SUB PlayGame
         AddScore b
         DrawHud
         FRAMEBUFFER COPY F, N
-        SfxPlay SFX_TICK, 1
-        SfxService
+        ' the BBC ticks on every fiftieth point, not on every step
+        IF gBonus MOD 50 = 0 THEN SndBonus
         PAUSE 12
       LOOP
-      SfxSilence
       gLevel = gLevel + 1
       IF gLevel > 40 THEN gLevel = 33
     ENDIF
@@ -1322,6 +1383,7 @@ END SUB
 SUB TitleScreen
   LOCAL INTEGER t, x, hb, nb, ud
 
+  SndStop
   HideAllEnt
   panelCol = RGB(MAGENTA)
   CLS RGB(BLACK)
@@ -1386,55 +1448,40 @@ SUB TitleScreen
   LOOP UNTIL kJump <> 0
   HideAllEnt
 END SUB
-
 ' ======================================================================
-'  Sound effects.  Each entry is
-'      DATA channel, waveform, volume        waveform 0=square 1=triangle
-'      DATA freq, frames, freq, frames, ... , -1, 0        2=sine 3=noise
-'  A frequency of 0 is a rest.  One frame is about 33 ms.  Volume is
-'  0 to 25 per channel (PLAY SOUND caps it at 100 / MAXSOUNDS).
+'  Sound tables, in the BBC Micro's own units, because PLAY BBC SOUND
+'  takes them unchanged: a pitch is 0 to 255 in quarter semitones with 89
+'  = the A above middle C and 4 to a semitone, and a duration is in
+'  twentieths of a second.  A pitch of -1 ends a table and 0 is a rest.
 ' ======================================================================
-sfxdata:
-' egg collected - quick rising sparkle
-DATA 0, 0, 10
-DATA 659,1, 880,1, 1047,1, 1319,1, 1568,1, 2093,2, -1,0
-' grain collected
-DATA 0, 0, 9
-DATA 1568,2, 1047,2, -1,0
-' jump
-DATA 0, 0, 8
-DATA 262,1, 349,1, 440,1, 523,1, 659,1, -1,0
-' caught - long fall away
-DATA 0, 0, 13
-DATA 880,2, 784,2, 698,2, 622,2, 587,2, 523,2, 466,2, 415,2, 370,2
-DATA 330,2, 294,2, 262,2, 233,2, 208,2, 185,2, 165,3, 147,3, -1,0
-' hen cluck
-DATA 2, 1, 7
-DATA 1245,1, 740,1, 988,1, 0,1, -1,0
-' footfall
-DATA 1, 0, 4
-DATA 147,1, 0,1, -1,0
-' bonus countdown tick
-DATA 0, 0, 8
-DATA 2093,1, 0,1, -1,0
-' extra life
-DATA 0, 0, 12
-DATA 1047,2, 1319,2, 1568,2, 2093,2, 1568,2, 2093,4, -1,0
-' duck quack
-DATA 2, 1, 8
-DATA 330,3, 262,3, 311,3, 247,4, -1,0
-' landing thud
-DATA 3, 3, 5
-DATA 300,2, 0,1, -1,0
 
-' ---------------------------------------------------------------- tunes
-'  DATA frequency, milliseconds ... terminated by -1, 0
+' ------------------------------------------------------------ .dead_tune
+'  The original's own sixteen notes, from the disassembly, played on
+'  channel 3 through envelope 2.  In hex, as they read there:
+'      21 04  29 02  21 04  19 02  15 04  05 02  0D 04  01 02
+'      05 0C  05 01  0D 01  15 01  19 01  21 01  31 01  35 01
+'  (nothing may follow a DATA line but data, so they are here instead)
+deadtune:
+DATA  33,4,  41,2,  33,4,  25,2
+DATA  21,4,   5,2,  13,4,   1,2
+DATA   5,12,  5,1,  13,1,  21,1
+DATA  25,1,  33,1,  49,1,  53,1
+
+' -------------------------------------------------------------- fanfares
+'  Ours.  The BBC game was silent at all four of these moments, so these
+'  are the tunes this version has always played, written out as notes.
+' a new floor:    C5 E5 G5 C6 - G5 C6
 tune0:
-DATA 523,70, 659,70, 784,70, 1047,140, 0,40, 784,70, 1047,220, 0,1, -1,0
+DATA 101,2, 117,2, 129,2, 149,3, 0,1, 129,2, 149,5, -1,0
+' floor cleared:  G5 B5 D6 G6 B6
 tune1:
-DATA 784,80, 988,80, 1175,80, 1568,80, 1976,260, 0,1, -1,0
+DATA 129,2, 145,2, 157,2, 177,2, 193,5, -1,0
+' game over:      C5 B4 A4 G4 E4
 tune2:
-DATA 523,180, 494,180, 440,180, 392,180, 330,520, 0,1, -1,0
+DATA 101,4, 97,4, 89,4, 81,4, 69,10, -1,0
+' ten thousand:   C6 E6 G6 C7 G6 C7
+extratune:
+DATA 149,2, 165,2, 177,2, 197,2, 177,2, 197,4, -1,0
 
 
 ' ----------------------------------------------------- hens per floor

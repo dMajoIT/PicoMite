@@ -34,7 +34,9 @@ out += ['', bar,
         "'    P  Harry starts   1-4  a hen starts",
         bar, 'lvldata:', lev.rstrip('\n'), '']
 
-dest = os.path.join(HERE, 'chuckie.bas')
+# Straight to the shipped copy in Bas/ - a build left sitting in this
+# directory is a build nobody runs.
+dest = os.path.abspath(os.path.join(HERE, os.pardir, 'chuckie.bas'))
 open(dest, 'w', encoding='utf-8', newline='\n').write('\n'.join(out))
 print('chuckie.bas: %d lines, %d bytes' %
       (sum(1 for _ in open(dest, encoding='utf-8')), os.path.getsize(dest)))
