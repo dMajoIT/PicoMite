@@ -227,6 +227,9 @@ footer{margin-top:3rem;color:var(--muted);font-size:.88rem;border-top:1px solid 
 
 <section id="drop">
   <div class="eyebrow">Scope</div>
+  <h3>The shield is not a shield</h3>
+  <p><code>shield_tractor_pressed</code> is one key doing one job. Holding it burns a unit of fuel a frame on two frames in four, draws the circle in place of the ship, and runs the engine — and that is the whole of it. There is no path in the 6502 where it stops <code>plot_ship_collision_detected</code> reaching <code>destroy_player_ship</code>, and <code>sheild_tractor_flag</code> is read in exactly one place, to choose the sprite. The bubble is the tractor field made visible, not armour; the name in the disassembly is the author’s reading of the picture. So it is implemented as what it is, which means it costs fuel <em>and</em> gives you a wider outline to catch the rock with.</p>
+
   <h2>What we deliberately do not port</h2>
   <div class="note">One that was considered and dropped: the BBC drew its terrain on alternate pixel rows, which is what gives the rock its texture, and TURTLE's <code>FILL PATTERN</code> 15 is exactly that stripe. It would even land world-locked, because our terrain scanline is two pixels and the camera moves in whole scanlines. But the patterned rectangle fill is a per-pixel <code>DrawPixel</code> loop over 72,000 pixels a frame, and the rectangle and polygon paths clamp the pattern index to 7 while the circle path allows all 32 — so it would need a firmware change as well as a frame-time one. Left solid.</div>
   <div class="tablewrap">

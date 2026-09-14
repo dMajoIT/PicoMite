@@ -19,6 +19,7 @@ of which the game sets per level.
   python gen_sprites.py --png    a contact sheet of every shape, to out/
   python gen_sprites.py --art    ASCII, for when a shape looks wrong
 """
+import math
 import sys
 
 import thrustdata as td
@@ -158,6 +159,17 @@ def data_lines():
                 s += '%X' % (row[i] * 4 + lo)
             out.append('DATA "%s"' % s)
     out.append('DATA "", 0, 0')
+    out += ["",
+            "' The ship's outline, eight points a heading, in world units -",
+            "' a column is four pixels across and a scanline two down, which",
+            "' is why the two columns look so different.  Headings 17 to 31",
+            "' are 32-n with x negated, the same mirror the sprite uses.",
+            'hulldata:']
+    for name, ring in hull_points():
+        out.append('DATA ' + ', '.join('%6.2f,%6.2f' % (x / td.COL_PX,
+                                                        y / td.ROW_PX)
+                                       for x, y in ring)
+                   + "   ' " + name)
     out += ["", "' Per level: the physical colour of logical colour 2 (the",
             "' landscape) and 3 (the objects).  0 black 1 red 2 green",
             "' 3 yellow 4 blue 5 magenta 6 cyan 7 white.", 'palfdata:']
@@ -168,6 +180,35 @@ def data_lines():
                    + "' level %d: %s cave, %s objects"
                    % (lvl, td.BBC_COLOUR[land[lvl]].lower(),
                       td.BBC_COLOUR[objc[lvl]].lower()))
+    return out
+
+
+# ------------------------------------------------------------ the hull
+#  Eight points per heading, taken off the shape itself rather than a
+#  circle round it: for each of eight directions, the farthest lit pixel
+#  from the centre of rotation.  Headings 17-31 mirror 32-n, so only the
+#  stored shapes need points and the mirror flips x.
+NHULL = 8
+
+
+def hull_points():
+    out = []
+    for n, px in ship_shapes():
+        ring = []
+        for k in range(NHULL):
+            a = k * 2 * math.pi / NHULL
+            dx, dy = math.sin(a), -math.cos(a)
+            best, bx, by = -1.0, 0.0, 0.0
+            for x, y in px:
+                ox, oy = x - SHIP_CX, y - SHIP_CY
+                d = ox * dx + oy * dy          # distance along this direction
+                if d > best:
+                    #  keep it only if it is roughly in that direction at all
+                    r = math.hypot(ox, oy)
+                    if r > 0 and d / r > 0.5:
+                        best, bx, by = d, ox, oy
+            ring.append((bx, by))
+        out.append((n, ring))
     return out
 
 

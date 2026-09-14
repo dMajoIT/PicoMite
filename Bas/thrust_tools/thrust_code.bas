@@ -45,14 +45,15 @@
 '
 '  Keys      Turn ........... left / right arrows
 '            Thrust ......... up arrow, or SPACE
-'            Tractor beam ... RETURN, or A  (also refuels)
+'            Tractor beam ... RETURN, or A  (also the shield, and refuels)
 '            Fire ........... down arrow, or F
 '            Level .......... N, P
 '            Restart ........ R
 '            Screenshot ..... S  (to A:/thrust.bmp)
 '
 '  For testing: N completes the mission, P swaps the cave under you, G
-'  puts the ship beside the pod with it already attached, and B runs the
+'  puts the ship beside the pod with a full tank and it already
+'  attached, and B runs the
 '  entity benchmark - a full particle pool and every object on the level,
 '  drawn and simulated flat out.
 '            Quit ........... ESC
@@ -93,9 +94,16 @@ CONST THRDIV = 16                 ' thrust is the table value over 16
 CONST DRAGX = 64                  ' velX -= velX / 64   per active tick
 CONST DRAGY = 256                 ' velY -= velY / 256  - weaker, because
                                   ' gravity is always adding to it
-CONST NHULL = 8                   ' hull points tested against the walls
-CONST HULLRX = 1.6                ' in columns
-CONST HULLRY = 3.2                ' in scanlines
+'  Eight hull points a heading, taken off the ship's own outline by
+'  gen_sprites.py rather than a ring drawn round it, so the nose leads
+'  when you fly nose-first and the flanks catch when you slew.
+CONST NHULL = 8
+'  The shield bubble is a 17 pixel circle, which is wider than the ship
+'  in both axes.  That is not an oversight in the original and it is not
+'  one here: the field is a thing you put around yourself, and it fouls
+'  the rock sooner than the hull does.
+CONST SHIELDR = 8.5               ' pixels
+CONST SHIELDDUTY = 2              ' on two frames in four, as the BBC does
 '  You start a game with an empty tank, which looks like a bug until you
 '  notice where the ship is put down: directly above the first fuel cell.
 '  You fall onto it, hold the tractor key, and fly off with a full tank.
@@ -204,7 +212,9 @@ DIM INTEGER actTick(15)
 DIM FLOAT gravY, startX, startY
 DIM INTEGER startCamY
 DIM FLOAT shipX, shipY, velX, velY, simAcc
-DIM FLOAT hullX(NHULL - 1), hullY(NHULL - 1)
+DIM FLOAT hullX(NANG - 1, NHULL - 1), hullY(NANG - 1, NHULL - 1)
+DIM FLOAT shX(NHULL - 1), shY(NHULL - 1)
+DIM INTEGER shieldOn
 DIM FLOAT midX, midY, podX, podY, podHomeX, podHomeY
 DIM FLOAT tethAng, tethVel
 DIM INTEGER podAtt, beamOn, hasPod, keepPod
@@ -219,6 +229,7 @@ DIM INTEGER paLife(MAXPART - 1), paType(MAXPART - 1)
 DIM INTEGER score, reactorHP, countdown, fuelBeam, fireGap, nPart
 DIM INTEGER lives, mission, gunProb, gunPen, planetDead, ending, gameOver
 DIM INTEGER warnUp, revGrav, invLand, hiScore, saidRev, saidInv
+CONST HIFILE = "A:/thrust.hi"
 DIM INTEGER shipAng, tick, fuel, crashed, deaths
 DIM INTEGER kLeft, kRight, kThrust, kTract
 DIM INTEGER kNext, kPrev, kQuit, kShot, kReset, kGrab, kFire, kBench
@@ -316,14 +327,34 @@ SUB Setup
     actTick(j) = 1
   NEXT i
 
-  ' An octagon standing in for the ship's outline.  The real shape turns
-  ' with the heading, but a ring this size is close enough to fly by and
-  ' costs eight comparisons instead of a per-pixel test.
+  ' The hull, eight points for each of the seventeen stored headings.
+  ' Headings 17 to 31 are 32-n with x negated - the same mirror the
+  ' sprite is drawn with, so the outline and the picture agree.
+  RESTORE hulldata
+  FOR i = 0 TO 16
+    FOR j = 0 TO NHULL - 1
+      READ hullX(i, j), hullY(i, j)
+    NEXT j
+  NEXT i
+  FOR i = 17 TO NANG - 1
+    FOR j = 0 TO NHULL - 1
+      hullX(i, j) = -hullX(NANG - i, j)
+      hullY(i, j) = hullY(NANG - i, j)
+    NEXT j
+  NEXT i
+  ' and a circle for the shield bubble
   FOR i = 0 TO NHULL - 1
     a = i * 2 * PI / NHULL
-    hullX(i) = HULLRX * SIN(a)
-    hullY(i) = -HULLRY * COS(a)
+    shX(i) = SHIELDR / COLPX * SIN(a)
+    shY(i) = -SHIELDR / ROWPX * COS(a)
   NEXT i
+  hiScore = 0
+  ON ERROR SKIP 3
+  OPEN HIFILE FOR INPUT AS #1
+  INPUT #1, hiScore
+  CLOSE #1
+  ON ERROR CLEAR
+  IF hiScore < 0 OR hiScore > 99999999 THEN hiScore = 0
 
   SPRITE CLOSE ALL
   LoadSprites 1, NSPRLOAD
@@ -588,11 +619,15 @@ END SUB
 ' the towing behaviour can be looked at without flying down to it.
 SUB GrabPod
   IF hasPod = 0 THEN EXIT SUB
+  fuel = 2000                     ' a testing state is no use without fuel
   podAtt = 1 : beamOn = 1
-  tethAng = 4 : tethVel = 0
+  ' Hang the pod straight down and put the pair a little above the stand,
+  ' which is open ground on every cave; angling the tether tended to post
+  ' the ship into the rock beside it.
+  tethAng = 0 : tethVel = 0
   velX = 0 : velY = 0
-  midX = podHomeX + TETHK * AngXi(tethAng)
-  midY = podHomeY + TETHK * AngYi(tethAng)
+  midX = podHomeX
+  midY = podHomeY - TETHK * 2.5
   DeriveShip
   crashed = 0
   camX = midX - VIEWC \ 2
@@ -626,7 +661,7 @@ SUB NextMission
   ENDIF
   planetDead = 0 : keepPod = 0
   Banner "MISSION " + STR$(mission - 1) + " COMPLETE", "BONUS " + STR$(b)
-  IF score > hiScore THEN hiScore = score
+  IF score > hiScore THEN hiScore = score : SaveHiScore
   ' Every sixth mission the two modifiers step round.  Inverting reverse
   ' gravity, and inverting the invisible landscape only when that leaves
   ' gravity normal again, gives: normal, reversed, invisible, both.
@@ -654,7 +689,7 @@ SUB LoseLife(why$)
   planetDead = 0
   IF lives <= 0 THEN
     Banner why$, "NO SHIPS LEFT"
-    IF score > hiScore THEN hiScore = score
+    IF score > hiScore THEN hiScore = score : SaveHiScore
     gameOver = 1
     EXIT SUB
   ENDIF
@@ -717,6 +752,14 @@ SUB TitleScreen
     ky$ = INKEY$
     t = KEYDOWN(0)
   LOOP UNTIL ky$ <> "" OR t > 0
+END SUB
+
+SUB SaveHiScore
+  ON ERROR SKIP 3
+  OPEN HIFILE FOR OUTPUT AS #1
+  PRINT #1, hiScore
+  CLOSE #1
+  ON ERROR CLEAR
 END SUB
 
 SUB GameOverScreen
@@ -800,6 +843,20 @@ SUB SimStep
     ENDIF
     velX = velX - velX / DRAGX
     velY = velY - velY / DRAGY
+  ENDIF
+  ' The shield.  One key does the tractor field and the bubble, which is
+  ' what the original means by shield_tractor: holding it costs a unit of
+  ' fuel a frame on two frames in four, draws the circle in place of the
+  ' ship, and runs the engine.  It does not make you invulnerable - there
+  ' is no path in the 6502 where it stops plot_ship_collision_detected
+  ' reaching destroy_player_ship - so all it buys is the beam, and it
+  ' costs a wider outline while it is up.
+  IF (kTract <> 0) AND (fuel > 0) AND ((tick AND SHIELDDUTY) <> 0) THEN
+    shieldOn = 1
+    fuel = fuel - 1
+    SndEngine
+  ELSE
+    shieldOn = 0
   ENDIF
   tick = tick + 1
   Tractor
@@ -1041,7 +1098,7 @@ SUB UpdateParticles
         paLife(i) = 0                          ' into the rock
       ELSEIF t = PT_HOSTILE THEN
         IF crashed = 0 THEN
-          IF ABS(x - shipX) < HULLRX AND ABS(y - shipY) < HULLRY THEN
+          IF ABS(x - shipX) < PODRX AND ABS(y - shipY) < PODRY THEN
             paLife(i) = 0
             Explode
           ENDIF
@@ -1115,21 +1172,26 @@ END SUB
 ' ----------------------------------------------------------------------
 FUNCTION HitWall() AS INTEGER
   LOCAL INTEGER i, wy
-  LOCAL FLOAT wx
+  LOCAL FLOAT wx, ox, oy
   HitWall = 1
   FOR i = 0 TO NHULL - 1
-    wy = INT(shipY + hullY(i))
+    IF shieldOn <> 0 THEN
+      ox = shX(i) : oy = shY(i)
+    ELSE
+      ox = hullX(shipAng, i) : oy = hullY(shipAng, i)
+    ENDIF
+    wy = INT(shipY + oy)
     IF wy < 0 OR wy >= depth THEN EXIT FUNCTION
-    wx = shipX + hullX(i)
+    wx = shipX + ox
     IF wx < wallL(wy) THEN EXIT FUNCTION
     IF wx >= wallR(wy) THEN EXIT FUNCTION
   NEXT i
   ' a towed pod scrapes the wall as readily as the ship does
   IF podAtt <> 0 THEN
     FOR i = 0 TO NHULL - 1
-      wy = INT(podY + hullY(i) * PODRY / HULLRY)
+      wy = INT(podY + shY(i) * PODRY * ROWPX / SHIELDR)
       IF wy < 0 OR wy >= depth THEN EXIT FUNCTION
-      wx = podX + hullX(i) * PODRX / HULLRX
+      wx = podX + shX(i) * PODRX * COLPX / SHIELDR
       IF wx < wallL(wy) THEN EXIT FUNCTION
       IF wx >= wallR(wy) THEN EXIT FUNCTION
     NEXT i
@@ -1204,6 +1266,12 @@ SUB DrawShip
   sx = INT((shipX - camX) * COLPX) - SHIPCX
   sy = PLAYTOP + INT((shipY - camY) * ROWPX) - SHIPCY
   IF Offscreen(sx, sy) <> 0 THEN EXIT SUB
+  IF shieldOn <> 0 THEN
+    n = sx + SHIPCX - 8
+    rot = sy + INT(SHIPCY) - 8
+    IF Offscreen(n, rot) = 0 THEN SPRITE WRITE S_SHIELD, n, rot, 0
+    EXIT SUB
+  ENDIF
   IF shipAng <= 16 THEN
     n = S_SHIP + shipAng : rot = 0
   ELSE
