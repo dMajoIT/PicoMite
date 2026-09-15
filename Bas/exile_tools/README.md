@@ -56,6 +56,8 @@ at `&13fa`.
 | `host_test.py` | `out/host/exile.dll`, the same kernel built with the Visual Studio compiler; replays every scene through it in seconds (`EXILE_DEBUG=1` for the kernel's debug prints) | the board run is the final word; this is for iterating |
 | `gen_exiletest.py` | `csub/exilestate2.h`, `csub/exile_tick.txt` (the `CSUB ExileTick` block), `out/scene/tables2.bin`, per scene a binary feed and an init file, and `Bas/exile/exiletest.bas` from `Bas/exile/exiletest_harness.bas` | `run_exiletest.py` |
 | `run_exiletest.py` | nothing; puts the scenes the board does not already have on the PC3, runs `exiletest.bas` and checks every slot of every tick against the traces | 79 scenes, 9,880 ticks, all match; 0.27 ms a tick on average, 0.48 at worst |
+| `gen_exilegame.py` | `out/game/start_obj.bin` and `start_game.bin` (the slots and the game array as a new game begins, with the feed off and the events and promotion on), `out/game/objsheet.bin` (where every (sprite, palette, flip) sits in the slot 2 image) and `Bas/exile/exile.bas` from `Bas/exile/exile_harness.bas` | `run_exilegame.py` |
+| `run_exilegame.py` | nothing; puts what the game needs beside it on the PC3 and starts it | the kernel costs 0.50 ms a tick and the drawing 6.8 ms, against the 40 ms a frame the game is paced to |
 | `census/` | the C# harness that walked the world before any of this existed, and its images | see `census/README.md` |
 
 The physics chain is `gen_traces.py` (the game's answers), `exilephys.py`
@@ -163,6 +165,24 @@ Two things to know if you read the digests back. XMODEM pads its last block
 with `&h1a`, so a file comes back longer than it went, and the list is written
 only after the files it describes, so a transfer that fails part way is simply
 put again next time.
+
+## The game
+
+`Bas/exile/exile.bas` is the game rather than a test of it: the same kernel,
+but running free. It draws its own random numbers, takes the keys from the
+game array a tick at a time, and everything it knows lives in `obj()` and
+`game()`, which the program reads back only to draw. The frame is the render
+order the review settled on: black, the four waterlines where the events have
+moved them, the objects from the kernel's own slots, then the two tile maps
+with colour zero transparent, so the tiles that are priority stand in front.
+
+Two things to know about drawing it. `TILEMAP DRAW` clips a partly scrolled
+tile to the screen rather than to the viewport it was given, so a tile at the
+right-hand edge spills over the panel; the panel is therefore redrawn after
+the tiles rather than once at the start. And `KEYDOWN` empties the console
+input buffer, so keys cannot be injected over the serial line: the game has to
+be played on the board's own keyboard, and what this end can check is the one
+screenshot the program saves at tick 60.
 
 ## Units and layout
 
