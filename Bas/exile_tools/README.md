@@ -50,12 +50,12 @@ at `&13fa`.
 | `csub/exilephys.c` | the kernel in C for a CSUB, the same transcription again; `csub/exilestate.h` (generated) is the layout of its state array | `gen_csubtest.py` |
 | `gen_csubtest.py` | `csub/exilestate.h`, `csub/exile_csub.txt` (the `CSUB ExileUpdate` block, built with `user-tools/armcfgen.py` at -O2), `out/phys/tables.bin` (the tables the kernel reads, packed), and `Bas/exile/physcsub.bas` (`Bas/exile/physcsub_harness.bas` with the state constants, the starting slot and the block) | `run_phystest.py --prog physcsub.bas` |
 | `bisect_cache.py` | nothing; opts subs into `OPTION TRACECACHE` a group at a time to find one the cache gets wrong | found `CollTiles`; the cache is also slower than none on this kernel |
-| `gen_traces2.py` | `out/traces2/<scene>.json`: whole scenes from the game, every slot every tick, with the water level, the screen position, every random number the code drew keyed by the address that drew it, two zero-page scratch bytes the physics reads after the plotting code has used them (`SCRATCH_SITES`: the sign register at &22fe, the sprite width at &39b2), and every tile routine the plotting called (`TILE_SITE` &1787: the tile and the mode), which the kernel replays in place of the screen scrolling it does not model yet | each is the real game's answer; promotion and events are switched off so a scene holds what was put in it; a scene is `lonely` (slots 1-15 wiped every tick), `'clear'` (wiped once: the image's slot 1 is Triax) or neither |
+| `gen_traces2.py` | `out/traces2/<scene>.json`: whole scenes from the game, every slot every tick, with the water level, the screen position, every random number the code drew keyed by the address that drew it, two zero-page scratch bytes the physics reads after the plotting code has used them (`SCRATCH_SITES`: the sign register at &22fe, the sprite width at &39b2), and every tile routine the plotting called (`TILE_SITE` &1787: the tile and the mode), which the kernel now checks itself against rather than replays, and the screen's own state as the scene starts, so the kernel works the viewport out for itself | each is the real game's answer; events and promotion are off unless the scene asks for them, so a scene holds what was put in it; a scene is `lonely` (slots 1-15 wiped every tick), `'clear'` (wiped once: the image's slot 1 is Triax) or neither |
 | `probe2.py` | nothing; `probe.py` for the whole-scene scenes: stops the game at chosen addresses in one tick and prints registers, the slot being updated and any memory bytes asked for | for chasing a divergence |
-| `csub/exile.c` | the whole-scene kernel: update_objects for all sixteen slots (the collision pass between objects, held objects, removal and demotion, the teleport countdown, the per-type dispatch), every object type's behaviour, the player's actions (thrust, jump, aim, pick up and drop, the weapons and firing, pocketing and retrieving, throwing, the whistles, teleporting and remembering, scrolling the viewpoint), the tile routines that make objects and the winds, and `update_events` (the waterlines, Triax's lab, the earthquake, the creatures that emerge, the stars, the summonings) | `gen_exiletest.py` |
+| `csub/exile.c` | the whole-scene kernel: update_objects for all sixteen slots (the collision pass between objects, held objects, removal and demotion, the teleport countdown, the per-type dispatch), every object type's behaviour, the player's actions (thrust, jump, aim, pick up and drop, the weapons and firing, pocketing and retrieving, throwing, the whistles, teleporting and remembering, and being teleported away when its energy runs out), the viewport (how far to scroll or whether to redraw, and bringing back the objects that were put aside when they went offscreen), the tile routines that make objects and the winds, and `update_events` (the waterlines, Triax's lab, the earthquake, the creatures that emerge, the stars, the summonings) | `gen_exiletest.py` |
 | `host_test.py` | `out/host/exile.dll`, the same kernel built with the Visual Studio compiler; replays every scene through it in seconds (`EXILE_DEBUG=1` for the kernel's debug prints) | the board run is the final word; this is for iterating |
 | `gen_exiletest.py` | `csub/exilestate2.h`, `csub/exile_tick.txt` (the `CSUB ExileTick` block), `out/scene/tables2.bin`, per scene a binary feed and an init file, and `Bas/exile/exiletest.bas` from `Bas/exile/exiletest_harness.bas` | `run_exiletest.py` |
-| `run_exiletest.py` | nothing; puts the scenes on the PC3, runs `exiletest.bas` and checks every slot of every tick against the traces | 76 scenes, 9,620 ticks, all match; 0.22 ms a tick on average, 0.46 at worst |
+| `run_exiletest.py` | nothing; puts the scenes the board does not already have on the PC3, runs `exiletest.bas` and checks every slot of every tick against the traces | 79 scenes, 9,880 ticks, all match; 0.27 ms a tick on average, 0.48 at worst |
 | `census/` | the C# harness that walked the world before any of this existed, and its images | see `census/README.md` |
 
 The physics chain is `gen_traces.py` (the game's answers), `exilephys.py`
@@ -87,9 +87,27 @@ wanted 152 KB of the PC3's 144 KB and AUTOSAVE stopped part way through with
 rest of the transfer echoes at the prompt; the program that is left then dies
 with `Internal fault 5(sorry)`, which is `CallCFunction` failing to find the
 code). Building with `-O s` instead of `-O 2` took the kernel from 44 KB to
-33 KB and cost nothing measurable: 0.217 ms a tick against 0.229. For the
-game itself the CSUB belongs in the library, where `LIBRARY SAVE` keeps the
-binary and throws the hex text away.
+33 KB and cost nothing measurable: 0.217 ms a tick against 0.229.
+
+The kernel now lives in the library, not in the program. `gen_exiletest.py`
+writes it to `out/scene/exile_lib.bas` and the test program's first statement
+is `LIBRARY LOAD "A:/exile_lib.bas", O`; the path is literal because
+`MM.INFO(PATH)` is `"NONE"` for a program that arrived over AUTOSAVE, and the
+`O` is there because the load would otherwise stop to ask before replacing
+what is in flash. All 79 scenes pass that way at 0.27 ms a tick, with the
+program down from 1,380 lines to 196 and program memory 97% free.
+
+The two ways in differ in what they store, which matters because the library
+is one flash slot:
+
+| | Library holds | Program memory | Cost to renew |
+| --- | --- | --- | --- |
+| `LIBRARY LOAD file.bas` | 107 KB: the hex text and the binary | 143 KB free | one XMODEM, and nothing at all if the file's hash is unchanged |
+| `LIBRARY SAVE` of a program holding the CSUB | 32 KB: the binary alone, the text stripped | 144 KB free | the whole block pasted over the console |
+
+So the rig loads from the file and the game will save, where 112 KB of
+library headroom is worth the slower step. `LIBRARY DELETE` undoes either,
+and `FLASH ERASE 3` frees the slot if an image is in the way.
 
 Run them in that order:
 
@@ -130,6 +148,21 @@ landing site is identical to that generator's own drawing. On the board,
 screenshots of the view at the ship (`2` in the viewer) and at Triax's lab
 (`3`) match `render_window.py` pixel for pixel, including the tiles that
 come from the second flash slot.
+
+## Putting the scenes on the board
+
+A full set is a hundred and sixty files and eleven minutes over XMODEM, which
+is longer than the run it feeds. Most of them do not change between runs, so
+`run_exiletest.py` puts only the ones that did: the board keeps a list of what
+it holds, one digest a file, in `exile_put.txt` on its own drive. Keeping the
+list there rather than here is the point. A drive that is wiped, or a board
+that has never been used, loses the list along with the files, so the next run
+puts everything without being told. `--reput` ignores the list.
+
+Two things to know if you read the digests back. XMODEM pads its last block
+with `&h1a`, so a file comes back longer than it went, and the list is written
+only after the files it describes, so a transfer that fails part way is simply
+put again next time.
 
 ## Units and layout
 

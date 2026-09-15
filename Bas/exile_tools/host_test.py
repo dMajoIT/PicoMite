@@ -76,6 +76,9 @@ def scene_arrays(mem, t):
             slots[FIELDS.index(k) * NSLOT + slot] = v
     g = game_init(mem)
     g['eventson'] = 1 if t.get('events') else 0
+    g['promoteon'] = 1 if t.get('promote') else 0
+    for n, v in t.get('screen0', {}).items():
+        g[n] = v
     game = [g[n] for n in GAME] + [0] * (GAME_SIZE - len(GAME))
     words = []
     for keys, tk in zip(t['keys'], t['ticks']):

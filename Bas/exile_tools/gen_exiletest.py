@@ -6,7 +6,9 @@ block with user-tools/armcfgen.py, packs the tables into out/scene/tables2.bin,
 and for every trace in out/traces2/ writes a binary feed (the keys, water
 level, screen position and random numbers of every tick) and an init file
 (the sixteen slots and the game array as the scene starts).  Then it
-assembles Bas/exile/exiletest.bas from Bas/exile/exiletest_harness.bas.
+assembles Bas/exile/exiletest.bas from Bas/exile/exiletest_harness.bas.  The
+CSUB itself goes to out/scene/exile_lib.bas, which the program loads with
+LIBRARY LOAD: pasted into the program its hex text would not fit.
 run_exiletest.py puts it all on the PC3 and checks every slot of every tick.
 
     python gen_exiletest.py exile-disassembly.txt
@@ -39,7 +41,9 @@ GAME = (['frame', 'angle', 'facing', 'immob', 'timmob', 'rotvel', 'lying', 'aim'
         + ['weapon', 'fired', 'blaster', 'pockused', 'telrem', 'telnext', 'scrollx', 'scrolly']
         + ['wlo%d' % i for i in range(6)] + ['whi%d' % i for i in range(6)]
         + ['pocket%d' % i for i in range(5)] + ['telx%d' % i for i in range(5)] + ['tely%d' % i for i in range(5)]
-        + ['eventson'] + ['wldes%d' % i for i in range(4)]
+        + ['eventson', 'promoteon'] + ['wldes%d' % i for i in range(4)]
+        + ['orgxf', 'orgyf', 'fracx', 'sgnx', 'fracy', 'sgny', 'secsx', 'secsy',
+           'svelx', 'svely', 'newtiles', 'secmode', 'secnext', 'secshuf', 'secdist']
         + ['gift%d' % i for i in range(5)]
         + ['wl%d' % i for i in range(8)] + ['rnd%d' % i for i in range(4)] + ['scr%d' % i for i in range(10)]
         + ['kh%d' % i for i in range(39)] + ['coll%d' % i for i in range(19)]
@@ -69,7 +73,9 @@ TABLES = [('OBPAT', 'ObstructionPatterns', 168), ('OBOFF', 'ObstructionPatternOf
           ('DOORTILES', 0x3E91, 4), ('DOORSPEED', 0x4D72, 4), ('DOORENERGY', 0x4D76, 4), ('DOORPAL', 0x4D7A, 8),
           ('GARG', 0x418B, 20), ('SUCKTRIG', 0x4E37, 9), ('SUCKPOW', 0x4E40, 9), ('SUCKPAL', 0x4E49, 9),
           ('CLAWEN', 0x48A3, 4), ('WALKANG256', 0x3962, 256),
-          ('WEAPONBULLET', 0x2CDC, 6), ('THROWVEL', 0x32D2, 8), ('SCROLLDELTA', 0x2C15, 4), ('SCROLLLIMIT', 0x2C19, 4)]
+          ('WEAPONBULLET', 0x2CDC, 6), ('THROWVEL', 0x32D2, 8), ('SCROLLDELTA', 0x2C15, 4), ('SCROLLLIMIT', 0x2C19, 4),
+          ('SCRCENTRE', 0x14C7, 4), ('SCROFFXF', 0x358C, 2), ('SCROFFX', 0x358E, 2),
+          ('SCROFFYF', 0x3590, 2), ('SCROFFY', 0x3592, 2)]
 
 
 def game_init(mem):
@@ -187,7 +193,12 @@ def main():
         print(r.stderr[-3000:])
         return 1
     hexwords = sum(len(l.split()) for l in open(block) if l.strip() and not l.strip().startswith(("CSUB", "End", "'")))
-    print("CSUB block: %d words (%d bytes of code)" % (hexwords, hexwords * 4))
+    # the block goes to the board as a library file, not inside the program: the
+    # hex text is 2.4 bytes for every byte of code and program memory cannot hold both
+    lib = os.path.join(sdir, 'exile_lib.bas')
+    open(lib, 'w', newline='\r\n').write(open(block).read())
+    print("CSUB block: %d words (%d bytes of code), %d bytes as %s" % (
+        hexwords, hexwords * 4, os.path.getsize(lib), os.path.basename(lib)))
 
     # the scenes
     tdir = os.path.join(out, 'traces2')
@@ -225,6 +236,9 @@ def main():
                 slots[FIELDS.index(k) * NSLOT + slot] = v
         g = game_init(mem)
         g['eventson'] = 1 if t.get('events') else 0
+        g['promoteon'] = 1 if t.get('promote') else 0
+        for n, v in t.get('screen0', {}).items():
+            g[n] = v
         lines = [str(len(t['ticks'])), str(len(feed)), "1" if t.get('lonely') else "0"] + [str(v) for v in slots] + [str(g[n]) for n in GAME]
         open(os.path.join(sdir, 'sc_%s.txt' % name), 'w', newline='\n').write("\n".join(lines) + "\n")
         listing.append(name)
@@ -236,7 +250,7 @@ def main():
     marker = "' @@CONSTS@@"
     assert marker in harness
     harness = harness.replace(marker, "\n".join(consts) + "\nConst TABLES_BYTES = %d\nConst NGAME = %d" % (len(packed), len(GAME)))
-    prog = harness.rstrip('\n') + "\n\n" + open(block).read()
+    prog = harness.rstrip('\n') + "\n"
     dest = os.path.join(here, '..', 'exile', 'exiletest.bas')
     open(dest, 'w', newline='\r\n').write(prog)
     print("wrote", os.path.normpath(dest), "(%d lines)" % prog.count('\n'))

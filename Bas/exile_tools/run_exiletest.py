@@ -5,12 +5,26 @@ board, uploads Bas/exile/exiletest.bas, runs it and compares every printed
 slot of every tick with the trace in out/traces2/, reporting the first
 tick and slot that differ.
 
-    python run_exiletest.py [--nofiles] [--noworld] [--log file] [names...]
+    python run_exiletest.py [--nofiles] [--noworld] [--lib] [--reput] [--log file] [names...]
 
 --nofiles skips putting the data files; --noworld puts the scene files but
-not world_types.bin; names restrict the scenes run (sc_list.txt is rewritten).
-The board is the one PC3_PORT names.
+not world_types.bin; --lib puts only the kernel (out/scene/exile_lib.bas),
+which is what changes when csub/exile.c does; names restrict the scenes run
+(sc_list.txt is rewritten).  The board is the one PC3_PORT names.
+
+Only the files that changed are put.  The board keeps a list of what it
+already has, one digest a file, in `exile_put.txt` on its own drive, so a
+drive that is wiped or a board that has never been used loses the list with
+the files and everything is put again.  --reput ignores the list and puts
+everything.  A full set is a hundred and sixty files and eleven minutes;
+changing only the kernel is a few seconds.
+
+The kernel is not in the program: it is a library file that the program loads
+with LIBRARY LOAD, since its hex text and binary together are more than
+program memory holds.  LIBRARY LOAD hashes the file, so putting an unchanged
+one costs nothing.
 """
+import hashlib
 import json
 import os
 import sys
@@ -23,6 +37,48 @@ from pc3 import PC3   # noqa: E402
 from exilegame import FIELDS   # noqa: E402
 
 out = os.path.join(here, 'out')
+
+
+MANIFEST = 'exile_put.txt'   # on the board, beside the files it lists
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def board_manifest(b, force=False):
+    """What the board says it already has: {name: digest}.  The list lives on
+       the board's own drive, so it cannot outlive the files it describes."""
+    if force:
+        return {}
+    try:
+        # XMODEM pads its last block, so the file comes back longer than it was
+        raw = b.grab(MANIFEST, timeout=60).rstrip(bytes([26, 0]))
+        return json.loads(raw.decode())
+    except Exception:
+        return {}      # never been used, wiped, or unreadable: put everything
+
+
+def put_files(b, manifest, items):
+    """Put the (name, contents) the board does not already have."""
+    put = skipped = 0
+    for name, data in items:
+        d = digest(data)
+        if manifest.get(name) == d:
+            skipped += 1
+            continue
+        t0 = time.time()
+        b.xmodem_send(name, data)
+        manifest[name] = d        # only after the put, so a failure re-puts
+        put += 1
+        print("put %-28s %6d bytes %5.1fs" % (name, len(data), time.time() - t0))
+    return put, skipped
+
+
+def save_manifest(b, manifest, put):
+    """Leave the list on the board, but only if it changed."""
+    if put:
+        b.xmodem_send(MANIFEST, json.dumps(manifest, sort_keys=True).encode())
 
 
 def parse(output):
@@ -106,24 +162,31 @@ def main():
     log = args[args.index('--log') + 1] if '--log' in args else None
     names = [a for a in args if not a.startswith('--') and a != log]
     sdir = os.path.join(out, 'scene')
-    if names:
-        open(os.path.join(sdir, 'sc_list.txt'), 'w', newline='\n').write("\n".join(names) + "\n")
     b = PC3()
     try:
         b.attention()
+        manifest = board_manifest(b, '--reput' in args)
         if '--nofiles' not in args:
             files = sorted(os.path.join(sdir, f) for f in os.listdir(sdir)
-                           if f == 'tables2.bin' or f == 'sc_list.txt' or
+                           if f in ('tables2.bin', 'sc_list.txt', 'exile_lib.bas') or
                            (f.startswith('sc_') and (not names or f[3:].rsplit('.', 1)[0] in names)))
             if '--noworld' not in args:
                 files.insert(0, os.path.join(out, 'world_types.bin'))
-            for f in files:
-                data = open(f, 'rb').read()
-                t0 = time.time()
-                b.xmodem_send(os.path.basename(f), data)
-                print("put %-28s %6d bytes %5.1fs" % (os.path.basename(f), len(data), time.time() - t0))
-        elif names:
-            b.xmodem_send('sc_list.txt', ("\n".join(names) + "\n").encode())
+        elif '--lib' in args:
+            files = [os.path.join(sdir, 'exile_lib.bas')]
+        else:
+            files = []
+        items = [(os.path.basename(f), open(f, 'rb').read()) for f in files]
+        if names:
+            # the scenes to run, built here rather than written over the list
+            # gen_exiletest.py generated, which is every scene there is
+            items = [it for it in items if it[0] != 'sc_list.txt']
+            items.append(('sc_list.txt', ("\n".join(names) + "\n").encode()))
+        t0 = time.time()
+        put, skipped = put_files(b, manifest, items)
+        save_manifest(b, manifest, put)
+        if files:
+            print("put %d files in %.0f s, %d already on the board" % (put, time.time() - t0, skipped))
         src = open(os.path.join(here, '..', 'exile', 'exiletest.bas'), encoding='utf-8').read()
         saved, n = b.upload(src, timeout=120)
         print("uploaded %d lines, saved %s bytes" % (n, saved))

@@ -23,7 +23,8 @@ def main():
     spec = SCENARIOS[name]
     start, objects, phases, lonely = spec[:4]
     keys = [k for k, n in phases for _ in range(n)]
-    g = Game(mem, promote=False, events=spec[4] if len(spec) > 4 else False)
+    g = Game(mem, promote=spec[5] if len(spec) > 5 else False,
+             events=spec[4] if len(spec) > 4 else False)
     if lonely == 'clear':
         lonely = False
         for s in range(1, 16):

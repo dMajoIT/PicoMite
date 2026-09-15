@@ -65,7 +65,13 @@ struct G {
     int fireCool, waterTile, boosterCol, suitCol, cross[3];
     int weapon, fired, blaster, pockUsed, telRem, telNext, scrollX, scrollY;   /* &084d, &29d7, &36, &0847, &0822, &0821, &14c8, &14ca */
     int wLo[6], wHi[6], pocket[5], telX[5], telY[5];                           /* &084e, &0854, &0848, &0823, &0828 */
-    int eventsOn, wlDes[4];                     /* whether update_events runs; &0836 the waterlines' desired y */
+    int eventsOn, promoteOn, wlDes[4];                     /* whether update_events runs; &0836 the waterlines' desired y */
+    /* the screen: &c7-&ce the origin, the fractions it is scrolling by and their
+       signs, &cf/&d1 the sections to scroll, &161c/&161e the scrolling velocity,
+       &14cd whether the scroll has uncovered new tiles */
+    int orgF[3], org[3], frac[3], sgn[3], secs[3], sVel[3], newTiles;
+    int secMode, secNext, secShuf, secDist;     /* &0b76, &0b73, &0b74, &0b77: promotion */
+    int fedScr[10];                             /* what the trace says the screen did, to check against */
     int feedMode, feedPos, wl[8], fault, faultArg, rnd[4];
     int held, demat, heldColl, scr[10], redMush, preAng, preMag, retrieve, viewpoint, feedEnd;
     int cYF, cYS, anyB, collTop, obs[4];        /* &18, &1a, &19, &1a again, &77-&7a: shared zero page */
@@ -2069,6 +2075,44 @@ static int create_projectile(struct P *p, int xv, int yv, int type)
     return create_child(p, type);
 }
 
+/* check_if_object_hit_by_other_control (&0bc7): 0 when the player has shot a
+   control device of type t that this object can see, close enough and squarely
+   enough on; 1 otherwise.  The game returns this in the carry, so the sense is
+   inverted from what reads naturally. */
+static int hit_by_control(struct P *p, int t)
+{
+    struct G *g = p->g;
+    int x = g->fired, a;
+    if (x & 128) return 1;                            /* nothing was fired */
+    if ((t ^ obj_at(g, 0x0860 + x)) != 0) return 1;   /* or not this kind of control */
+    if (obstruction_between(p, x, 0x18)) return 1;    /* three tiles, and in sight */
+    a = angle_of_object_to_this(p, x);                /* which leaves the carry set */
+    a = sub8(p, a, g->aimFlip, 1);
+    a = sub8(p, a, 0x80, p->cy);
+    a = inv_neg(a);                                   /* and this leaves it clear */
+    a = add8(p, a, p->dist, 0);                       /* further off, aim less exactly */
+    return a >= 0x18;                                 /* too wide an angle */
+}
+
+/* update_remote_control_device (&4351): when the player shoots it, it answers
+   with a sound and a puff of aim particles.  Neither is the kernel's business,
+   but putting the particles on the player's side turns the device round, and
+   the vector it fires them along costs a random draw. */
+static void update_remote_control_device(struct P *p)
+{
+    struct G *g = p->g;
+    if (p->slot != g->fired) return;                  /* &0bbf: only the one just shot */
+    firing_vector_from_angle(p, g->aimFlip);
+    p->xFlip ^= 0x80;
+}
+
+/* update_cannon (&40ee): fires a cannonball when its own control device is shot */
+static void update_cannon(struct P *p)
+{
+    if (!hit_by_control(p, 0x4F)) create_projectile(p, 0x40, 0, 0x15);
+    consider_flipping(p, 0x0F);
+}
+
 /* ---- firing at a target ------------------------------------------------------------------ */
 
 /* calculate_firing_vector_from_distance (&3355): a vector of speed a3/4 towards
@@ -2173,6 +2217,27 @@ static void explode_with_squeal(struct P *p)
     struct G *g = p->g;
     int e = g->tab[T_RANGEENERGY + range_of_type(g, p->type)];
     explode_with_duration(p, ((e >> 5) + 3 + ((e >> 4) & 1)) & 255);
+}
+
+/* consider_teleporting_damaged_player (&4096): the player is the one object
+   that cannot explode.  Out of energy it is given a single point back, and
+   then half the time it is teleported away; the rest of the time it may
+   fumble whatever it was carrying back into its hand.  The game also counts
+   the death on its panel, which is not the kernel's business. */
+static void consider_teleporting_damaged_player(struct P *p)
+{
+    struct G *g = p->g;
+    int a;
+    p->energy = (p->energy + 1) & 255;
+    if (read_site(g, 0x409C) & 128) {             /* one time in two */
+        handle_dropping(p);
+        handle_teleporting(p);
+        return;
+    }
+    a = read_rnd_byte(g, 0x40AC, 1);              /* and one in four of the rest */
+    a = ((a >= 0xC0) << 7) | (a >> 1);
+    if (a & g->held & 128) retrieve_object(p);    /* if its hand is empty */
+    handle_dropping(p);
 }
 
 /* get_tile_and_check_for_tertiary_objects (&1715) at (tx, ty) in the mode set */
@@ -2913,6 +2978,223 @@ static void update_moving_fireball(struct P *p)
     apply_acceleration(p);
     add_to_pos(p, 2, p->vel[2], p->vel[2] & 128);
     add_to_pos(p, 0, p->vel[0], p->vel[0] & 128);
+}
+
+static int far_away(struct P *p, int y);   /* &111d, defined with the viewport below */
+
+/* ---- promotion (&0be8) -------------------------------------------------------------------- */
+
+/* promote_secondary_object_to_primary_if_Y_slots_free (&0c15): secondary x is
+   brought back as a primary object, with the quarter-tile position and the
+   coarse energy that were kept for it */
+static void promote_secondary(struct P *p, int x, int slots)
+{
+    struct G *g = p->g;
+    long long *obj = g->obj;
+    int y, a;
+    if ((int)g->game[G_SECY0 + x] == 0) return;
+    y = create_new_object(p, (int)g->game[G_SECT0 + x], slots);
+    if (y < 0) return;
+    OS(O_X, y, (int)g->game[G_SECX0 + x]);
+    OS(O_Y, y, (int)g->game[G_SECY0 + x]);
+    a = (int)g->game[G_SECE0 + x];
+    OS(O_ENERGY, y, a | 0x0F);
+    a = (a << 4) & 255;
+    OS(O_XF, y, a & 0xC0);
+    OS(O_YF, y, (a << 2) & 255);
+    g->game[G_SECY0 + x] = 0;
+}
+
+static void consider_promoting(struct P *p)
+{
+    struct G *g = p->g;
+    int a, c, x, saveX, saveY;
+    if (!(g->secMode & 128)) {                    /* the usual case: one of them, in a shuffled order */
+        a = inv_neg(p->vel[2]);
+        c = inv_neg(p->vel[0]);
+        if (c > a) a = c;                         /* how fast the player is moving */
+        c = (a >> 1) & 1;                         /* the second shift leaves bit 1 in the carry */
+        a = add8(p, a >> 2, g->secDist, c);       /* and the add that follows takes it */
+        g->secDist = a;
+        if (!p->cy) {                             /* until that adds up to a screenful */
+            g->secNext = (g->secNext - 1) & 255;
+            if (g->secNext & 128) {
+                g->secShuf = read_site(g, 0x0BFF) & 0x1F;
+                g->secNext = 0x1F;
+            }
+            promote_secondary(p, g->secNext ^ g->secShuf, 4);
+            return;
+        }
+    }
+    saveX = p->ps[0]; saveY = p->ps[2];           /* all of them, against the new view */
+    for (x = 0x1F; x >= 0; x--) {
+        p->ps[2] = (int)g->game[G_SECY0 + x];
+        p->ps[0] = (int)g->game[G_SECX0 + x];
+        if (far_away(p, 4)) continue;
+        promote_secondary(p, x, 1);
+    }
+    p->ps[0] = saveX; p->ps[2] = saveY;
+}
+
+/* ---- the viewport (&152a, &161f, &3684) --------------------------------------------------- */
+
+/* divide_by_eight (&3275): three halvings that keep the sign, leaving the last
+   bit shifted out in the carry, which the caller adds in */
+static int div8_signed(struct P *p, int a)
+{
+    int i, c = 0, b7;
+    for (i = 0; i < 3; i++) { b7 = (a >> 7) & 1; c = a & 1; a = (b7 << 7) | (a >> 1); }
+    p->cy = c;
+    return a;
+}
+
+/* calculate_amount_of_scrolling_needed_in_direction (&15d2): how far the screen
+   is from where the player wants it, in eighths of a tile, with the scrolling
+   velocity easing towards the player's own so the view does not jerk */
+static int scroll_needed(struct P *p, int xi)
+{
+    struct G *g = p->g;
+    int a, c, cfrac, v, d;
+    if (g->shipMoving & 128) {
+        if (xi == 0) return 2;                   /* the ship leaves to the right */
+        p->cen[2] = 0x3B;                        /* and the player's height is fixed */
+    }
+    cfrac = p->cenf[xi] >= g->orgF[xi];           /* this carry is wanted much later */
+    a = p->vel[xi];
+    if (xi != 0) a = (((a >> 7) & 1) << 7) | (a >> 1);   /* y counts for half as much */
+    a = div8_signed(p, a);
+    v = g->sVel[xi];
+    d = sub8(p, a, v, 1);
+    if (a != v) {                                 /* ease one step towards it */
+        if (d & 128) v = (v - 2) & 255;
+        v = (v + 1) & 255;
+    }
+    g->sVel[xi] = v;
+    a = div8_signed(p, v); c = p->cy;
+    a = add8(p, a, xi ? g->scrollY : g->scrollX, c);     /* whatever the arrow keys asked for */
+    a = add8(p, a, p->cen[xi], 0);
+    a = sub8(p, a, g->org[xi], cfrac);
+    a = sub8(p, a, g->tab[T_SCRCENTRE + xi], 1);
+    d = sub8(p, a, g->secs[xi], 1);
+    if (d & 128) a = add8(p, a, 1, 0);
+    return a;
+}
+
+/* update_screen_variables (&161f): move the origin by the sections decided, and
+   work out where sprites are to be drawn from.  Only the parts the physics can
+   see are here; the screen addressing is the plotter's business */
+static void update_screen_variables(struct P *p)
+{
+    struct G *g = p->g;
+    int xi, a, c, y, n = 0;
+    for (xi = 2; xi >= 0; xi -= 2)
+        if (g->secs[xi] != 0 && g->orgF[xi] == 0) n = 0xFF;
+    g->newTiles = n;                              /* a tile-aligned edge uncovers new tiles */
+    for (xi = 2; xi >= 0; xi -= 2) {
+        c = (g->secs[xi] >> 7) & 1;
+        a = (g->secs[xi] << 1) & 255;
+        y = c ? 0xFF : 0;
+        if (xi >= 2) a = (a << 1) & 255;          /* a section is &40 of a tile down, &20 across */
+        a = (a << 4) & 255;
+        g->frac[xi] = a;
+        a = add8(p, a, g->orgF[xi], 0);
+        g->orgF[xi] = a;
+        g->sgn[xi] = y;
+        g->org[xi] = add8(p, y, g->org[xi], p->cy);
+    }
+    for (xi = 2; xi >= 0; xi -= 2) {
+        int offF, off;
+        offF = sub8(p, 0, g->frac[xi], 1);
+        off = sub8(p, 0, g->sgn[xi], p->cy);
+        if (off & 128) { off = 0; offF = 0; }     /* nothing to offset when scrolling right or down */
+        a = g->orgF[xi];
+        g->scr[2 + xi] = a;
+        a = add8(p, a, offF, 0);
+        g->scr[3 + xi] = a;
+        c = p->cy;
+        g->scr[6 + xi] = g->org[xi];
+        g->scr[7 + xi] = add8(p, g->org[xi], off, c);
+    }
+    g->scr[0] = g->org[0];
+    g->scr[1] = g->org[2];
+}
+
+/* prepare_screen_for_scrolling (&3684), less the wiping: the strip of tiles the
+   scroll has uncovered is looked at, and a tile that makes an object makes it now */
+static void prepare_screen(struct P *p)
+{
+    struct G *g = p->g;
+    int tx, ty, n, i, fi, y;
+    if (g->secs[0] != 0) {                        /* a vertical edge, four tiles down it */
+        y = (g->sgn[0] + 1) & 255;
+        add8(p, g->tab[T_SCROFFXF + y], g->orgF[0], 0);
+        tx = add8(p, g->tab[T_SCROFFX + y], g->org[0], p->cy);
+        ty = g->org[2];
+        n = 4; fi = 2;
+    } else if (g->secs[2] != 0) {                 /* a horizontal edge, eight along it */
+        y = (g->sgn[2] + 1) & 255;
+        add8(p, g->tab[T_SCROFFYF + y], g->orgF[2], 0);
+        ty = add8(p, g->tab[T_SCROFFY + y], g->org[2], p->cy);
+        tx = g->org[0];
+        n = 8; fi = 0;
+    } else return;
+    if (g->orgF[fi] != 0) n++;                    /* one more if the edge is not tile aligned */
+    g->mode = g->newTiles & 0x80;
+    for (i = 0; i < n; i++) {
+        look_at_tile(p, tx, ty);
+        if (fi == 0) tx = (tx + 1) & 255; else ty = (ty + 1) & 255;
+    }
+}
+
+/* redraw_screen (&158e): the view has moved too far to scroll, so it is rebuilt
+   from the bottom up, four tiles at a time, and every tile of it is looked at */
+static void redraw_screen(struct P *p)
+{
+    struct G *g = p->g;
+    int i;
+    g->orgF[0] = 0x80; g->orgF[2] = 0x80;
+    g->org[2] = sub8(p, p->cen[2], 1, 1);
+    g->org[0] = sub8(p, p->cen[0], 4, p->cy);
+    g->secs[2] = 0xFE; g->secs[0] = 0;
+    update_screen_variables(p);
+    g->org[2] = add8(p, g->org[2], 4, 0);
+    for (i = 0; i < 8; i++) {
+        update_screen_variables(p);
+        prepare_screen(p);
+    }
+    g->secs[2] = 0;
+    g->secMode = 0xF0;                            /* and every secondary object is reconsidered */
+}
+
+/* consider_how_to_scroll_screen (&152a): how far to scroll, or a redraw if the
+   view has moved too far to catch up by scrolling */
+static void consider_how_to_scroll(struct P *p)
+{
+    struct G *g = p->g;
+    int a, absx, absy, yv, s;
+    g->secMode >>= 1;
+    get_this_object_centre(p);
+    a = scroll_needed(p, 0);
+    absx = inv_neg(a);
+    if (absx >= 0x0C) { redraw_screen(p); return; }
+    if (absx >= 2) {
+        s = 2;
+        if (absx > 2 && (g->orgF[0] & 0x7F) == 0) s = 4;      /* aligned to half a tile: go faster */
+        else if ((g->orgF[0] & 0x20) != 0) s = 1;
+    } else s = absx;
+    if (a & 128) s = neg8(s);
+    g->secs[0] = s;
+    yv = scroll_needed(p, 2);
+    absy = inv_neg(yv);
+    if (absy < absx) { g->secs[2] = 0; return; }              /* x wants it more */
+    if (absy >= 0x0C) { redraw_screen(p); return; }
+    if (absy < 2) s = yv;
+    else {
+        s = (g->orgF[2] & 0x40) ? 1 : 2;
+        if (yv & 128) s = neg8(s);
+    }
+    g->secs[2] = s;
+    g->secs[0] = 0;
 }
 
 /* ---- the tiles' own routines (&3e1b-&3fd2) ------------------------------------------------ */
@@ -3785,6 +4067,8 @@ static void call_update_routine(struct P *p)
     else if (t == 0x26) update_triax(p);
     else if (t >= 0x22 && t <= 0x25) update_clawed_robot(p);
     else if (t == 0x47) update_alien_weapon(p);
+    else if (t == 0x46) update_cannon(p);
+    else if (t == 0x4E || t == 0x4F) update_remote_control_device(p);
     else if (t == 0x3B) update_engine_fire(p);
     else if (t == 0x40) update_bush(p);
     else if (t == 0x49) update_placeholder(p);
@@ -4038,7 +4322,7 @@ static void update_object(struct G *g, int slot)
             /* the type's explosion: 0 indestructible (the player teleports away),
                1 and 3 an explosion with a squeal, 2 a fireball */
             int et = (g->tab[T_RTFLAGS + 0x14 + p->type] >> 6) & 3;
-            if (et == 0) { if (slot == 0) fault(g, 7, 0); }
+            if (et == 0) { if (slot == 0) consider_teleporting_damaged_player(p); }
             else if (et == 2) turn_into_fireball(p, 7);
             else explode_with_squeal(p);
         }
@@ -4081,14 +4365,18 @@ static void update_object(struct G *g, int slot)
     OS(O_TX, slot, p->tx); OS(O_ENERGY, slot, p->energy); OS(O_TY, slot, p->ty);
     OS(O_TOUCHING, slot, p->touch | 128); OS(O_STATE, slot, p->state); OS(O_TIMER, slot, p->timer);
     if (slot == g->viewpoint) {
-        /* the screen scrolls after the viewpoint object, and every tile it
-           uncovers whose routine wants to know is told (nests grow their
-           bush, turrets and switches appear).  The scrolling itself is not
-           modelled yet: a trace says which tiles the game looked at */
-        int v, s;
-        g->mode = 0x80;
-        while ((s = peek_site(g, &v)) == SITE_TILE && (v & 0x800000)) look_at_tile(p, v & 255, (v >> 8) & 255);
+        /* the screen follows the viewpoint object, and every tile the scroll
+           uncovers whose routine wants to know is told: nests grow their bush,
+           turrets and switches appear */
+        int i;
+        consider_how_to_scroll(p);            /* which redraws if it must, and then */
+        update_screen_variables(p);           /* the game does these two regardless */
+        prepare_screen(p);
         g->mode = 0x20;
+        if (g->promoteOn) consider_promoting(p);
+        if (g->feedMode)
+            for (i = 0; i < 10; i++)
+                if (g->scr[i] != g->fedScr[i]) { fault(g, 15, (i << 16) | (g->scr[i] << 8) | g->fedScr[i]); break; }
     }
 }
 
@@ -4240,7 +4528,13 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     IN(signs, G_SIGNS); IN(windSign, G_WINDSIGN); IN(relTX, G_RELTX); IN(relTY, G_RELTY); IN(walkSpd, G_WALKSPD);
     IN(maxAcc0, G_MAXACC0); IN(fireCool, G_FIRECOOL); IN(waterTile, G_WATERTILE);
     IN(weapon, G_WEAPON); IN(fired, G_FIRED); IN(blaster, G_BLASTER); IN(pockUsed, G_POCKUSED);
-    IN(eventsOn, G_EVENTSON);
+    IN(eventsOn, G_EVENTSON); IN(promoteOn, G_PROMOTEON);
+    IN(orgF[0], G_ORGXF); IN(orgF[2], G_ORGYF); IN(frac[0], G_FRACX); IN(sgn[0], G_SGNX);
+    IN(frac[2], G_FRACY); IN(sgn[2], G_SGNY); IN(secs[0], G_SECSX); IN(secs[2], G_SECSY);
+    IN(sVel[0], G_SVELX); IN(sVel[2], G_SVELY); IN(newTiles, G_NEWTILES);
+    IN(secMode, G_SECMODE); IN(secNext, G_SECNEXT); IN(secShuf, G_SECSHUF); IN(secDist, G_SECDIST);
+    g->org[0] = (int)game[G_SCR0]; g->org[2] = (int)game[G_SCR1];
+    g->orgF[1] = g->org[1] = g->frac[1] = g->sgn[1] = g->secs[1] = g->sVel[1] = 0;
     for (i = 0; i < 4; i++) g->wlDes[i] = (int)game[G_WLDES0 + i];
     IN(telRem, G_TELREM); IN(telNext, G_TELNEXT); IN(scrollX, G_SCROLLX); IN(scrollY, G_SCROLLY);
     for (i = 0; i < 6; i++) { g->wLo[i] = (int)game[G_WLO0 + i]; g->wHi[i] = (int)game[G_WHI0 + i]; }
@@ -4274,7 +4568,7 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
             int pos = g->feedPos, n;
             lo = f[pos]; hi = f[pos + 1]; pos += 2;
             for (i = 0; i < 8; i++) { int v = f[pos++]; if (!g->eventsOn) g->wl[i] = v; }
-            for (i = 0; i < 10; i++) g->scr[i] = f[pos++];
+            for (i = 0; i < 10; i++) { g->fedScr[i] = f[pos++]; g->scr[i] = g->fedScr[i]; }
             g->relTY = f[pos++];
             n = f[pos++];
             g->feedPos = pos;
@@ -4301,7 +4595,15 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
         pe.touch = 0xFF;
         update_events(g, &pe);
     }
-    if (g->feedMode) g->feedPos = g->feedEnd;
+    if (g->feedMode) {
+        /* nothing the game's plotting did may be left over: a tile the kernel
+           failed to look at would otherwise pass unnoticed, since read_site
+           scans forward over what it does not model */
+        const int *f = (const int *)feed;
+        for (i = g->feedPos; i < g->feedEnd; i += 2)
+            if (f[i] == SITE_TILE && (f[i + 1] & 0x800000)) { fault(g, 16, f[i + 1] & 0xFFFF); break; }
+        g->feedPos = g->feedEnd;
+    }
     /* the main loop after update_objects: the mushroom timers run down and the explosion timer runs up */
     if (g->blueMush) g->blueMush = (g->blueMush - 1) & 255;
     if (g->redMush) g->redMush = (g->redMush - 1) & 255;
@@ -4313,6 +4615,10 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     OUT(signs, G_SIGNS); OUT(windSign, G_WINDSIGN); OUT(relTX, G_RELTX); OUT(relTY, G_RELTY); OUT(walkSpd, G_WALKSPD);
     OUT(maxAcc0, G_MAXACC0); OUT(fireCool, G_FIRECOOL); OUT(waterTile, G_WATERTILE);
     OUT(weapon, G_WEAPON); OUT(fired, G_FIRED); OUT(blaster, G_BLASTER); OUT(pockUsed, G_POCKUSED);
+    OUT(orgF[0], G_ORGXF); OUT(orgF[2], G_ORGYF); OUT(frac[0], G_FRACX); OUT(sgn[0], G_SGNX);
+    OUT(frac[2], G_FRACY); OUT(sgn[2], G_SGNY); OUT(secs[0], G_SECSX); OUT(secs[2], G_SECSY);
+    OUT(sVel[0], G_SVELX); OUT(sVel[2], G_SVELY); OUT(newTiles, G_NEWTILES);
+    OUT(secMode, G_SECMODE); OUT(secNext, G_SECNEXT); OUT(secShuf, G_SECSHUF); OUT(secDist, G_SECDIST);
     for (i = 0; i < 4; i++) game[G_WLDES0 + i] = g->wlDes[i];
     OUT(telRem, G_TELREM); OUT(telNext, G_TELNEXT); OUT(scrollX, G_SCROLLX); OUT(scrollY, G_SCROLLY); OUT(retrieve, G_RETRIEVE);
     for (i = 0; i < 6; i++) { game[G_WLO0 + i] = g->wLo[i]; game[G_WHI0 + i] = g->wHi[i]; }

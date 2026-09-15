@@ -16,7 +16,7 @@ import os
 import sys
 
 from exile6502 import load_listing, Halt
-from exilegame import Game, OBJ, FIELDS
+from exilegame import Game, OBJ, FIELDS, SCREEN_STATE
 
 # object types
 BOULDER = 0x45
@@ -45,7 +45,8 @@ MAGENTA_ROBOT = 0x1C
 # an object's optional dict sets slot fields (exilegame.FIELDS names) after the spawn;
 # lonely True wipes slots 1-15 before every tick, 'clear' wipes them once at the start
 # (the image's slot 1 holds a teleporting Triax), False leaves the image's slots alone;
-# an optional fifth element switches update_events on for the scene
+# an optional fifth element switches update_events on for the scene, and a
+# sixth brings back objects that were put aside when they went offscreen
 # lonely scenes wipe slots 1-15 before every tick, as the first-generation traces did
 SCENARIOS = {
     # the player alone, as before
@@ -159,6 +160,13 @@ SCENARIOS = {
     'events_surface': ((0x88, 0x4D), [], [((), 200)], 'clear', True),
     'events_cave': ((0x5C, 0x61), [], [((), 200)], 'clear', True),
     'events_water': ((0x40, 0xC8), [], [((), 150)], 'clear', True),
+    # with the secondary list live: the objects the game starts with, which sit
+    # offscreen until the view reaches them, come back as the player walks east
+    # to the ship (two grenades at &98,&4d, the cannon at &a0,&49) and in the cave
+    'promote_ship': ((0x8E, 0x4D), [], [(('W',), 100)], 'clear', False, True),
+    'promote_cave': ((0x5C, 0x61), [], [((), 60)], 'clear', False, True),
+    # and with everything on at once, which is how the game will run
+    'promote_events': ((0x8E, 0x4D), [], [(('W',), 100)], 'clear', True, True),
     # two boulders and a piano in a heap
     'heap': ((0x88, 0x4D), [(1, BOULDER, 0x8B, 0x4A), (2, BOULDER, 0x8B, 0x47), (3, PIANO, 0x8C, 0x44)], [((), 120)], False),
 }
@@ -167,7 +175,8 @@ SCENARIOS = {
 def run_scenario(mem, name, spec):
     start, objects, phases, lonely = spec[:4]
     events = spec[4] if len(spec) > 4 else False
-    g = Game(mem, promote=False, events=events)
+    promote = spec[5] if len(spec) > 5 else False
+    g = Game(mem, promote=promote, events=events)
     clear = lonely == 'clear'
     if clear:
         lonely = False
@@ -181,7 +190,10 @@ def run_scenario(mem, name, spec):
         for k, v in (spec[4] if len(spec) > 4 else {}).items():
             g.mem[OBJ[k] + slot] = v
     trace = {'name': name, 'start': start, 'objects': objects, 'lonely': lonely, 'clear': clear,
-             'events': events, 'fields': FIELDS,
+             'events': events, 'promote': promote, 'fields': FIELDS,
+             # everything the screen keeps, as it stands before the first tick: the
+             # kernel works the viewport out from here rather than being told it
+             'screen0': {n: g.mem[a] for n, a in SCREEN_STATE.items()},
              'keys': [], 'ticks': []}
     try:
         for keys, n in phases:

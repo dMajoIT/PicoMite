@@ -60,6 +60,17 @@ FEED_STOPS = frozenset([MAIN_GAME_LOOP, RND_ENTRY, TILE_SITE] + list(SCRATCH_SIT
 # the slot tables in the order a trace records them
 FIELDS = ['type', 'sprite', 'xf', 'x', 'yf', 'y', 'flags', 'palette', 'vx', 'vy', 'target', 'tx',
           'energy', 'ty', 'touching', 'timer', 'tdata', 'state']
+# the screen's own state, by the name the game array uses for it
+SCREEN_STATE = {
+    'orgxf': 0xC7, 'scr0': 0xC8, 'orgyf': 0xC9, 'scr1': 0xCA,
+    'fracx': 0xCB, 'sgnx': 0xCC, 'fracy': 0xCD, 'sgny': 0xCE,
+    'secsx': 0xCF, 'secsy': 0xD1,
+    'svelx': 0x161C, 'svely': 0x161E, 'newtiles': 0x14CD,
+    'secmode': 0x0B76, 'secnext': 0x0B73, 'secshuf': 0x0B74, 'secdist': 0x0B77,
+    'scr2': 0x0B91, 'scr3': 0x0B92, 'scr4': 0x0B93, 'scr5': 0x0B94,
+    'scr6': 0x0B95, 'scr7': 0x0B96, 'scr8': 0x0B97, 'scr9': 0x0B98,
+}
+
 VSYNC_STATE = 0x11E4
 ACTION_KEYS = 0x126B
 FRAME_COUNTER = 0xC0

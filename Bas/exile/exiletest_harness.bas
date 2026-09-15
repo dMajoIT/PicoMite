@@ -1,9 +1,17 @@
 ' exiletest_harness.bas - replay whole scenes through the CSUB kernel, all sixteen slots.
-' gen_exiletest.py puts the layouts before Main and the CSUB block at the end to
-' make exiletest.bas.  For each scene in sc_list.txt: read sc_<name>.txt (tick
+' gen_exiletest.py puts the layouts before Main to make exiletest.bas, and the
+' CSUB itself into out/scene/exile_lib.bas, which the line below loads.
+' For each scene in sc_list.txt: read sc_<name>.txt (tick
 ' count, feed size, the slot tables, the game array), pull sc_<name>.bin (the
 ' feed) into memory, then tick and print every live slot.  run_exiletest.py
 ' compares the output with the trace of the real game.
+' The kernel is a CSUB of some 35 KB.  Pasted into a program it costs its hex
+' text as well, which is more than program memory holds, so it lives in the
+' library: run_exiletest.py puts exile_lib.bas on the drive and this loads it.
+' LIBRARY LOAD must be the program's first statement, and it hashes the file,
+' so a run with an unchanged kernel costs nothing.  The path is literal because
+' MM.INFO(PATH) is "NONE" for a program that arrived over AUTOSAVE.
+LIBRARY LOAD "A:/exile_lib.bas", O
 Option EXPLICIT
 Option DEFAULT INTEGER
 Option BASE 0
