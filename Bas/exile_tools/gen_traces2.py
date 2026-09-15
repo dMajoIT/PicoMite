@@ -204,8 +204,14 @@ def run_scenario(mem, name, spec):
                 g.tick2(set(keys))
                 m = g.mem
                 trace['keys'].append(sorted(keys))
+                # the particle system, which the kernel does not model yet: the
+                # count is the index of the last one, so &ff means none, and the
+                # eight bytes a particle are velocity x and y, the two position
+                # fractions, x, y, the time to live and the colour with its flags
+                npart = (m[0x1E58] + 1) & 0xFF
                 trace['ticks'].append({'slots': g.slots(), 'feed': g.feed, 'wl': list(m[0x082E:0x0836]),
-                                       'scr': g.screen, 'd4': m[0xD4]})
+                                       'scr': g.screen, 'd4': m[0xD4],
+                                       'npart': npart, 'part': list(m[0x28D6:0x28D6 + npart * 8])})
     except Halt as e:
         trace['halt'] = "%s at tick %d" % (e, g.ticks)
         print("  %s: %s" % (name, trace['halt']))

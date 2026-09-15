@@ -247,9 +247,10 @@ Sub DrawObjects(vx, vy)
           oh = (geo >> 40) And &HFF
           sx = obj(O_X * NSLOT + s) * TW + (obj(O_XF * NSLOT + s) \ 8) - vx
           sy = obj(O_Y * NSLOT + s) * TH + (obj(O_YF * NSLOT + s) \ 8) - vy
-          ' whole sprites only for now: a BLIT crossing the right edge would
-          ' spill into the panel
-          If sx >= 0 And sy >= 0 And sx + ow <= VIEWW And sy + oh <= VIEWH Then
+          ' BLIT clips to the framebuffer and takes a negative corner, so a
+          ' sprite may hang off any edge.  What it cannot do is stop at the
+          ' view's right-hand edge, but the panel is drawn over that after.
+          If sx > -ow And sx < VIEWW And sy > -oh And sy < VIEWH Then
             Blit FLASH 2, F, ox, oy, sx, sy, ow, oh, 2
           EndIf
         EndIf
