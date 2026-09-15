@@ -33,6 +33,8 @@ from exile6502 import CPU, load_listing
 
 SPRITE_NONE = 0x46          # tiles_sprite_and_y_flip_table entry &C6 & &7F
 GET_TILE_AND_SET_SPRITE_VARIABLES = 0x2398
+PLOT_MODE = 0x20            # tile_processing_mode as the game plots a tile
+DOOR_TILES = (0x03, 0x04)   # the only tiles whose look a routine settles
 
 
 def generate(mem, progress=True):
@@ -41,6 +43,9 @@ def generate(mem, progress=True):
     n = 65536
     types = bytearray(n)
     drawn = bytearray(n)
+    cdrawn = bytearray(n)       # as the census sees it, with no routine run
+    cflips = bytearray(n)
+    cpal = bytearray(n)
     flips = bytearray(n)
     pal = bytearray(n)
     spr = bytearray(n)
@@ -69,11 +74,30 @@ def generate(mem, progress=True):
             if mem[0x00] & 0x80:
                 frommap[i >> 3] |= 1 << (i & 7)
             ttype[i] = mem[0xBE] if mem[0xBD] else 0
+            cdrawn[i] = drawn[i]; cflips[i] = flips[i]; cpal[i] = pal[i]
+            # A door's look comes from its own routine, so asked with the
+            # routines off it answers blank and the square is drawn as nothing
+            # at all.  That is how the player came to be standing on thin air
+            # inside the ship: the floor there is a door.  Ask again and let
+            # the routine run - for a door it only settles the type, it makes
+            # no object and touches nothing else.
+            if types[i] in DOOR_TILES:
+                mem[0x95] = x
+                mem[0x97] = y
+                mem[0x2D] = PLOT_MODE
+                mem[0x00] = 0
+                cpu.run(GET_TILE_AND_SET_SPRITE_VARIABLES)
+                flips[i] = mem[0x09]
+                drawn[i] = cpu.y
+                pal[i] = mem[0x73]
+                spr[i] = mem[0x75]
+                yfrac[i] = mem[0x51]
+                xfrac[i] = mem[0x4F]
         if progress and (y & 15) == 15:
             sys.stderr.write("\r  row %3d of 256, %5.1f s" % (y + 1, time.time() - t0))
     if progress:
         sys.stderr.write("\r  %d squares in %.1f s, %d instructions\n" % (n, time.time() - t0, cpu.steps))
-    return types, drawn, flips, pal, spr, yfrac, xfrac, tdata, ttype, frommap
+    return types, drawn, flips, pal, spr, yfrac, xfrac, tdata, ttype, frommap, cdrawn, cflips, cpal
 
 
 def check(census_dir, drawn, flips, pal):
@@ -177,10 +201,12 @@ def main():
             print("unknown argument", args[i])
             return 2
     mem = load_listing(listing)
-    types, drawn, flips, pal, spr, yfrac, xfrac, tdata, ttype, frommap = generate(mem)
+    (types, drawn, flips, pal, spr, yfrac, xfrac, tdata, ttype, frommap,
+     cdrawn, cflips, cpal) = generate(mem)
     ok = True
     if census_dir:
-        ok = check(census_dir, drawn, flips, pal)
+        # against what the census walked, which is the world with no routine run
+        ok = check(census_dir, cdrawn, cflips, cpal)
     cells, variants = build_variants(drawn, flips, pal, spr, yfrac, xfrac)
     write_outputs(out_dir, cells, variants, types, drawn, flips, pal, tdata, ttype, frommap)
     empty = sum(1 for c in cells if c == 0)
