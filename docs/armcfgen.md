@@ -238,6 +238,10 @@ These are not style preferences — break them and the blob crashes or won't bui
    add/subtract are fine.
    *Safety net:* if you slip up, the build fails with `undefined reference to
    __aeabi_…` rather than producing a broken blob.
+   `switch` statements are fine: the tool compiles with `-fno-jump-tables`, so a
+   `switch` (or an if‑chain the optimiser would turn into one) becomes compares and
+   branches rather than a jump table through a libgcc helper
+   (`__gnu_thumb1_case_*`) that is not in the blob either.
 2. **Constant data (`.rodata`) is fine.** `const` tables, strings and `double`
    literals work: the tool compiles position‑independent (text‑relative) code and
    appends the rodata to the blob, reached PC‑relative — so it runs wherever it
@@ -519,6 +523,7 @@ No CallTable argument is needed — the blob finds the CallTable itself.
 | `PicoCFunctions.h: No such file` | Add `-I` pointing at the firmware tree. |
 | `… is not fully linked. Re-run with --compile…` | An un‑linked `.o` with unresolved relocations — use `--compile` or a linked `.elf`. |
 | `undefined reference to '__aeabi_…'` | A `double`/64‑bit operator slipped in — route the maths through the CallTable (§1.4). |
+| `undefined reference to '__gnu_thumb1_case_…'` | A jump table got in (an object built without the tool's flags) — compile with `--compile`, or add `-fno-jump-tables` to your own build. |
 | `entry '…' is not 4-byte aligned` | Put the merge entry function first in the source. |
 | `constant data (.rodata) not allowed in JOIN mode` | Remove `const` tables / big literals, or use merge. |
 | `no symbol table` | The object was stripped — rebuild without stripping. |

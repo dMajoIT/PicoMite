@@ -42,7 +42,11 @@ CFLAGS = ["-c", "-mcpu=cortex-m0plus", "-mthumb", "-ffreestanding", "-fno-except
           # each function in its own section so the linker can 4-byte align them
           # (SUBALIGN below) -> any function is valid as a merge entry. -falign-
           # functions is ignored at -Os, so this is the reliable route.
-          "-ffunction-sections"]
+          "-ffunction-sections",
+          # a switch (or an if-chain the optimiser turns into one) would become a
+          # jump table through libgcc's __gnu_thumb1_case_* helpers, which are
+          # not in the blob; compare-and-branch instead.
+          "-fno-jump-tables"]
 
 # Linker script: one resolved .text at 0 holding code AND rodata contiguously, so
 # intra-blob bl's are fixed up, .text.startup/.text.* merge in, and the PC-
