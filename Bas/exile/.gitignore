@@ -1,0 +1,9 @@
+# Programs the tools in Bas/exile_tools build from the harnesses beside them.
+# They are not tracked: they change with every kernel edit, they cannot be
+# rebuilt without the game's disassembly (which this repo does not carry), and
+# physics.bas embeds the game's own data tables.  Rebuild them with
+# gen_phystest.py, gen_csubtest.py, gen_exiletest.py and test_objects.py.
+physics.bas
+physcsub.bas
+exiletest.bas
+objview.bas
