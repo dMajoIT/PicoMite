@@ -881,6 +881,7 @@ The following MATH commands support structure member array syntax:
 |---------|-------------|
 | `MATH V_ROTATE` | Rotate 2D coordinate arrays around a point |
 | `MATH WINDOW` | Normalize array values to a specified range |
+| `MATH CLAMP` | Limit each element to a range: values below `lo` become `lo`, above `hi` become `hi` |
 
 ### Syntax
 
@@ -2514,6 +2515,7 @@ Vertical: (50,0) to (50,100)
 | `MATH POWER a().m, k, b().m` | Raise all elements to power k |
 | `MATH V_ROTATE cx,cy,ang,x().m,y().m,ox().m,oy().m` | Rotate coordinates |
 | `MATH WINDOW a().m, lo, hi, b().m` | Normalize to range [lo, hi] |
+| `MATH CLAMP a().m, lo, hi, b().m` | Limit each element to [lo, hi] |
 | `MATH(MAX(a().m [,idx%]))` | Maximum value (and optional index) |
 | `MATH(MIN(a().m [,idx%]))` | Minimum value (and optional index) |
 | `MATH(MEAN(a().m))` | Arithmetic mean |

@@ -1686,6 +1686,60 @@ void cmd_math(void)
 	else if (mytoupper(*cmdline) == 'C')
 	{
 		unsigned char *tp1 = NULL;
+		tp = checkstring(cmdline, (unsigned char *)"CLAMP");
+		if (tp)
+		{ // MATH CLAMP in(), lo, hi, out() - limit every element of in() to lo..hi
+			int i, card1 = 1, card2 = 1;
+			MMFLOAT *a1float = NULL, *a2float = NULL, lo, hi, v;
+			int64_t *a1int = NULL, *a2int = NULL, ilo, ihi, iv;
+			int s1, s2;
+			getcsargs(&tp, 7);
+			if (argc != 7)
+				StandardError(2);
+			card1 = parsenumberarray(argv[0], &a1float, &a1int, 1, 0, dims, false, &s1);
+			lo = getnumber(argv[2]);
+			hi = getnumber(argv[4]);
+			if (lo > hi)
+				error("Low limit above high limit");
+			card2 = parsenumberarray(argv[6], &a2float, &a2int, 4, 0, dims, true, &s2);
+			if (card1 != card2)
+				error("Size mismatch");
+			ilo = FloatToInt64(lo);
+			ihi = FloatToInt64(hi);
+			if (a2float != NULL && a1float != NULL)
+			{ // float in, float out
+				for (i = 0; i < card1; i++)
+				{
+					v = STRIDE_FLOAT(a1float, i, s1);
+					STRIDE_FLOAT(a2float, i, s2) = v < lo ? lo : (v > hi ? hi : v);
+				}
+			}
+			else if (a2float != NULL && a1float == NULL)
+			{ // integer in, float out
+				for (i = 0; i < card1; i++)
+				{
+					v = (MMFLOAT)STRIDE_INT(a1int, i, s1);
+					STRIDE_FLOAT(a2float, i, s2) = v < lo ? lo : (v > hi ? hi : v);
+				}
+			}
+			else if (a2float == NULL && a1float != NULL)
+			{ // float in, integer out
+				for (i = 0; i < card1; i++)
+				{
+					v = STRIDE_FLOAT(a1float, i, s1);
+					STRIDE_INT(a2int, i, s2) = FloatToInt64(v < lo ? lo : (v > hi ? hi : v));
+				}
+			}
+			else
+			{ // integer in, integer out: the limits are rounded to integers
+				for (i = 0; i < card1; i++)
+				{
+					iv = STRIDE_INT(a1int, i, s1);
+					STRIDE_INT(a2int, i, s2) = iv < ilo ? ilo : (iv > ihi ? ihi : iv);
+				}
+			}
+			return;
+		}
 		tp = checkstring(cmdline, (unsigned char *)"C_ADD");
 		if (tp)
 		{
