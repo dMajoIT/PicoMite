@@ -111,7 +111,7 @@ def main():
         consts.append("Const O_%s = %d" % (f.upper(), i))
     want = ('kmask', 'fault', 'faultarg', 'scr0', 'scr1', 'orgxf', 'orgyf', 'frame',
             'angle', 'aim', 'weapon', 'held', 'feedmode', 'eventson', 'promoteon',
-            'wl0', 'wldes0', 'pocket0', 'wlo0', 'whi0', 'viewpoint')
+            'wl0', 'wldes0', 'pocket0', 'pockused', 'wlo0', 'whi0', 'viewpoint')
     for n in want:
         consts.append("Const G_%s = %d" % (n.upper(), GAME.index(n)))
     consts.append("Const NGAME = %d, NSLOT = %d" % (len(GAME), NSLOT))

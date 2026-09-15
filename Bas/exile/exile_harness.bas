@@ -14,7 +14,9 @@
 '
 '   Q W      walk or fly left and right
 '   P L      up and down
-'   SPACE    fire
+'   SPACE    fire, once a weapon has been found and picked up
+'   F1-F10   pick a weapon up (F1 is the jetpack, which fires nothing);
+'            with shift, pour energy from the one in use into it
 '   arrows   move the view on its own
 '   TAB      the map
 '   ESC      quit
@@ -38,6 +40,7 @@ Dim obj(287), game(NGAME - 1), world(25599), tbl(511), feed(7)
 Dim sheet(OS_N - 1)
 Dim wlx(4)
 Dim keyHeld(38)
+Dim quitting
 Dim homeDir$
 Dim Float frameMs, tickMs, drawMs
 
@@ -54,7 +57,7 @@ Sub Main
   tNext = Timer + MSPERTICK
   Do
     ReadKeys
-    If keyHeld(38) Then quit = 1
+    If quitting Then quit = 1
     game(G_KMASK) = KeyMask()
     t1 = Timer
     ExileTick obj(), game(), world(), tbl(), feed()
@@ -128,34 +131,51 @@ End Sub
 ' the whole set is read once a tick.  Every KEYDOWN call empties the console
 ' input buffer, so nothing else may read it.
 Sub ReadKeys
-  Local i, k
+  Local i, k, sh
   For i = 0 To 38 : keyHeld(i) = 0 : Next i
+  quitting = 0
   For i = 1 To 6
     k = KEYDOWN(i)
     If k = 0 Then Exit For
-    Select Case k
-      Case 81, 113  : keyHeld(K_Q) = 1        ' Q, left
-      Case 87, 119  : keyHeld(K_W) = 1        ' W, right
-      Case 80, 112  : keyHeld(K_P) = 1        ' P, up
-      Case 76, 108  : keyHeld(K_L) = 1        ' L, down
-      Case 32       : keyHeld(K_SPACE) = 1    ' fire
-      Case 128      : keyHeld(K_UP) = 1       ' the arrows move the view
-      Case 129      : keyHeld(K_DOWN) = 1
-      Case 130      : keyHeld(K_LEFT) = 1
-      Case 131      : keyHeld(K_RIGHT) = 1
-      Case 9        : keyHeld(K_TAB) = 1      ' the map
-      Case 71, 103  : keyHeld(K_G) = 1        ' retrieve
-      Case 83, 115  : keyHeld(K_S) = 1        ' store
-      Case 84, 116  : keyHeld(K_T) = 1        ' teleport
-      Case 82, 114  : keyHeld(K_R) = 1        ' remember
-      Case 27       : keyHeld(38) = 1         ' quit, not one of the game's
-    End Select
+    ' KEYDOWN gives characters, not modifiers, so an upper case letter is how
+    ' the shift key shows: which is what shift means to the game anyway
+    If k >= 65 And k <= 90 Then sh = 1 : k = k + 32
+    ' the function keys pick a weapon up, or with shift pour energy into it;
+    ' the game calls them f0 to f9 and F1 is its f0, so the numbers line up
+    If k >= 145 And k <= 154 Then
+      keyHeld(k - 144) = 1
+    Else
+      Select Case k
+        Case 113 : keyHeld(K_Q) = 1          ' left
+        Case 119 : keyHeld(K_W) = 1          ' right
+        Case 112 : keyHeld(K_P) = 1          ' up
+        Case 108 : keyHeld(K_L) = 1          ' down
+        Case 32  : keyHeld(K_SPACE) = 1      ' fire
+        Case 128 : keyHeld(K_UP) = 1         ' the arrows move the view alone
+        Case 129 : keyHeld(K_DOWN) = 1
+        Case 130 : keyHeld(K_LEFT) = 1
+        Case 131 : keyHeld(K_RIGHT) = 1
+        Case 9   : keyHeld(K_TAB) = 1        ' the map
+        Case 103 : keyHeld(K_G) = 1          ' retrieve from a pocket
+        Case 115 : keyHeld(K_S) = 1          ' store into one
+        Case 116 : keyHeld(K_T) = 1          ' teleport
+        Case 114 : keyHeld(K_R) = 1          ' remember where you are
+        Case 121 : keyHeld(K_Y) = 1          ' the whistles
+        Case 117 : keyHeld(K_U) = 1
+        Case 109 : keyHeld(K_M) = 1          ' pick up and drop
+        Case 107 : keyHeld(K_K) = 1          ' aim
+        Case 111 : keyHeld(K_O) = 1
+        Case 46  : keyHeld(K_GT) = 1         ' throw
+        Case 27  : quitting = 1              ' quit, which is not the game's
+      End Select
+    EndIf
   Next i
+  If sh Then keyHeld(K_SHIFT) = 1
 End Sub
 
 Function KeyMask()
   Local i, m
-  For i = 0 To 37
+  For i = 0 To 38
     If keyHeld(i) Then m = m Or (1 << i)
   Next i
   KeyMask = m
@@ -254,13 +274,27 @@ Sub DrawPanel
 End Sub
 
 Sub DrawGauges
-  Local e, j
+  Local e, j, w, i
   e = obj(O_ENERGY * NSLOT) * 56 \ 255
   j = game(G_WHI0) * 56 \ 255
   Box PANELX + 4, 38, 56, 6, 1, RGB(WHITE)
   If e > 2 Then Box PANELX + 5, 39, e - 2, 4, 0, RGB(GREEN), RGB(GREEN)
   Box PANELX + 4, 64, 56, 6, 1, RGB(WHITE)
   If j > 2 Then Box PANELX + 5, 65, j - 2, 4, 0, RGB(GREEN), RGB(GREEN)
+  ' how many pockets are in use, which is the only thing that says they hold
+  ' anything: the five type bytes keep whatever was last in them.  And the
+  ' weapon the function keys have picked up.
+  ' Weapon 0 is the jetpack, which fires nothing: a new game starts there and
+  ' with none of the others collected, so there is nothing to fire until one
+  ' has been found.
+  For i = 0 To 4
+    If i < game(G_POCKUSED) Then Box PANELX + 5 + i * 11, 91, 8, 10, 0, RGB(YELLOW), RGB(YELLOW)
+  Next i
+  w = game(G_WEAPON)
+  Text PANELX + 4, 108, "WEAPON " + Str$(w) + " ", "LT", 7, 1, RGB(CYAN), RGB(BLACK)
+  Box PANELX + 4, 118, 56, 6, 1, RGB(WHITE)
+  e = game(G_WHI0 + w) * 56 \ 255
+  If e > 2 Then Box PANELX + 5, 119, e - 2, 4, 0, RGB(GREEN), RGB(GREEN)
   Text PANELX + 4, 200, "&" + Hex$(obj(O_X * NSLOT), 2) + " &" + Hex$(obj(O_Y * NSLOT), 2), "LT", 7, 1, RGB(WHITE), RGB(BLACK)
   ' the tick and the draw against the 40 ms a frame the game is paced to
   Text PANELX + 4, 212, "t" + Str$(Int(tickMs * 1000)) + " d" + Str$(Int(drawMs * 1000)) + "us  ", "LT", 7, 1, RGB(WHITE), RGB(BLACK)
