@@ -2,7 +2,7 @@
 
 ## Overview
 
-The TILEMAP command provides hardware-accelerated tile map rendering for 2D games on RGB121 displays. It combines flash-resident tilesets (loaded via `FLASH LOAD IMAGE`) with compact internal map storage read from DATA statements to efficiently render scrolling tile-based worlds.
+The TILEMAP command provides hardware-accelerated tile map rendering for 2D games on RGB121 displays. It combines flash-resident tilesets (loaded via `FLASH LOAD IMAGE`) with compact internal map storage, read from DATA statements (`TILEMAP CREATE`) or from a text file (`TILEMAP LOAD`), to efficiently render scrolling tile-based worlds.
 
 Map data uses just 2 bytes per cell (instead of 8 bytes per MMBasic integer), so a 100×50 map occupies only 10 KB internally. Tile attributes can be defined separately, allowing collision detection to distinguish solid, climbable, collectible and other tile types.
 
@@ -12,7 +12,7 @@ Instead of blitting each tile individually from BASIC (which would require hundr
 
 - An RGB121 framebuffer — either a VGA/HDMI display in RGB121 mode, or an LCD display with `FRAMEBUFFER CREATE` (use `FRAMEBUFFER COPY` to update the physical display)
 - A tileset image loaded into flash via `FLASH LOAD IMAGE`
-- Map data defined in DATA statements
+- Map data defined in DATA statements, or in a text file for `TILEMAP LOAD`
 
 ## Tileset Image Format
 
@@ -60,6 +60,38 @@ DATA 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 DATA 0, 0, 2, 0, 0, 0, 3, 0, 0, 0
 DATA 5, 5, 5, 5, 5, 5, 5, 5, 5, 5
 ```
+
+### TILEMAP LOAD file$, id, flashSlot, tileW, tileH, tilesPerRow
+
+Creates a tilemap exactly as `TILEMAP CREATE` does, but reads the map from a text file instead of DATA statements. The file carries the map size, so `cols` and `rows` are not given. This is the way to bring in a map that is too large to keep in program memory as DATA (a 256 x 256 world is 65,536 values), or one produced by a tool on the PC.
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `file$` | string | Name of the map file; `.map` is added if no extension is given |
+| `id` | 1-4 | Tilemap slot number |
+| `flashSlot` | 1-3 | Flash image slot containing the tileset |
+| `tileW` | 1-256 | Width of each tile in pixels |
+| `tileH` | 1-256 | Height of each tile in pixels |
+| `tilesPerRow` | 1-1024 | Number of tiles across the tileset image |
+
+**File format:** plain text. The first two numbers are the width (columns) and the height (rows), each 1-10000, followed by `width * height` tile numbers in row order, 0-65535 (0 = empty). Numbers are separated by commas, spaces, tabs or line breaks in any mixture, so one row per line is the natural layout but not required. Anything from a `'` or `#` to the end of the line is a comment. Line endings may be LF or CR LF.
+
+```
+' level1.map - 10 x 3
+10, 3
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0   ' sky
+0, 0, 2, 0, 0, 0, 3, 0, 0, 0   ' a brick and a stone
+5, 5, 5, 5, 5, 5, 5, 5, 5, 5   ' ground
+```
+
+```
+FLASH LOAD IMAGE 1, "tiles.bmp"
+TILEMAP LOAD "level1.map", 1, 1, 16, 16, 16
+```
+
+The whole file is read before the previous contents of the slot are released, so an error leaves an existing tilemap in that slot untouched, and the file is closed on every error. Errors are reported for a missing file, a file that does not start with a valid width and height, a value above 65535, a character that is not a digit or a separator, and a file with fewer than `width * height` values ("Not enough data in tilemap file (need n, found m)"). Extra values after the last one needed are ignored, so a row comment or trailing blank lines are harmless. Ctrl-C interrupts a long load.
+
+The map occupies 2 bytes per cell of heap exactly as with `TILEMAP CREATE`; a 256 x 256 map is 128 KB.
 
 ### TILEMAP ATTR attrLabel, id, numTiles
 

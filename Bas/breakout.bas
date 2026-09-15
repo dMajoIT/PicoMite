@@ -4,15 +4,22 @@
 ' Uses TILEMAP for the brick field and
 ' TILEMAP sprites for the ball and paddle.
 ' Procedurally generates tileset BMP.
+' The brick field is read from breakout.map
+' with TILEMAP LOAD; keep it beside the program.
 '
 ' Controls: Left/Right arrows to move paddle
 '           Space to launch ball
 '           Q to quit
 '
-' Requires: MODE 2 (320x240 RGB121), SD card
+' Requires: MODE 2 (320x240 RGB121), SD card,
+'           breakout.map on the same drive
 '=============================================
 Option EXPLICIT
 Option BASE 0
+' Button pad on GP8-GP15 where the board has one.  Boards that reserve
+' those pins (the PC3 reserves GP8) fall back to the keyboard or console.
+Dim pad = 1
+On Error Skip 8
 SetPin gp8,din,pullup
 SetPin gp9,din,pullup
 SetPin gp10,din,pullup
@@ -21,6 +28,8 @@ SetPin gp12,din,pullup
 SetPin gp13,din,pullup
 SetPin gp14,din,pullup
 SetPin gp15,din,pullup
+If MM.ErrNo <> 0 Then pad = 0
+On Error Clear
 
 
 ' ---- Display constants ----
@@ -81,7 +90,7 @@ Dim edge_t
 Dim hit_pos!, pad_centre!
 
 ' ---- Speed/difficulty ----
-Const BALL_SPEED! = 4.0
+Dim BALL_SPEED! = 4.0    ' a variable: it rises by a quarter each level
 Const PAD_SPEED = 10
 Const PAD_W_TILES = 5    ' paddle width in tiles
 Const PAD_ROW = 28       ' row where paddle sits
@@ -121,7 +130,7 @@ level = 1
 NewLevel:
 ' Build the map
 Tilemap CLOSE
-Tilemap CREATE mapdata, 1, 1, TW, TH, TPR, COLS, ROWS
+Tilemap LOAD "breakout.map", 1, 1, TW, TH, TPR   ' the brick field is a text file
 Tilemap ATTR tileattrs, 1, 8
 BALL_SPEED=BALL_SPEED*1.25
 ' Count bricks
@@ -129,8 +138,7 @@ bricks_left = 0
 For r = BRICK_START_ROW To BRICK_START_ROW + BRICK_ROWS - 1
  For c = 1 To COLS - 2
    If Tilemap(TILE 1, c * TW + 1, r * TH + 1) > 0 Then
-     If (Tilemap(ATTR 1, Tilemap(TILE 1, c * TW + 1, r * TH + 1)) And A_BRICK)
-Then
+     If (Tilemap(ATTR 1, Tilemap(TILE 1, c * TW + 1, r * TH + 1)) And A_BRICK) Then
        bricks_left = bricks_left + 1
      End If
    End If
@@ -170,8 +178,7 @@ Do
  End If
  If k$ = Chr$(131) Then         ' Right arrow
    pad_x = pad_x + PAD_SPEED
-   If pad_x > SCR_W - PAD_W_TILES * TW - TW Then pad_x = SCR_W - PAD_W_TILES *
-TW - TW
+   If pad_x > SCR_W - PAD_W_TILES * TW - TW Then pad_x = SCR_W - PAD_W_TILES * TW - TW
  End If
  If k$ = "L" And launched = 0 Then launched = 1
  If UCase$(k$) = "Q" Then GoTo Cleanup
@@ -272,10 +279,8 @@ TW - TW
 
    ' ---- Paddle collision ----
    If ball_dy! > 0 Then  ' only when moving down
-     If Int(new_y!) + TH >= PAD_ROW * TH And Int(new_y!) + TH <= PAD_ROW * TH +
-TH Then
-       If Int(new_x!) + TW > pad_x And Int(new_x!) < pad_x + PAD_W_TILES * TW T
-hen
+     If Int(new_y!) + TH >= PAD_ROW * TH And Int(new_y!) + TH <= PAD_ROW * TH + TH Then
+       If Int(new_x!) + TW > pad_x And Int(new_x!) < pad_x + PAD_W_TILES * TW Then
          new_y! = PAD_ROW * TH - TH
          ball_dy! = -Abs(ball_dy!)
 
@@ -410,74 +415,6 @@ Sub GenerateTileset
  Save IMAGE "breakout_tiles.bmp", 0, 0, TPR * TW, TH
 End Sub
 
-' ============================================
-' MAP DATA: 20 cols x 30 rows = 600 values
-' ============================================
-mapdata:
-' Row 0: top wall
-Data 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
-' Row 1: side walls, HUD space
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 2: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 3: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 4: red bricks
-Data 5,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,5
-' Row 5: red bricks
-Data 5,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,5
-' Row 6: yellow bricks
-Data 5,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,5
-' Row 7: yellow bricks
-Data 5,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,5
-' Row 8: green bricks
-Data 5,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,5
-' Row 9: green bricks
-Data 5,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,5
-' Row 10: blue bricks
-Data 5,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5
-' Row 11: blue bricks
-Data 5,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5
-' Row 12: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 13: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 14: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 15: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 16: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 17: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 18: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 19: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 20: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 21: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 22: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 23: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 24: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 25: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 26: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 27: empty
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 28: empty (paddle row - paddle is a sprite)
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-' Row 29: open bottom (ball death zone)
-Data 5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5
-
-' ============================================
-' TILE ATTRIBUTES (8 tile types)
-' ============================================
 tileattrs:
 Data 1      ' tile 1: red brick    - A_BRICK
 Data 1      ' tile 2: yellow brick - A_BRICK
@@ -488,7 +425,8 @@ Data 0      ' tile 6: ball         - none
 Data 0      ' tile 7: paddle       - none
 Data 0      ' tile 8: paddle left  - none
 Function GetPress() As string
- Local x% = Port(GP8,8)
+ Local x% = &HFF
+ If pad Then x% = Port(GP8,8)
  Local y%=x% Xor &HFF
    Select Case y%
      Case 2
@@ -502,6 +440,6 @@ Function GetPress() As string
      Case 16
        GetPress=" "
      Case Else
-     GetPress=""
+     GetPress=Inkey$        ' console or USB keyboard
    End Select
 End Function

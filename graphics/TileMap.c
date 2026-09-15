@@ -44,7 +44,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  *
  * Provides hardware-accelerated tile map rendering using flash-resident
  * tilesets (loaded via FLASH LOAD IMAGE) and compact internal map storage.
- * Map data is read from DATA statements into an internal uint16_t array.
+ * Map data is read from DATA statements (TILEMAP CREATE) or from a text
+ * file (TILEMAP LOAD) into an internal uint16_t array.
  * Tile attributes are stored separately via TILEMAP ATTR.
  * ============================================================================ */
 
@@ -304,7 +305,47 @@ static unsigned char *tilemap_get_dest(unsigned char *token)
     }
 }
 
-/* ---- TILEMAP CREATE id, flashSlot, tileW, tileH, tilesPerRow, cols, rows, mapLabel ---- */
+/* Validate the flash image in 'slot' (loaded by FLASH LOAD IMAGE) and return
+ * its base address and pixel size */
+static uint8_t *tilemap_flash_image(int slot, int *fw, int *fh)
+{
+    uint8_t *base = (uint8_t *)(flash_target_contents + (slot - 1) * MAX_PROG_SIZE);
+    uint32_t *hdr = (uint32_t *)base;
+    *fw = (int)hdr[0];
+    *fh = (int)hdr[1];
+    if (*fw < 1 || *fw > 3840 || *fh < 1 || *fh > 2160)
+        error("Invalid flash image in slot %", slot);
+    return base;
+}
+
+/* Free whatever a tilemap slot holds and mark it inactive */
+static void tilemap_release(tilemap_t *tm)
+{
+    if (tm->map)
+        FreeMemory((unsigned char *)tm->map);
+    if (tm->attrs)
+        FreeMemory((unsigned char *)tm->attrs);
+    memset(tm, 0, sizeof(tilemap_t));
+}
+
+/* Point a released tilemap slot at its tileset and map and activate it */
+static void tilemap_install(tilemap_t *tm, uint8_t *base, int fw, int fh, int tw, int th, int tpr, int cols, int rows, uint16_t *map)
+{
+    tm->map = map;
+    tm->flash_data = base + 8; /* skip 8-byte header (width + height) */
+    tm->flash_w = fw;
+    tm->flash_h = fh;
+    tm->tile_w = tw;
+    tm->tile_h = th;
+    tm->tiles_per_row = tpr;
+    tm->map_cols = cols;
+    tm->map_rows = rows;
+    tm->view_x = 0;
+    tm->view_y = 0;
+    tm->active = true;
+}
+
+/* ---- TILEMAP CREATE mapLabel, id, flashSlot, tileW, tileH, tilesPerRow, cols, rows ---- */
 static void tilemap_cmd_create(unsigned char *p)
 {
     /* Parse label name first (before getcsargs tokenises it) */
@@ -331,36 +372,135 @@ static void tilemap_cmd_create(unsigned char *p)
     int cols = getint(argv[10], 1, 10000);
     int rows = getint(argv[12], 1, 10000);
 
-    /* Validate the flash image */
-    uint8_t *base = (uint8_t *)(flash_target_contents + (slot - 1) * MAX_PROG_SIZE);
-    uint32_t *hdr = (uint32_t *)base;
-    int fw = (int)hdr[0];
-    int fh = (int)hdr[1];
-    if (fw < 1 || fw > 3840 || fh < 1 || fh > 2160)
-        error("Invalid flash image in slot %", slot);
+    int fw, fh;
+    uint8_t *base = tilemap_flash_image(slot, &fw, &fh);
 
-    /* Free previous allocation if re-creating */
+    /* Free previous allocation if re-creating, then read the map from DATA */
     tilemap_t *tm = &tilemaps[id];
-    if (tm->map)
-        FreeMemory((unsigned char *)tm->map);
-    if (tm->attrs)
-        FreeMemory((unsigned char *)tm->attrs);
-    memset(tm, 0, sizeof(tilemap_t));
+    tilemap_release(tm);
+    uint16_t *map = tilemap_read_data(label, cols * rows);
+    tilemap_install(tm, base, fw, fh, tw, th, tpr, cols, rows, map);
+}
 
-    /* Read map data from DATA statements */
-    tm->map = tilemap_read_data(label, cols * rows);
+/* Read the next unsigned decimal value from an open text file.  Values are
+ * separated by commas, spaces, tabs or line ends, and anything from a quote
+ * or a hash to the end of the line is a comment.  Returns 1 with the value,
+ * 0 at the end of the file, -1 on a character that is neither a digit nor a
+ * separator, -2 on a value above 65535. */
+#define TILEMAP_FILE_SEP(c) ((c) == ' ' || (c) == ',' || (c) == '\t' || (c) == '\r' || (c) == '\n' || (c) == 0 || (c) == 0x1a)
+#define TILEMAP_FILE_REM(c) ((c) == '\'' || (c) == '#')
+static int tilemap_file_value(int fnbr, int *value)
+{
+    int c;
+    for (;;)
+    {
+        if (FileEOF(fnbr))
+            return 0;
+        c = FileGetChar(fnbr) & 0xff;
+        if (TILEMAP_FILE_REM(c))
+        {
+            while (!FileEOF(fnbr) && (FileGetChar(fnbr) & 0xff) != '\n')
+                ;
+            continue;
+        }
+        if (TILEMAP_FILE_SEP(c))
+            continue;
+        if (c >= '0' && c <= '9')
+            break;
+        return -1;
+    }
+    int v = 0;
+    for (;;)
+    {
+        v = v * 10 + (c - '0');
+        if (v > 65535)
+            return -2;
+        if (FileEOF(fnbr))
+            break;
+        c = FileGetChar(fnbr) & 0xff;
+        if (c >= '0' && c <= '9')
+            continue;
+        if (TILEMAP_FILE_REM(c))
+        {
+            while (!FileEOF(fnbr) && (FileGetChar(fnbr) & 0xff) != '\n')
+                ;
+            break;
+        }
+        if (TILEMAP_FILE_SEP(c))
+            break;
+        return -1;
+    }
+    *value = v;
+    return 1;
+}
 
-    tm->flash_data = base + 8; /* skip 8-byte header (width + height) */
-    tm->flash_w = fw;
-    tm->flash_h = fh;
-    tm->tile_w = tw;
-    tm->tile_h = th;
-    tm->tiles_per_row = tpr;
-    tm->map_cols = cols;
-    tm->map_rows = rows;
-    tm->view_x = 0;
-    tm->view_y = 0;
-    tm->active = true;
+/* ---- TILEMAP LOAD file$, id, flashSlot, tileW, tileH, tilesPerRow ----
+ * As CREATE, but the map comes from a text file: the width and height
+ * first, then width * height tile numbers, row by row. */
+static void tilemap_cmd_load(unsigned char *p)
+{
+    getcsargs(&p, 11);
+    if (argc != 11)
+        SyntaxError();
+
+    char *fname = (char *)getFstring(argv[0]);
+    int id = getint(argv[2], 1, MAX_TILEMAPS) - 1;
+    int slot = getint(argv[4], 1, MAXFLASHSLOTS);
+    int tw = getint(argv[6], 1, 256);
+    int th = getint(argv[8], 1, 256);
+    int tpr = getint(argv[10], 1, 1024);
+
+    int fw, fh;
+    uint8_t *base = tilemap_flash_image(slot, &fw, &fh);
+
+    AppendDefaultExtension(fname, ".map");
+    if (!InitSDCard())
+        return;
+    int fnbr = FindFreeFileNbr();
+    if (!BasicFileOpen(fname, fnbr, FA_READ))
+        return;
+
+    /* The file starts with the map size */
+    int cols = 0, rows = 0;
+    int r = tilemap_file_value(fnbr, &cols);
+    if (r == 1)
+        r = tilemap_file_value(fnbr, &rows);
+    if (r != 1 || cols < 1 || cols > 10000 || rows < 1 || rows > 10000)
+    {
+        FileClose(fnbr);
+        if (r == -1)
+            error("Invalid character in tilemap file");
+        error("Tilemap file must start with width and height (1-10000)");
+    }
+
+    /* Then cols * rows tile numbers */
+    int count = cols * rows;
+    uint16_t *map = (uint16_t *)GetMemory(count * sizeof(uint16_t));
+    int idx = 0, v = 0;
+    while (idx < count)
+    {
+        r = tilemap_file_value(fnbr, &v);
+        if (r != 1)
+            break;
+        map[idx++] = (uint16_t)v;
+        if ((idx & 255) == 0)
+            routinechecks();
+    }
+    FileClose(fnbr);
+    if (r < 0 || idx < count)
+    {
+        FreeMemory((unsigned char *)map);
+        if (r == -1)
+            error("Invalid character in tilemap file");
+        if (r == -2)
+            error("Value out of range in tilemap file");
+        error("Not enough data in tilemap file (need %, found %)", count, idx);
+    }
+
+    /* Only now, with the whole map read, replace whatever the slot held */
+    tilemap_t *tm = &tilemaps[id];
+    tilemap_release(tm);
+    tilemap_install(tm, base, fw, fh, tw, th, tpr, cols, rows, map);
 }
 
 /* ---- TILEMAP ATTR id, numTiles, attrLabel ---- */
@@ -586,6 +726,10 @@ void MIPS16 cmd_tilemap(void)
     if ((p = checkstring(cmdline, (unsigned char *)"CREATE")))
     {
         tilemap_cmd_create(p);
+    }
+    else if ((p = checkstring(cmdline, (unsigned char *)"LOAD")))
+    {
+        tilemap_cmd_load(p);
     }
     else if ((p = checkstring(cmdline, (unsigned char *)"ATTR")))
     {
