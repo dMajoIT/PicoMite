@@ -167,6 +167,9 @@ SCENARIOS = {
     'promote_cave': ((0x5C, 0x61), [], [((), 60)], 'clear', False, True),
     # and with everything on at once, which is how the game will run
     'promote_events': ((0x8E, 0x4D), [], [(('W',), 100)], 'clear', True, True),
+    # where a new game starts, walking east off the ledge: the square to the
+    # player's right is open for three squares down, so it should fall
+    'ship_gap': ((0x9B, 0x3B), [], [((), 20), (('W',), 80)], 'clear'),
     # two boulders and a piano in a heap
     'heap': ((0x88, 0x4D), [(1, BOULDER, 0x8B, 0x4A), (2, BOULDER, 0x8B, 0x47), (3, PIANO, 0x8C, 0x44)], [((), 120)], False),
 }
