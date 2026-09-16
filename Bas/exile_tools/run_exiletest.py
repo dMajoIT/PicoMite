@@ -7,10 +7,13 @@ tick and slot that differ.
 
     python run_exiletest.py [--nofiles] [--noworld] [--lib] [--reput] [--log file] [names...]
 
+Files go over the board's own TFTP server (PC3_HOST, default 192.168.1.245),
+which is about ten times faster than XMODEM; set PC3_HOST= empty for serial.
+
 --nofiles skips putting the data files; --noworld puts the scene files but
 not world_types.bin; --lib puts only the kernel (out/scene/exile_lib.bas),
 which is what changes when csub/exile.c does; names restrict the scenes run
-(sc_list.txt is rewritten).  The board is the one PC3_PORT names.
+(sc_list.txt is rewritten).  The board is the one PC3_PORT names (COM4 if unset).
 
 Only the files that changed are put.  The board keeps a list of what it
 already has, one digest a file, in `exile_put.txt` on its own drive, so a
@@ -32,8 +35,14 @@ import time
 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(here, '..', 'elite_tools'))
-os.environ.setdefault('PC3_PORT', 'COM17')
+os.environ.setdefault('PC3_PORT', 'COM4')
+# The WEB builds serve TFTP straight onto the board's drive, which is an order
+# of magnitude faster than XMODEM down the console: the full scene set took
+# fourteen minutes over serial and takes under a minute this way.  Set
+# PC3_HOST to the board's address, or to an empty string to force serial.
+PC3_HOST = os.environ.get('PC3_HOST', '192.168.1.245')
 from pc3 import PC3   # noqa: E402
+import tftp            # noqa: E402
 from exilegame import FIELDS   # noqa: E402
 
 out = os.path.join(here, 'out')
@@ -53,10 +62,24 @@ def board_manifest(b, force=False):
         return {}
     try:
         # XMODEM pads its last block, so the file comes back longer than it was
-        raw = b.grab(MANIFEST, timeout=60).rstrip(bytes([26, 0]))
+        if PC3_HOST:
+            raw = tftp.fetch(PC3_HOST, MANIFEST)          # no XMODEM padding this way
+        else:
+            # XMODEM pads its last block, so the file comes back longer than it was
+            raw = b.grab(MANIFEST, timeout=60).rstrip(bytes([26, 0]))
         return json.loads(raw.decode())
     except Exception:
         return {}      # never been used, wiped, or unreadable: put everything
+
+
+def put_one(b, name, data):
+    """One file to the board, over TFTP where there is a network path and down
+       the console otherwise.  The board announces each TFTP transfer on its own
+       console, so the caller drains that before talking to the prompt again."""
+    if PC3_HOST:
+        tftp.send(PC3_HOST, name, data)
+    else:
+        b.xmodem_send(name, data)
 
 
 def put_files(b, manifest, items):
@@ -68,7 +91,7 @@ def put_files(b, manifest, items):
             skipped += 1
             continue
         t0 = time.time()
-        b.xmodem_send(name, data)
+        put_one(b, name, data)
         manifest[name] = d        # only after the put, so a failure re-puts
         put += 1
         print("put %-28s %6d bytes %5.1fs" % (name, len(data), time.time() - t0))
@@ -78,7 +101,7 @@ def put_files(b, manifest, items):
 def save_manifest(b, manifest, put):
     """Leave the list on the board, but only if it changed."""
     if put:
-        b.xmodem_send(MANIFEST, json.dumps(manifest, sort_keys=True).encode())
+        put_one(b, MANIFEST, json.dumps(manifest, sort_keys=True).encode())
 
 
 def parse(output):
@@ -185,6 +208,8 @@ def main():
         t0 = time.time()
         put, skipped = put_files(b, manifest, items)
         save_manifest(b, manifest, put)
+        if put and PC3_HOST:
+            b.attention()    # the board printed a line per transfer; clear it
         if files:
             print("put %d files in %.0f s, %d already on the board" % (put, time.time() - t0, skipped))
         src = open(os.path.join(here, '..', 'exile', 'exiletest.bas'), encoding='utf-8').read()

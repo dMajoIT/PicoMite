@@ -9,7 +9,7 @@ the same list the board keeps for the tests (see run_exiletest.py).
 
 The game does not end by itself, so this starts it and reads the console for a
 few seconds to show that it began.  It keeps playing on the board afterwards;
-ESC on the board's own keyboard stops it.  The board is the one PC3_PORT names.
+ESC on the board's own keyboard stops it.  The board is the one PC3_PORT names (COM4 if unset).
 """
 import os
 import sys
@@ -17,7 +17,7 @@ import time
 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(here, '..', 'elite_tools'))
-os.environ.setdefault('PC3_PORT', 'COM17')
+os.environ.setdefault('PC3_PORT', 'COM4')
 from pc3 import PC3                                              # noqa: E402
 from run_exiletest import board_manifest, put_files, save_manifest   # noqa: E402
 

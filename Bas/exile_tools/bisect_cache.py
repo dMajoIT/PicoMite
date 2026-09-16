@@ -21,7 +21,7 @@ import time
 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(here, '..', 'elite_tools'))
-os.environ.setdefault('PC3_PORT', 'COM17')
+os.environ.setdefault('PC3_PORT', 'COM4')
 from pc3 import PC3   # noqa: E402
 from run_phystest import parse, COMPARE   # noqa: E402
 

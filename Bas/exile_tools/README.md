@@ -153,18 +153,47 @@ come from the second flash slot.
 
 ## Putting the scenes on the board
 
-A full set is a hundred and sixty files and eleven minutes over XMODEM, which
-is longer than the run it feeds. Most of them do not change between runs, so
-`run_exiletest.py` puts only the ones that did: the board keeps a list of what
-it holds, one digest a file, in `exile_put.txt` on its own drive. Keeping the
-list there rather than here is the point. A drive that is wiped, or a board
-that has never been used, loses the list along with the files, so the next run
-puts everything without being told. `--reput` ignores the list.
+A full set is some 250 files and about 3 MB. Down the console over XMODEM that
+took fourteen minutes, which was longer than the run it fed. The WEB builds
+serve TFTP straight onto the board's drive, and that is where the files go now:
 
-Two things to know if you read the digests back. XMODEM pads its last block
-with `&h1a`, so a file comes back longer than it went, and the list is written
-only after the files it describes, so a transfer that fails part way is simply
-put again next time.
+| | XMODEM | TFTP |
+|---|---|---|
+| the full set | 230 files, 828 s | 246 files, **78 s** |
+| `world_types.bin`, 204,800 bytes | about 40 s | **3.6 s** |
+| `sc_worm.bin`, 30,152 bytes | 5.7 s | **0.56 s** |
+
+`PC3_HOST` names the board (the default is the COM4 rig); setting it to an
+empty string forces the console path, which is what a board without WiFi, or
+the VGA rig, needs. `tftp.py` is the client: plain RFC 1350, no dependency, and
+nothing to tune because the server is fixed at 512-byte blocks with no option
+negotiation (`third_party_mod/tftp.c`), so the round trip sets the rate.
+
+Two things the server does that a client has to expect. It takes **one transfer
+at a time** and needs a moment to close the file, so a put sent straight after
+another is refused with "Only one connection at a time is supported" rather
+than queued; the client backs off and asks again. And it announces every
+transfer on the board's own console, so the runner drains that before it talks
+to the prompt again.
+
+Most files do not change between runs, so `run_exiletest.py` still puts only
+the ones that did: the board keeps a list of what it holds, one digest a file,
+in `exile_put.txt` on its own drive. Keeping the list there rather than here is
+the point. A drive that is wiped, or a board that has never been used, loses
+the list along with the files, so the next run puts everything without being
+told. `--reput` ignores the list. Changing one scene now costs three seconds of
+transfer and five of running.
+
+One thing to know if you read the digests back over the console: XMODEM pads
+its last block with `&h1a`, so a file comes back longer than it went. TFTP does
+not. Either way the list is written only after the files it describes, so a
+transfer that fails part way is simply put again next time.
+
+If `LIBRARY LOAD` ever answers "Flash Slot 3 already in use", the library region
+holds something and `LIBRARY DELETE` will not clear it: that command returns
+without erasing whenever no library is *registered* (`core/MM_Misc.c`), and both
+`LIBRARY LIST` and `FLASH LIST 3` print nothing for a CSUB-only library, so
+everything looks empty while `FLASH LIST` says otherwise. `FLASH ERASE 3`.
 
 ## What is still missing
 
