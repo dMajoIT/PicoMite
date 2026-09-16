@@ -288,6 +288,15 @@ SCENARIOS = {
     # &a1,&c8 is an open square with 79 of its 81 neighbours earth, far enough
     # down that the odds are worth having.
     'worm_emerges': ((0xA1, 0xC8), [], [((), 200)], 'clear', True),
+    # the game's opening move, end to end: walk right onto the switch, which
+    # unlocks both hatches, come back onto the upper one and drop through both.
+    # Nothing else covers the ship's switch, and the port had never been asked
+    # to do this - the sequence a player has to perform to start the game.
+    'ship_escape': ((0x9B, 0x3B), [],
+                    [((), 20), (('W',), 30), ((), 40), (('Q',), 8), ((), 220)],
+                    'clear', False, False,
+                    {0x0995: 0x81, 0x099B: 0x8A, 0x09AE: 0xFD,
+                     0x09AF: 0x81, 0x09D2: 0xFD, 0x0A23: 0x80}),
     # the game's own opening: the player standing in the ship.  The two hatches
     # are the only doors of the fifty in the world whose tertiary byte has bit 7
     # clear in the snapshot the listing was taken from, which tells the game they
@@ -392,6 +401,7 @@ PROVES = {
     'slime_boulder': ['convert_yellow_slime_to_coronium_boulder'],
     'cannon_kill': ['explode_object_with_loud_squeal'],
     'ship_start': ['update_door', 'update_metal_door_tile'],
+    'ship_escape': ['update_switch', 'process_switch_effects', 'toggle_door_opening'],
     'worm_emerges': ['emerge_worm_or_maggot', 'spawn_object_in_event'],
     'plasma_water': ['remove_plasma_ball_or_fireball'],
     'chatter_whistle': ['activate_chatter'],

@@ -4960,8 +4960,14 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
         g->feedPos = g->feedEnd;
     }
     /* the main loop after update_objects: the mushroom timers run down and the explosion timer runs up */
+    /* update_player_mushroom_timers_loop (&19d2) counts X down from 2 to 0, and
+       &0819 is the byte before player_mushroom_timers: X = 0 is the door timer.
+       Missing it left the timer stuck at the sixty a door sets when it opens,
+       always above the twenty that lets a door turn round, so no door in the
+       game ever finished opening and none could be gone through. */
     if (g->blueMush) g->blueMush = (g->blueMush - 1) & 255;
     if (g->redMush) g->redMush = (g->redMush - 1) & 255;
+    if (g->doorTimer) g->doorTimer = (g->doorTimer - 1) & 255;
     if (g->expTimer) g->expTimer = (g->expTimer + 1) & 255;
 #define OUT(field, idx) game[idx] = g->field
     OUT(frm, G_FRAME); OUT(angle, G_ANGLE); OUT(facing, G_FACING); OUT(immob, G_IMMOB); OUT(tImmob, G_TIMMOB);

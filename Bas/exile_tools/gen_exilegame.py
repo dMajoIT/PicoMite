@@ -77,8 +77,39 @@ def tables_bytes():
 LANDING_SITE = (0x8A, 0x4A)
 SHIP = None
 
-# the tertiary data offsets of the ship's two hatches, &9c,&3c and &9c,&3d
-SHIP_DOOR_OFFSETS = (0x0F, 0x29)                      # None means the binary's own saved position
+# The tile types whose update routine makes an object out of the tertiary data.
+TERTIARY_CREATORS = (0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x0C)
+
+
+def unmade_tertiaries(mem):
+    """The tertiary bytes a new game should have waiting, but this one does not.
+
+    A tile that carries an object only makes it while bit 7 of its tertiary data
+    byte is set; the game clears that bit as it makes the object (&408a, "clear
+    &80 to indicate object is now primary") so it is made once and no more.  The
+    listing is a snapshot of a game in progress, so everything that happened to
+    be a live object at that moment has the bit clear - and the sixteen object
+    slots it carries are empty, so those objects exist nowhere at all.
+
+    Six squares are in that state and five of them are in the ship, which is
+    where the snapshot was taken: both hatches, the switch that opens them, and
+    both engines.  Without this the player begins sealed in a ship with no way
+    out, no switch to press and no engines.
+
+    Bit 7 is only ever that flag - it is stripped when the object is made - so
+    putting it back cannot change what the object is.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    w = open(os.path.join(here, 'out', 'world_types.bin'), 'rb').read()
+    tf, tdata = w[0:65536], w[65536:131072]
+    offs = set()
+    for i in range(65536):
+        if (tf[i] & 0x3F) not in TERTIARY_CREATORS:
+            continue
+        off = tdata[i]
+        if off and not (mem[0x0986 + off] & 0x80):
+            offs.add(off)
+    return sorted(offs)                      # None means the binary's own saved position
 
 
 def start_arrays(mem, start=SHIP):
@@ -108,14 +139,7 @@ def start_arrays(mem, start=SHIP):
     mem[0xDE] = 0xC0         # the player upright
     mem[0xDD] = 0xFF         # holding nothing
     g = game_init(mem)
-    # The two doors out of the ship are the only ones of the fifty in the world
-    # whose tertiary data byte has bit 7 clear.  Bit 7 clear tells the game the
-    # object "has already become primary" (&404d), so it will never create it -
-    # and the sixteen object slots the snapshot carries are empty, so it never
-    # became anything.  That is an artefact of where the snapshot was taken:
-    # with the player standing in the ship and both hatches live as objects.
-    # A new game has them waiting as tertiary objects, so put them back.
-    for off in SHIP_DOOR_OFFSETS:
+    for off in unmade_tertiaries(mem):      # see the note there: the ship's own fittings
         g['tert%d' % off] |= 0x80
     g['feedmode'] = 0        # its own random numbers, and the keys from the array
     g['eventson'] = 1
