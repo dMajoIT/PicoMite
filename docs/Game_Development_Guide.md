@@ -1694,6 +1694,40 @@ first line, so it is only available to a program **loaded from a file**. One
 that arrived over `AUTOSAVE` has no header and `MM.INFO(PATH)` returns `"NONE"`,
 which is why the fallback is worth keeping while developing.
 
+Three things that mechanism does not tell you, each of which is a bug that only
+shows up on somebody else's machine.
+
+**The current drive and directory have nothing to do with where your program was
+loaded from.** A program loaded from `B:/mygame/` starts with the current drive
+still set to whatever it was, usually `A:`, so a bare `"level1.dat"` does not
+resolve beside the program - it resolves somewhere you have never thought about.
+That is why *every* path needs the prefix rather than most of them, and it is
+why developing from the root of `A:` hides the fault completely: there, the two
+happen to be the same place.
+
+**Drive letters are not the same devices on every machine.** On a PicoCalc `A:`
+is the internal flash and `B:` is the SD card; on other builds the roles and the
+sizes differ. A hardwired `A:/` is not merely inflexible - on some machines it
+points at a different physical device from the one the user put your game on.
+Let `MM.INFO(PATH)` say which drive you are on instead of deciding for the user.
+
+**Everything the game writes needs the same treatment as everything it reads.**
+Saved games, high scores, screenshots and settings are easy to miss, because
+they are not "assets" and they are usually written from a different part of the
+code. A game installed on `B:` whose save file is hardwired to `A:/save.dat`
+works perfectly on the desk it was written on and fails for the first person who
+puts it anywhere else.
+
+Two details. `MM.INFO(PATH)` includes its trailing slash, so `home$ +
+"level1.dat"` is right and `home$ + "/level1.dat"` is not. And anything optional
+should be asked about rather than assumed, so that a missing file degrades
+instead of stopping the game:
+
+```basic
+IF DIR$(home$ + "title.jpg", FILE) <> "" THEN LOAD JPG home$ + "title.jpg"
+```
+
+
 ### Code too big for program memory
 
 Program memory is split into two halves of the same size - the program and the
