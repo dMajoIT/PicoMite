@@ -1036,8 +1036,6 @@ void MIPS16 cmd_flash(void)
     }
     else if ((p = checkstring(cmdline, (unsigned char *)"ERASE")))
     {
-        if (CurrentLinePtr)
-            StandardError(10);
         int i = getint(p, 1, MAXFLASHSLOTS);
         if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && i == MAXFLASHSLOTS)
             StandardErrorParam(25, MAXFLASHSLOTS);
@@ -2869,7 +2867,6 @@ void MIPS16 cmd_save(void)
                 bmpcolourpallette[m * 4 + 3] = 0;
             }
 
-
         //        unsigned char bmppad[3] = {0, 0, 0};
         getcsargs(&p, 9);
         if (!InitSDCard())
@@ -3027,7 +3024,6 @@ void MIPS16 cmd_save(void)
                     bmpcolourpallette[m * 4 + 2] = (unsigned char)(MapRGB[m]);
                     bmpcolourpallette[m * 4 + 3] = 0;
                 }
-
 
             unsigned char bmppad[3] = {0, 0, 0};
             getcsargs(&p, 9);
