@@ -17,7 +17,7 @@ The screen state is left at zero, so the first tick finds the view nowhere
 near the player and redraws the whole of it, which is what the game does when
 it starts.
 
-    python gen_exilegame.py exile-disassembly.txt
+    python gen_exilegame.py exile-disassembly.txt [--start &8a,&4a | --saved]
 """
 import json
 import os
@@ -45,12 +45,27 @@ def tables_bytes():
     return os.path.getsize(os.path.join(out, 'scene', 'tables2.bin'))
 
 
-def start_arrays(mem):
+# Where a new game puts the player.  The position in the binary is a saved one
+# - the routine that loads it is called relocate_binary_and_saved_position -
+# and it sits inside the ship, walled in by two doors that will not open until
+# the view scrolls onto their tiles, which inside the ship it never does: from
+# there the player can reach five squares by three and no more.  The landing
+# site outside gives fifty by thirty-six, which is somewhere a game can be
+# played and tested.  --start &xx,&yy overrides it.
+LANDING_SITE = (0x8A, 0x4A)
+
+
+def start_arrays(mem, start=LANDING_SITE):
     """The slots and the game array as a new game begins."""
     slots = [0] * (NSLOT * len(FIELDS))
     for f in FIELDS:
         for sl in range(NSLOT):
             slots[FIELDS.index(f) * NSLOT + sl] = mem[OBJ[f] + sl]
+    if start:
+        slots[FIELDS.index('x') * NSLOT] = start[0]
+        slots[FIELDS.index('y') * NSLOT] = start[1]
+        slots[FIELDS.index('xf') * NSLOT] = 0x80
+        slots[FIELDS.index('yf') * NSLOT] = 0
     g = game_init(mem)
     g['feedmode'] = 0        # its own random numbers, and the keys from the array
     g['eventson'] = 1
@@ -93,10 +108,16 @@ def main():
         print(__doc__)
         return 2
     mem = load_listing(sys.argv[1])
+    start = LANDING_SITE
+    if '--start' in sys.argv:
+        a, b = sys.argv[sys.argv.index('--start') + 1].replace('&', '').split(',')
+        start = (int(a, 16), int(b, 16))
+    elif '--saved' in sys.argv:
+        start = None                 # wherever the binary's saved position puts it
     gdir = os.path.join(out, 'game')
     os.makedirs(gdir, exist_ok=True)
 
-    slots, game = start_arrays(mem)
+    slots, game = start_arrays(mem, start)
     open(os.path.join(gdir, 'start_obj.bin'), 'wb').write(struct.pack('<%dq' % len(slots), *slots))
     open(os.path.join(gdir, 'start_game.bin'), 'wb').write(struct.pack('<%dq' % len(game), *game))
     print("the player starts at (&%02x, &%02x); game array %d of %d"
