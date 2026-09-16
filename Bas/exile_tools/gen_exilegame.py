@@ -29,7 +29,7 @@ out = os.path.join(here, 'out')
 
 from exile6502 import load_listing                              # noqa: E402
 from exilegame import OBJ, FIELDS, ACTIONS                      # noqa: E402
-from gen_exiletest import GAME, GAME_SIZE, NSLOT, game_init     # noqa: E402
+from gen_exiletest import GAME, GAME_SIZE, NSLOT, game_init, TABLES   # noqa: E402
 
 # the sheet lookup, as offsets into one array of 64-bit words
 NSPRITE = 128          # sprite ids run to 124
@@ -38,6 +38,16 @@ OS_COUNT = OS_START + NSPRITE      # how many palettes that sprite has
 OS_PAL = OS_COUNT + NSPRITE        # the palette of each pair
 OS_GEO = None                      # x | y<<16 | w<<32 | h<<40, four flips a pair
 OS_N = None
+
+
+def table_offset(name):
+    """Where a packed table starts, so the program can read it out of tbl()."""
+    off = 0
+    for cname, _, size in TABLES:
+        if cname == name:
+            return off
+        off += size
+    raise KeyError(name)
 
 
 def tables_bytes():
@@ -132,7 +142,7 @@ def main():
         consts.append("Const O_%s = %d" % (f.upper(), i))
     want = ('kmask', 'fault', 'faultarg', 'scr0', 'scr1', 'orgxf', 'orgyf', 'frame',
             'angle', 'aim', 'weapon', 'held', 'feedmode', 'eventson', 'promoteon',
-            'wl0', 'wldes0', 'pocket0', 'pockused', 'wlo0', 'whi0', 'viewpoint', 'npart')
+            'wl0', 'wldes0', 'pocket0', 'pockused', 'wlo0', 'whi0', 'viewpoint', 'npart', 'nsnd', 'snd0')
     for n in want:
         consts.append("Const G_%s = %d" % (n.upper(), GAME.index(n)))
     consts.append("Const NGAME = %d, NSLOT = %d" % (len(GAME), NSLOT))
@@ -140,6 +150,9 @@ def main():
     # a particle is eight words: the two velocities, the two position fractions,
     # the two squares, the time to live, and the colour with its flags
     consts.append("Const P_VX = 0, P_VY = 1, P_XF = 2, P_YF = 3, P_X = 4, P_Y = 5, P_TTL = 6, P_CF = 7")
+    # where the sound chip's envelopes and the forty-eight sounds sit in tbl()
+    consts.append("Const T_ENVELOPE = %d, T_SOUND = %d, NSOUND = 48"
+                  % (table_offset('ENVELOPE'), table_offset('SOUND')))
     consts.append("Const OS_START = %d, OS_COUNT = %d, OS_PAL = %d, OS_GEO = %d, OS_N = %d"
                   % (OS_START, OS_COUNT, OS_PAL, OS_GEO, OS_N))
     for i, a in enumerate(ACTIONS):

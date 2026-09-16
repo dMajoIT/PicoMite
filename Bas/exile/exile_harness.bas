@@ -41,6 +41,8 @@ Dim part(255)                          ' the particle system, eight words a part
 Dim sheet(OS_N - 1)
 Dim wlx(4)
 Dim pcol(7)                            ' the eight colours a particle can be
+Dim sAct(3), sNext                     ' which of the four channels are sounding
+Dim sEv(7), sDur(7), sSoff(7), sSdur(7), sLoop(7), sLoff(7)
 Dim keyHeld(38)
 Dim quitting
 Dim homeDir$
@@ -54,6 +56,7 @@ Sub Main
   Local Float t0, t1, tNext, tickAcc, drawAcc
   homeDir$ = MM.Info(Path) : If homeDir$ = "NONE" Then homeDir$ = "A:/"
   wlx(0) = 0 : wlx(1) = &H54 : wlx(2) = &H74 : wlx(3) = &HA0 : wlx(4) = 256
+  sNext = 1
   pcol(0) = RGB(BLACK)  : pcol(1) = RGB(RED)     : pcol(2) = RGB(GREEN) : pcol(3) = RGB(YELLOW)
   pcol(4) = RGB(BLUE)   : pcol(5) = RGB(MAGENTA) : pcol(6) = RGB(CYAN)  : pcol(7) = RGB(WHITE)
   LoadAll
@@ -70,6 +73,7 @@ Sub Main
       Print "fault "; game(G_FAULT); " arg &"; Hex$(game(G_FAULTARG)); " at frame "; game(G_FRAME)
       game(G_FAULT) = 0
     EndIf
+    StepSounds
     t1 = Timer
     DrawFrame
     drawAcc = drawAcc + (Timer - t1)
@@ -279,6 +283,121 @@ Sub DrawParticles(vx, vy)
       Box sx, sy, 2, 2, 0, pcol(part(i * 8 + P_CF) And 7), pcol(part(i * 8 + P_CF) And 7)
     EndIf
   Next i
+End Sub
+
+' ---------------------------------------------------------------- the sound
+' The game drives the sound chip itself: on every vsync its interrupt steps a
+' volume envelope and a frequency envelope for each channel and writes the
+' chip's registers.  This runs those envelopes exactly as the 6502 does, from
+' the game's own two hundred and eight byte table, and hands each step to
+' PLAY BBC SOUND as a flushed fifty millisecond note.  A tick is forty
+' milliseconds and a vsync twenty, so every channel takes two steps a tick.
+'
+' The kernel does not make a noise: it leaves the numbers of the sounds that
+' started on a queue, and this starts them.
+Sub StartSound(n)
+  Local ch, i, b, at
+  at = T_SOUND + n * 5
+  If Peek(VAR tbl(), at + 4) Then       ' the call that takes channel zero
+    ch = 0
+  Else
+    ch = 0
+    For i = 1 To 3
+      If sAct(i) = 0 Then ch = i : Exit For
+    Next i
+    If ch = 0 Then ch = sNext : sNext = sNext + 1 : If sNext > 3 Then sNext = 1
+  EndIf
+  b = Peek(VAR tbl(), at + 1)
+  sEv(ch * 2) = b And &HF0 : sDur(ch * 2) = b And 15
+  sSoff(ch * 2) = Peek(VAR tbl(), at)
+  b = Peek(VAR tbl(), at + 3)
+  sEv(ch * 2 + 1) = b And &HF0 : sDur(ch * 2 + 1) = b And 15
+  sSoff(ch * 2 + 1) = Peek(VAR tbl(), at + 2)
+  sSdur(ch * 2) = 0 : sSdur(ch * 2 + 1) = 0
+  sLoop(ch * 2) = 0 : sLoop(ch * 2 + 1) = 0
+  sLoff(ch * 2) = 0 : sLoff(ch * 2 + 1) = 0
+  sAct(ch) = 1
+End Sub
+
+' One vsync of the game's update_sound_envelope for one envelope.  Returns 1
+' while it is still running, 0 once it has ended.
+Function EnvStep(k)
+  Local y, a
+  If sDur(k) = 0 Then EnvStep = 0 : Exit Function
+  y = sSoff(k)
+  If sSdur(k) = 0 Then
+    If sLoop(k) = 0 Then                 ' not inside a loop: one of the duration's stages
+      sDur(k) = sDur(k) - 1
+      If sDur(k) = 0 Then EnvStep = 0 : Exit Function
+    EndIf
+    y = y + 1
+    a = Peek(VAR tbl(), T_ENVELOPE + y)
+    If a >= 128 Then                     ' a loop marker: an end, a start, or both
+      sLoop(k) = (sLoop(k) - 1) And 255
+      If sLoop(k) >= 128 Then             ' it went negative: start the loop this byte describes
+        sLoop(k) = a And 127
+        y = y + 1
+        sLoff(k) = y
+      EndIf
+      y = sLoff(k)                        ' back to the top of the loop body
+      a = Peek(VAR tbl(), T_ENVELOPE + y)
+    EndIf
+    sSdur(k) = a                          ' first byte of a stage: how many steps
+    y = y + 1
+    sSoff(k) = y                          ' second byte: the delta, added each step
+  EndIf
+  sEv(k) = (sEv(k) + Peek(VAR tbl(), T_ENVELOPE + y)) And 255
+  sSdur(k) = sSdur(k) - 1
+  EnvStep = 1
+End Function
+
+' The chip period the game writes for an eight bit frequency value
+Function SndPeriod(v)
+  Local a
+  a = 255 - v
+  If a >= &HB6 Then
+    SndPeriod = ((a - &H80) And 255) << 3
+  ElseIf a >= &H84 Then
+    SndPeriod = ((a - &H4A) And 255) << 2
+  ElseIf a >= &H40 Then
+    SndPeriod = ((a - &H10) And 255) << 1
+  Else
+    SndPeriod = (a + &H20) And 255
+  EndIf
+End Function
+
+' Two vsyncs for every channel that is sounding, then one note each
+Sub StepSounds
+  Local ch, i, k, loud, per, pit, skip
+  Local Float f
+  For i = 0 To game(G_NSND) - 1
+    StartSound game(G_SND0 + i)
+  Next i
+  For ch = 0 To 3
+    If sAct(ch) Then
+    k = ch * 2
+    For i = 1 To 2
+      skip = 0
+      If EnvStep(k) = 0 Then              ' the volume envelope is over: fade by two a vsync
+        If sEv(k) < 2 Then skip = 1 Else sEv(k) = sEv(k) - 2
+      EndIf
+      If skip = 0 Then skip = EnvStep(k + 1)
+    Next i
+    loud = sEv(k) >> 4
+    If loud = 0 Then
+      sAct(ch) = 0
+      Play BBC SOUND &H10 + ch, 0, 0, 1
+    Else
+      per = SndPeriod(sEv(k + 1))
+      If per < 1 Then per = 1
+      f = 125000.0 / per
+      pit = Cint(89 + 48 * Log(f / 440) / Log(2))
+      If pit < 0 Then pit = 0
+      If pit > 255 Then pit = 255
+      Play BBC SOUND &H10 + ch, -loud, pit, 1
+    EndIf
+    EndIf
+  Next ch
 End Sub
 
 ' ---------------------------------------------------------------- the panel
