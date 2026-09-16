@@ -4689,6 +4689,13 @@ static const struct optmap_s OptionMap[] = {
     OPT(MOUSE_CLOCK, OPT_U8),
     OPT(MOUSE_DATA, OPT_U8),
     OPT(CPU_Speed, OPT_I32),
+#ifdef PICOMITEWEB
+    /* Guarded although the struct field is not: PicoMite.c reads
+       Option.Telnet on non-WEB builds too, where it is inert only
+       because nothing can set it. Restoring TELNET CONSOLE ONLY (-1)
+       onto such a build would stop the USB CDC console being read. */
+    OPT(Telnet, OPT_I32),
+#endif
     OPT(DefaultFC, OPT_I32),
     OPT(DefaultBC, OPT_I32),
     OPT(KEYBOARD_CLOCK, OPT_U8),
@@ -4819,6 +4826,7 @@ static const struct optmap_s OptionMap[] = {
     OPT(F9key, OPT_STR),
     OPT(SSID, OPT_STR),
     OPT(PASSWORD, OPT_STR),
+    OPT(platform, OPT_STR),
     OPT(BACKLIGHT_KBD, OPT_U8),
     OPT(BACKLIGHT_LCD, OPT_U8),
     OPT(GPSBaud, OPT_U32),
