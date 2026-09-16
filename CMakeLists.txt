@@ -139,6 +139,7 @@ set(OPTIMIZED_SOURCES
 	third_party_mod/aes.c
 	misc/XModem.c
 	io/AudioBBC.c
+	misc/FileIO.c
 )
 
 set(FULL_RP2040_VARIANTS
