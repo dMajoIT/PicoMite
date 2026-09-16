@@ -1020,6 +1020,47 @@ PLAY SOUND 2, R, Q, 220, 30
 ' Available waveforms: Sine, sQuare, Triangle, saWtooth, Noise, Pink, User, Off
 ```
 
+### The BBC Micro's SOUND and ENVELOPE
+
+`PLAY BBC SOUND` and `PLAY BBC ENVELOPE` are the BBC Micro's own statements,
+with the same parameters and the same units. They are worth knowing even if the
+BBC means nothing to you, because what they give you is a **four-channel
+sequencer**: a note is queued with a duration and plays in its turn, so a tune
+is a run of statements rather than a timing problem your game loop has to solve.
+
+```basic
+PLAY BBC ENVELOPE 1, 1, 0,0,0, 0,0,0, 126, -50, 0, 0, 100, 0
+PLAY BBC SOUND &H13, 1, 100, 1      ' channel 3, flushed, envelope 1, 1/20 s
+```
+
+- `channel` is a word, not a number: the low nibble picks channel 0-3, `&10`
+  flushes whatever that channel already has queued, `&100`/`&200`/`&300` hold
+  notes back so several channels start together.
+- `amplitude` is `-15` to `0` for a plain volume, or `1` to `16` to select an
+  envelope, which then shapes the volume and can bend the pitch as it plays.
+- `pitch` is in quarter semitones, 89 being the A above middle C.
+- `duration` is in twentieths of a second, or `255` for "until something
+  flushes it".
+
+Three things to plan around:
+
+**Each channel queues eight notes, and a ninth statement waits.** That is what
+paces a tune for free - a loop of `PLAY BBC SOUND` statements runs at the speed
+of the music with no timing code at all. It also means a sixteen-note jingle
+fired from inside your game loop stops the game dead halfway through. Keep a
+burst under eight notes, or split it around whatever else has to happen.
+
+**Channel 0 is the noise generator, and its pitch 3 and 7 are clocked by
+channel 1.** A noise effect that wants a sweep gets it by playing a tone on
+channel 1 at the same time, which means channel 1 is not free for music while
+that effect is sounding.
+
+**Flushing is how effects retrigger, and how they cut each other off.** An
+engine noise that reasserts itself every frame on a flushed channel will also
+silence an explosion started on that channel a moment earlier - the explosion
+never gets past its first frame. Decide which channel each class of effect owns,
+and if two must share, gate the quieter one.
+
 ### Playing Audio Files
 
 ```basic
@@ -1405,6 +1446,80 @@ cases pass. Count how often they agree, report the number, and write down why it
 cannot be 100%, so that a change making it worse is visible rather than
 invisible.
 
+**The notes are not the code.** A good disassembly comes with prose explaining
+what its author worked out, and that prose is the most useful thing in the
+repository - and it is not authoritative. In one of these ports the notes said
+the game ran at 50 frames a second, in four separate places. The code did not:
+the routine *named* for waiting on the vertical sync actually spins on the
+centisecond clock until it reads 3, so the frame is 30 ms and the game runs at
+33.3 Hz. Every rate in the game - rotation, gravity, the periodic force update,
+the countdown - was derived from that one tick, so believing the notes made the
+port 1.5x too fast in every axis at once.
+
+That class of error is invisible, which is what makes it expensive. Nothing
+looks wrong. No single behaviour is identifiably off, because they are all off
+by the same factor and stay in proportion to one another. What it feels like
+from outside is that the game is unreasonably hard, which is exactly how the
+first tester described it. **If a port feels unfairly difficult and you cannot
+point at anything specific, suspect the frame rate before you suspect your
+physics.**
+
+**Find the frame before you write anything else.** Locate the routine the
+original loops on, work out from the instructions how long it really waits, and
+derive every rate in your port from that number. In the same port the notes gave
+the rotation as "about 8.4 steps per second"; the code is a three-frames-in-four
+test, which at the real rate is 25 steps a second. You cannot get that figure at
+all until you know what a frame is.
+
+**Behaviour that reads as a bug is usually faithful.** You will find things that
+look obviously broken: a game that starts you with an empty tank, a refuelling
+test that only succeeds from one side, a pickup that requires you to move *away*
+from the thing you are collecting, a shield that burns fuel and protects you
+from nothing. Every one of those was in the original, and every one is part of
+how the game plays. Check the code before you "fix" anything. And when you keep
+a rule that surprises people, **say so in the game** - leaving without the cargo
+silently costs a life in the original, and a two-word warning in the status
+panel turned that from a stream of bug reports into a mechanic.
+
+**Transcribing a table proves nothing about the code that reads it.** The sound
+in one port was audited by decoding every sound and envelope block out of the
+original binary and diffing it against what the port emitted. All of them
+matched byte for byte - and eight call sites were still wrong, because the
+blocks were only primitives. The original played almost none of them directly:
+it wrapped them in named routines, and every piece of behaviour lived in the
+wrappers. One of them muted the engine for a fixed number of frames after an
+explosion, and without it a player who was thrusting when they died cut their
+own explosion off after a single frame. **Audit the callers, not just the
+constants.**
+
+**A transcribed test still needs its inputs checked.** That same audit missed a
+bug a player found in the first minute: the walking sound played continuously
+whether or not the character was moving. The test itself was a faithful
+transcription - "did he move?" - and what was wrong was the flag feeding it,
+which eight places in the update set for their own reasons, one of them firing
+every frame while he stood still on solid ground. Comparing our code against the
+original could never have found it, because the line that was wrong had no
+counterpart in the original at all. When you transcribe a condition, check that
+the values it tests are derived the way the original derives them - and prefer
+to **measure state rather than flag it**. "His position changed since last
+frame" cannot be set by accident in a branch that was thinking about something
+else.
+
+**Generate the source.** These ports are a few thousand lines of MMBasic each,
+and most of that is `DATA`: level maps, sprite bitmaps, terrain runs, sound
+blocks, physics tables. None of it was typed. A short Python script per
+subsystem reads the original binary and prints the `DATA` statements, and a
+`build.py` splices them into the hand-written code and writes the finished
+`.bas`. When you discover the level format was wrong you re-run the generator
+instead of re-keying three hundred lines, and the generator is where you write
+down what you learned about the format.
+
+One rule that costs an afternoon to learn: **have the build write straight to
+the file you actually load.** A build that lands in the tools directory beside
+the generator is a build nobody runs, and when the game on the board stubbornly
+fails to change you will look for the fault in your code long before you look
+for it in the path.
+
 ---
 
 ## Shipping a Finished Game
@@ -1502,12 +1617,30 @@ is 8. A 64-pixel status panel holds ten characters of font 7 and no more, so
 Count before designing a panel, and leave headroom for the largest value a field
 can reach, not the value it shows at the start.
 
-**Names are unique irrespective of type suffix.** `k` and `k$` are the same
-name, and a no-argument built-in function name cannot be used as a variable.
+**Names are unique irrespective of type suffix, and case does not separate
+them either.** `k` and `k$` are the same name, and so are `FIREGAP` and
+`fireGap` - which collides with the natural habit of naming a constant after the
+variable it initialises. `CONST FIREGAP = 12` followed by a variable `fireGap`
+is a redeclaration, not a pair. Give the constant a different word, not a
+different case. A no-argument built-in function name cannot be used as a
+variable at all.
 
-**Variables cannot be invented at the prompt** once a program using
-`OPTION EXPLICIT` has run, and the command line truncates around 250
-characters - both worth knowing when poking at a running game from the console.
+**A SUB cannot be named after a command.** `SUB Play` looks perfectly
+reasonable and then fails at every call site with "Unknown command", because
+`PLAY` is parsed as the statement it is. The same goes for any other keyword.
+
+**Poking at a running game from the console has two sharp edges.** A program's
+`CONST`, `DIM` and `OPTION EXPLICIT` are *statements*: none of those names exist
+until the program has executed them. Call one of its SUBs from the prompt before
+any `RUN` and it runs with every constant reading as an undeclared zero, and
+without `OPTION EXPLICIT` there to object - so the call succeeds and quietly
+tests something other than what you meant. Start the program, let it reach its
+title screen and break out of it first. After that: variables cannot be invented
+at the prompt, the command line truncates around 250 characters, a `FOR` and its
+`NEXT` cannot span two entries, and `MM.ERRNO` is cleared only by a `RUN`, so a
+stale value from a typo three commands ago will sit there through every later
+test. Breaking out with Ctrl-C while a SUB is executing leaves that SUB's locals
+declared, which makes the next call behave differently from the first.
 
 ---
 
@@ -1524,6 +1657,7 @@ Each subsystem has a detailed reference manual available as a PDF:
 | **BLIT_User_Manual.pdf** | All BLIT commands: bare copy, READ/WRITE/CLOSE buffers, LOAD BMP, MERGE, RESIZE scaling, FLASH, FRAMEBUFFER copy, COMPRESSED, MEMORY |
 | **FRAME_User_Manual.pdf** | Character-cell frame buffer, panels, box-drawing, text HUDs |
 | **PLAY_SAMPLE_User_Manual.pdf** | Wavetable synthesis, ADSR envelopes, waveform generation |
+| **PLAY_BBC_User_Manual.md** (in `docs/`) | The BBC Micro's `SOUND` and `ENVELOPE`: channel words, envelope parameters, queues, flushing, synchronised chords |
 | **Game_Input_Devices_Manual.pdf** | Keyboard (INKEY$, KEYDOWN), USB gamepads (PS4/PS3/Xbox/Generic), Wii Nunchuck & Classic, GPIO buttons |
 
 Happy game making!
