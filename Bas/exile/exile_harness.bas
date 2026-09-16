@@ -41,7 +41,7 @@ Dim part(255)                          ' the particle system, eight words a part
 Dim sheet(OS_N - 1)
 Dim wlx(4)
 Dim pcol(7)                            ' the eight colours a particle can be
-Dim sAct(3), sNext                     ' which of the four channels are sounding
+Dim sAct(3), sWhat(3), sNext           ' which of the four channels are sounding, and with what
 Dim sEv(7), sDur(7), sSoff(7), sSdur(7), sLoop(7), sLoff(7)
 Dim keyHeld(38)
 Dim quitting
@@ -295,20 +295,31 @@ End Sub
 '
 ' The kernel does not make a noise: it leaves the numbers of the sounds that
 ' started on a queue, and this starts them.
-Sub StartSound(n)
-  Local ch, i, b, at
+' n carries the sound in its low byte and how far off the middle of the screen
+' it happened in the next, which is how much quieter it is.
+Sub StartSound(q)
+  Local ch, i, b, at, n, far, v
+  n = q And 255 : far = (q >> 8) And 15
   at = T_SOUND + n * 5
   If Peek(VAR tbl(), at + 4) Then       ' the call that takes channel zero
     ch = 0
   Else
-    ch = 0
-    For i = 1 To 3
-      If sAct(i) = 0 Then ch = i : Exit For
+    ch = -1
+    For i = 1 To 3                      ' one already playing this sound takes it again
+      If sAct(i) And sWhat(i) = n Then ch = i : Exit For
     Next i
-    If ch = 0 Then ch = sNext : sNext = sNext + 1 : If sNext > 3 Then sNext = 1
+    If ch < 0 Then
+      For i = 1 To 3
+        If sAct(i) = 0 Then ch = i : Exit For
+      Next i
+    EndIf
+    If ch < 0 Then ch = sNext : sNext = sNext + 1 : If sNext > 3 Then sNext = 1
   EndIf
+  sWhat(ch) = n
   b = Peek(VAR tbl(), at + 1)
-  sEv(ch * 2) = b And &HF0 : sDur(ch * 2) = b And 15
+  v = (b And &HF0) - (far << 4)
+  If v < 0 Then v = 0
+  sEv(ch * 2) = v : sDur(ch * 2) = b And 15
   sSoff(ch * 2) = Peek(VAR tbl(), at)
   b = Peek(VAR tbl(), at + 3)
   sEv(ch * 2 + 1) = b And &HF0 : sDur(ch * 2 + 1) = b And 15
