@@ -184,6 +184,33 @@ def object_sheet():
     return words, len(pairs)
 
 
+def flash_image_bytes(path):
+    """Exactly what FLASH LOAD IMAGE leaves in a slot after its eight-byte
+       header, worked out from the BMP.  The board writes the picture top row
+       first, two pixels a byte with the left pixel in the LOW nibble, and it
+       converts each colour with RGB121() - which is not the BMP's own index,
+       so the palette has to be run through the same arithmetic.  Verified
+       against a board word for word at both ends of the image."""
+    d = open(path, 'rb').read()
+    off = struct.unpack('<I', d[10:14])[0]
+    w, h = struct.unpack('<ii', d[18:26])
+    h = abs(h)
+    hdr = struct.unpack('<I', d[14:18])[0]
+    pal = d[14 + hdr:off]
+    nib = {}
+    for i in range(16):
+        b, g, r, _ = pal[i * 4:i * 4 + 4]
+        c = (r << 16) | (g << 8) | b
+        nib[i] = ((c & 0x800000) >> 20) | ((c & 0xC000) >> 13) | ((c & 0x80) >> 7)
+    stride = ((w * 4 + 31) // 32) * 4
+    out = bytearray()
+    for r in range(h - 1, -1, -1):
+        row = d[off + r * stride:off + r * stride + w // 2]
+        for bb in row:
+            out.append(nib[bb >> 4] | (nib[bb & 15] << 4))
+    return bytes(out), w, h
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -229,12 +256,26 @@ def main():
     consts.append("Const OS_PALCOL = %d, GLOW_PALETTE = %d" % (OS_PALCOL, GLOW_PALETTE))
     from gen_objects import RESERVED
     consts.append("Const GLOW0 = %d, GLOW1 = %d, GLOW2 = %d" % RESERVED)
-    # the size of each flash image, so the game can tell its own tileset from
-    # whatever else a board may have left in the slot
+    # What must be in the flash slots for THIS build.  The size alone is not
+    # enough: the door fix renumbered the tiles without changing slot 1's
+    # height, so a board carrying the old sheet passed the size check and drew
+    # the new maps through the old tiles.  So take some words of the real
+    # picture too, spread through it, and compare those.
+    probes = []
     for n, f in ((1, "exile_tiles1.bmp"), (2, "exile_slot2.bmp")):
-        hdr = open(os.path.join(out, f), "rb").read(26)
-        w, h = struct.unpack("<ii", hdr[18:26])
-        consts.append("Const SLOT%dW = %d, SLOT%dH = %d" % (n, w, n, abs(h)))
+        fb, w, h = flash_image_bytes(os.path.join(out, f))
+        consts.append("Const SLOT%dW = %d, SLOT%dH = %d" % (n, w, n, h))
+        for k in range(1, 7):
+            o = (len(fb) * k // 7) & ~3
+            # step on until the word is not blank: a run of zeroes matches any
+            # other image's blank run and would prove nothing
+            while o + 4 <= len(fb) and fb[o:o + 4] == bytes(4):
+                o += 4
+            probes.append((n, 8 + o, struct.unpack("<I", fb[o:o + 4])[0]))
+    consts.append("Const NPROBE = %d" % len(probes))
+    consts.append("TilesetProbes:")
+    for n, o, v in probes:
+        consts.append("Data %d, %d, &H%08X" % (n, o, v))
 
     for i, a in enumerate(ACTIONS):
         consts.append("Const K_%s = %d" % (a.upper().replace('@', 'AT').replace('>', 'GT').replace('<', 'LT'), i))

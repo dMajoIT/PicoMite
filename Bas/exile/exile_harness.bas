@@ -77,10 +77,15 @@ Sub Main
   sNext = 1
   ' which actions repeat while held, from the game's own table at &121d;
   ' every other action fires once and waits for the key to be let go
+  ' RESTORE to the label, never to "the first DATA in the program": the
+  ' generated constants carry a DATA block of their own and are put in front
+  ' of this one, so an unqualified READ here took the wrong numbers.
   Local kr, kri
+  Restore RepeatingKeys
   For kri = 0 To 14
     Read kr : kRepeat(kr) = 1
   Next kri
+RepeatingKeys:
   Data 0, 11, 14, 19, 20, 21, 22, 28, 29, 30, 33, 34, 35, 37, 38
   pcol(0) = RGB(BLACK)  : pcol(1) = RGB(RED)     : pcol(2) = RGB(GREEN) : pcol(3) = RGB(YELLOW)
   pcol(4) = RGB(BLUE)   : pcol(5) = RGB(MAGENTA) : pcol(6) = RGB(CYAN)  : pcol(7) = RGB(WHITE)
@@ -150,6 +155,7 @@ Sub LoadAll
   ' that has not run the game before.  FLASH ERASE 1, 2 undoes it.
   LoadTileset 1, "exile_tiles1.bmp", SLOT1W, SLOT1H
   LoadTileset 2, "exile_slot2.bmp", SLOT2W, SLOT2H
+  CheckTilesets
   Tilemap CLOSE
   t0 = Timer
   Tilemap LOAD homeDir$ + "exile_w1.map", 1, 1, TW, TH, 8
@@ -172,6 +178,27 @@ Sub LoadAll
   Close #1
   Print "the player starts at &"; Hex$(obj(O_X * NSLOT), 2); " &"; Hex$(obj(O_Y * NSLOT), 2)
   Option CONSOLE SERIAL                ' the screen is the game's from here on
+End Sub
+
+' The size of an image says it is AN image, not that it is OURS: the door fix
+' renumbered the tiles without changing slot 1's height, and a board carrying
+' the old sheet drew the new maps through the old tiles - a clean-looking
+' picture made of the wrong squares.  So look at the picture itself.  A dozen
+' words of it are generated into DATA by gen_exilegame.py, straight from the
+' BMPs, because what FLASH LOAD IMAGE stores is worked out from them exactly:
+' eight bytes of width and height, then the picture top row first, two pixels
+' a byte with the left one in the low nibble, each colour through RGB121().
+Sub CheckTilesets
+  Local i, slot, off, want
+  Restore TilesetProbes
+  For i = 1 To NPROBE
+    Read slot, off, want
+    If Peek(WORD MM.INFO(FLASH ADDRESS slot) + off) <> want Then
+      Print "  slot "; Str$(slot); " holds a tileset from another build"
+      Error "FLASH ERASE " + Str$(slot) + ", then run again"
+    EndIf
+  Next i
+  Print "  tilesets verified"
 End Sub
 
 Sub LoadTileset(slot, file$, wantW, wantH)
