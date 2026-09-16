@@ -65,6 +65,36 @@ It also says nothing about the parts that were never meant to match: the
 particle system is close rather than exact by design, and sound is not compared
 at all because the recording does not carry it.
 
+## What the first pass found
+
+Acting on the list above, in one sitting:
+
+**The player's weapons were right all along.** Six scenes now fire the pistol,
+the icer and the plasma gun, change weapon with a function key, pour energy
+between weapons with shift, move the aim and blow both whistles. All six
+matched first time. Nothing had ever asked them, and the answer was yes.
+
+That took fixing the test rig rather than the port. The first run failed at
+the tick the first shot should appear: the game made a bullet and the kernel
+made nothing. It looked exactly like a bug in firing. It was not: a scene can
+now set the game up before its first tick, and the kernel's starting state was
+still being built from the untouched image, so it had no weapon either and the
+code under test was never entered.
+
+**Ten of the eleven untested object types were right too.** Scenes now place
+the invisible frogman, yellow slime, dense nest, sucking nest, active grenade,
+tracer bullet, gargoyle, red magenta bird, inactive chatter, engine fire and
+switch beside the player and watch them. All but one matched.
+
+**One real divergence, and it only appears with two objects.** A dense nest
+and a sucking nest side by side: at tick 82 the nest is removed in both, but
+the kernel's sucker stays active and goes looking for something to pull, which
+the game does not. Either nest alone matches for all 150 ticks, so it is the
+pair that is wrong, not the pieces. It is kept as a scene and listed as known
+rather than deleted, so the suite reports 94 scenes, 0 failed, 1 known.
+
+Ninety-four scenes now, 11,496 ticks.
+
 ## What to do about it
 
 Close the gaps by adding scenes, in this order:

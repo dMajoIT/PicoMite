@@ -193,6 +193,22 @@ SCENARIOS = {
     # both whistles, which need the things that let you blow them
     'whistles': ((0x88, 0x4D), [], [((), 5), (('Y',), 10), ((), 20), (('U',), 10), ((), 40)],
                  'clear', False, False, {0x0816: 0x80, 0x0817: 0x80}),
+    # The eleven object types the coverage audit found had never been run.
+    # Each is put beside the player where it can be watched for a while.
+    'untested_a': ((0x88, 0x4D), [(1, 0x08, 0x8B, 0x4D), (2, 0x0B, 0x8D, 0x4D)],
+                   [((), 120)], 'clear'),                      # invisible frogman, yellow slime
+    'dense_nest': ((0x88, 0x4D), [(1, 0x0C, 0x8B, 0x4C)], [((), 150)], 'clear'),
+    'sucking_nest': ((0x88, 0x4D), [(1, 0x0D, 0x8D, 0x4C)], [((), 150)], 'clear'),
+    # the two together: a sucking nest with something it can pull at
+    'two_nests': ((0x88, 0x4D), [(1, 0x0C, 0x8B, 0x4C), (2, 0x0D, 0x8D, 0x4C)], [((), 150)], 'clear'),
+    'untested_c': ((0x88, 0x4D), [(1, 0x12, 0x8A, 0x4C), (2, 0x14, 0x8C, 0x4C)],
+                   [((), 120)], 'clear'),                      # active grenade, tracer bullet
+    'untested_d': ((0x88, 0x4D), [(1, 0x28, 0x8B, 0x4B), (2, 0x30, 0x8D, 0x4A)],
+                   [((), 150)], 'clear'),                      # gargoyle, red magenta bird
+    'untested_e': ((0x88, 0x4D), [(1, 0x38, 0x8B, 0x4D), (2, 0x3B, 0x8D, 0x4D)],
+                   [((), 150)], 'clear'),                      # inactive chatter, engine fire
+    'untested_f': ((0x88, 0x4D), [(1, 0x42, 0x8A, 0x4D)],
+                   [((), 20), (('W',), 40), ((), 60)], 'clear'),   # a switch, walked into
     # two boulders and a piano in a heap
     'heap': ((0x88, 0x4D), [(1, BOULDER, 0x8B, 0x4A), (2, BOULDER, 0x8B, 0x47), (3, PIANO, 0x8C, 0x44)], [((), 120)], False),
 }
