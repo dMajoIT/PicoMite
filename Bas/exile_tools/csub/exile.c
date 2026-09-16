@@ -342,7 +342,14 @@ static void move_particle(struct P *p, int i)
    once all thirty-two are in use */
 static int free_particle(struct G *g)
 {
-    if (g->nPart >= 0x1F) return (read_rnd_byte(g, 0x2174, 1) & 0xF8) >> 3;
+    /* The two draws a particle can make on its own account - which one to
+       replace when all thirty-two are in use, and the colour the water turns
+       one - are taken from the generator directly rather than from the feed.
+       A particle's life depends on what the game's plotting found under it,
+       pixel by pixel, which the kernel cannot see; so particle lifetimes are
+       close but not exact, and this keeps that from moving any draw the
+       physics depends on. */
+    if (g->nPart >= 0x1F) return (g->rnd[1] & 0xF8) >> 3;
     g->nPart++;
     return g->nPart;
 }
@@ -456,8 +463,7 @@ static void update_particles(struct P *p)
             if (PT(P_Y, i) > p->wlRow ||
                 (PT(P_Y, i) == p->wlRow && PT(P_YF, i) >= p->wlFrac)) {
                 add = 0xFD;
-                a = read_site(g, 0x20C1);
-                g->signs = (a & 7) | 6;          /* and turns cyan or white */
+                g->signs = (g->rnd[1] & 7) | 6;   /* and turns cyan or white */
             }
             a = add8(p, add, PT(P_VY, i), 0);
             if (!p->ov) PTS(P_VY, i, a);
@@ -4738,7 +4744,10 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
             int pos = g->feedPos, n;
             lo = f[pos]; hi = f[pos + 1]; pos += 2;
             for (i = 0; i < 8; i++) { int v = f[pos++]; if (!g->eventsOn) g->wl[i] = v; }
-            for (i = 0; i < 10; i++) { g->fedScr[i] = f[pos++]; g->scr[i] = g->fedScr[i]; }
+            /* the screen the game had at the end of this tick, kept only to check
+               the kernel's own against: the kernel works it out itself now, and
+               during an object's update the origin is still the previous tick's */
+            for (i = 0; i < 10; i++) g->fedScr[i] = f[pos++];
             g->relTY = f[pos++];
             n = f[pos++];
             g->feedPos = pos;
