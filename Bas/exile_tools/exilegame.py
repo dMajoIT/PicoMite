@@ -39,7 +39,10 @@ RND_SITES = [0x14E0, 0x2174, 0x220D, 0x2243, 0x24AD, 0x24DA, 0x257A, 0x25E8, 0x2
              0x46AB, 0x4720, 0x4726, 0x4738, 0x473A, 0x4749, 0x478A, 0x47D7, 0x4809, 0x4815, 0x4914,
              0x491A, 0x4A94, 0x4A96, 0x4AD8, 0x4ADA, 0x4B4D, 0x4B51, 0x4BCD, 0x4BCF, 0x4C21, 0x4C38,
              0x4E1F, 0x4EA5, 0x4F05, 0x4F33, 0x4F39, 0x4F88, 0x4FBD, 0x4FD0, 0x60B3, 0x60B5]
-CARRY_SITES = [REDUCE_WEAPON_ENERGY]
+# &3f24: the wind's direction is the frame counter rotated twice through the
+# carry, so it depends on the carry the caller happened to leave
+VARIABLE_WIND = 0x3F24
+CARRY_SITES = [REDUCE_WEAPON_ENERGY, VARIABLE_WIND]
 # Zero-page scratch the physics reads after the plotting code has used it for
 # its own purposes, which a kernel that does not plot cannot derive, so the
 # feed hands the byte over at the instruction that reads it:

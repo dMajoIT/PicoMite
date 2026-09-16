@@ -50,6 +50,7 @@ typedef unsigned char u8;
 #define SITE_DAMAGE_IMMOB 0x24AD      /* BIT &da in damage_object */
 #define SITE_RELIABILITY 0x2DA0       /* CMP &da in check_reliability */
 #define SITE_DRAIN_CARRY 0x2D79       /* the carry into reduce_energy_of_weapon_X */
+#define SITE_WIND_CARRY  0x3F24       /* the carry that sets the variable wind's direction */
 #define SITE_VISIBILITY 0x1CF6        /* JSR rnd for the red-mushroom visibility */
 #define SITE_TOUCH_THIS 0x2B11        /* JSR rnd: note this object touching the other */
 #define SITE_TOUCH_OTHER 0x2B1A       /* JSR rnd: note the other touching this */
@@ -195,7 +196,7 @@ static int read_site(struct G *g, int site)
         fault(g, 1, site);
         return 0;
     }
-    if (site == SITE_DRAIN_CARRY) return 0;
+    if (site == SITE_DRAIN_CARRY || site == SITE_WIND_CARRY) return 0;
     if (site == SITE_DAMAGE_IMMOB || site == SITE_RELIABILITY) return g->rnd[1];
     if (site >= 0x10000) return g->rnd[site & 3];        /* a direct read of rnd_state + n */
     return rnd_advance(g);
@@ -3559,7 +3560,12 @@ static void tile_variable_wind(struct P *p, int flp)
     int a, c, ang;
     if (p->waterline & 128) return;
     if (flp & 0x80) { wind_from_a(p, 0x70); return; }
-    ang = ((g->frm << 2) & 255) | (g->frm >> 7);
+    /* two ROLs, which rotate through the carry, so the wind's direction depends
+       on the carry the caller happened to leave.  The kernel's arithmetic does
+       not arrive at &3f24 by the same road, so the carry is fed like the other
+       things a transcription cannot derive. */
+    c = read_site(g, SITE_WIND_CARRY) & 1;
+    ang = ((g->frm << 2) | (c << 1) | (g->frm >> 7)) & 255;
     a = (read_rnd_byte(g, 0x3F2A, 1) & 0x1F) ^ p->tileY;
     c = a >> 7; a = (a << 1) & 0x7F;
     if (p->tileX & 128) a = ((a & 0x3F) + 0x28 + c) & 255;

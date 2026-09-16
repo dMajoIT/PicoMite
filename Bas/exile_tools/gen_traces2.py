@@ -209,6 +209,22 @@ SCENARIOS = {
                    [((), 150)], 'clear'),                      # inactive chatter, engine fire
     'untested_f': ((0x88, 0x4D), [(1, 0x42, 0x8A, 0x4D)],
                    [((), 20), (('W',), 40), ((), 60)], 'clear'),   # a switch, walked into
+    # The tiles the coverage audit found had never been touched: the player is
+    # dropped just above each and left to fall onto it.
+    'water_tile': ((0x57, 0x68), [], [((), 140)], 'clear'),
+    'wind_variable': ((0x40, 0x80), [], [((), 140)], 'clear'),
+    'wind_constant': ((0xB8, 0x60), [], [((), 140)], 'clear'),
+    'switch_tile': ((0x46, 0x54), [], [((), 40), (('W',), 40), (('Q',), 60)], 'clear'),
+    'door_tile': ((0x99, 0x4A), [], [((), 60), (('W',), 40), ((), 60)], 'clear'),
+    'invisible_switch': ((0xA8, 0x67), [], [((), 60), (('W',), 40), ((), 40)], 'clear'),
+    # carrying something and putting it down, and the weight slowing the walk
+    'drop_boulder': ((0x88, 0x4D), [(1, BOULDER, 0x8A, 0x4C)],
+                     [((), 20), (('<',), 10), (('W',), 30), (('M',), 10), ((), 40)], 'clear'),
+    'carry_piano': ((0x88, 0x4D), [(1, PIANO, 0x8A, 0x4C)],
+                    [((), 20), (('<',), 10), (('W',), 60), (('Q',), 60)], 'clear'),
+    # the arrow keys, which move the view without moving the player
+    'scroll_view': ((0x88, 0x4D), [], [((), 10), (('RIGHT',), 30), (('DOWN',), 30),
+                                       (('LEFT',), 30), (('UP',), 30)], 'clear'),
     # two boulders and a piano in a heap
     'heap': ((0x88, 0x4D), [(1, BOULDER, 0x8B, 0x4A), (2, BOULDER, 0x8B, 0x47), (3, PIANO, 0x8C, 0x44)], [((), 120)], False),
 }
