@@ -153,7 +153,7 @@ DIM INTEGER gStart
 DIM INTEGER gScore, gHi, gLives, gLevel, gLap, gTime, gBonus, gNextLife
 DIM INTEGER panelCol, eggBuf, eggVal, clockStop
 DIM FLOAT henSpd, dkSpd
-DIM INTEGER sndOK, sndTick
+DIM INTEGER sndTick
 
 ' ======================================================================
 '  main
@@ -277,24 +277,32 @@ END SUB
 '
 '  That is the lot: the hens, the duck, the end of a floor and the extra
 '  life were all silent in 1983.  The four sounds this version adds for
-'  them are marked "ours" and share a fourth envelope of our own.
+'  them are marked "ours" and share a fourth envelope of our own.  The
+'  only other noise the machine made was a VDU 7 bell on the key
+'  redefinition screen, which we do not have.
+'
+'  Audited against the 6502 a second time, call site by call site, and
+'  these all check out: the three envelopes and four blocks byte for
+'  byte; the sixteen notes of dead_tune; harry_motion_noises called
+'  immediately after update_harry and before the lift, gated on every
+'  other frame of a counter that runs free; pitch 100 walking, 150 on a
+'  ladder, 100 along a moving lift but silence standing on one, and the
+'  two bends through the air; an egg at pitch 6 and grain at 5; and the
+'  bonus ticking once every fifty points, which is what .bonus_1 being 0
+'  or 5 comes to.
 ' ======================================================================
 SUB SndInit
-  sndOK = 0
-  ON ERROR SKIP 4
   PLAY BBC ENVELOPE 1, 1, 0, 0, 0, 0, 0, 0, 126, -50, 0, 0, 100, 0
   PLAY BBC ENVELOPE 2, 1, 0, 0, 0, 0, 0, 0, 126, -2, 0, -5, 126, 100
   PLAY BBC ENVELOPE 3, 1, 0, 0, 0, 0, 0, 0, 50, 0, 0, -25, 100, 0
   ' ours: a squawk that falls away, for the hens and the duck.  T carries
   ' 128 so the pitch slide runs once instead of repeating.
   PLAY BBC ENVELOPE 4, 129, -4, 0, 0, 8, 0, 0, 126, -6, 0, -30, 110, 50
-  IF MM.ERRNO = 0 THEN sndOK = 1
-  ON ERROR CLEAR
 END SUB
 
 ' Everything quiet, queues and all.  Envelopes survive PLAY STOP.
 SUB SndStop
-  IF sndOK <> 0 THEN PLAY STOP
+  PLAY STOP
 END SUB
 
 ' ----------------------------------------------------------------------
@@ -308,7 +316,6 @@ END SUB
 ' ----------------------------------------------------------------------
 SUB HarryNoise
   LOCAL INTEGER p
-  IF sndOK = 0 THEN EXIT SUB
   IF pState = ST_CLIMB OR pLift <> 0 OR pGround <> 0 THEN
     pAir = 0 : pJump = 0
   ELSE
@@ -329,24 +336,27 @@ SUB HarryNoise
   ELSE
     p = 110 - 2 * pAir
   ENDIF
-  IF p < 1 THEN p = 1
-  IF p > 255 THEN p = 255
+  ' The 6502 works this out in one byte - LDA #&6E / SBC vy / SBC vy -
+  ' and lets it wrap.  A fall of more than about fifty five frames takes
+  ' 110 - 2*vy past zero, and the whistle drops out of the bottom of the
+  ' range and comes back in at the top.  Clamping it loses that.
+  p = p AND 255
   PLAY BBC SOUND BCH_MOVE, 1, p, 1
 END SUB
 
 ' sound3: the same burst of noise at two pitches, 6 for an egg and 5 for
 ' a pile of grain, both of them flushing the noise channel.
 SUB SndEgg
-  IF sndOK <> 0 THEN PLAY BBC SOUND BCH_NOISE, 3, 6, 4
+  PLAY BBC SOUND BCH_NOISE, 3, 6, 4
 END SUB
 
 SUB SndGrain
-  IF sndOK <> 0 THEN PLAY BBC SOUND BCH_NOISE, 3, 5, 4
+  PLAY BBC SOUND BCH_NOISE, 3, 5, 4
 END SUB
 
 ' sound4: the bonus counting down, one tick per fifty points.
 SUB SndBonus
-  IF sndOK <> 0 THEN PLAY BBC SOUND BCH_NOISE, 1, 4, 1
+  PLAY BBC SOUND BCH_NOISE, 1, 4, 1
 END SUB
 
 ' ----------------------------------------------------------------------
@@ -358,7 +368,6 @@ END SUB
 ' ----------------------------------------------------------------------
 SUB SndDie(half AS INTEGER)
   LOCAL INTEGER i, p, d, ch
-  IF sndOK = 0 THEN EXIT SUB
   ch = BCH_MOVE
   IF half <> 0 THEN ch = BCH_TUNE
   RESTORE deadtune
@@ -378,7 +387,6 @@ END SUB
 ' ----------------------------------------------------------------------
 SUB Tune(which AS INTEGER)
   LOCAL INTEGER p, d, tot, ch
-  IF sndOK = 0 THEN EXIT SUB
   SELECT CASE which
     CASE 0 : RESTORE tune0            ' new floor
     CASE 1 : RESTORE tune1            ' floor cleared
@@ -402,7 +410,6 @@ END SUB
 ' ours: ten thousand points.  Six notes fit the queue, so it never waits.
 SUB SndExtra
   LOCAL INTEGER p, d, ch
-  IF sndOK = 0 THEN EXIT SUB
   ch = BCH_MUSICF
   RESTORE extratune
   DO
@@ -415,11 +422,11 @@ END SUB
 
 ' ours: a hen finding the grain, and the duck
 SUB SndCluck
-  IF sndOK <> 0 THEN PLAY BBC SOUND BCH_BIRD, 4, 161, 2
+  PLAY BBC SOUND BCH_BIRD, 4, 161, 2
 END SUB
 
 SUB SndQuack
-  IF sndOK <> 0 THEN PLAY BBC SOUND BCH_BIRD, 4, 73, 4
+  PLAY BBC SOUND BCH_BIRD, 4, 73, 4
 END SUB
 
 ' ======================================================================
