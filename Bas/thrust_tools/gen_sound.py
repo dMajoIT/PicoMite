@@ -27,6 +27,17 @@ BLOCKS = [
 ENV_FIELD = ['n', 'T', 'PI1', 'PI2', 'PI3', 'PN1', 'PN2', 'PN3',
              'AA', 'AD', 'AS', 'AR', 'ALA', 'ALD']
 
+# explosion_sound stores $1F in sound_timer, update_sound_timer counts it
+# down once a frame, and run_engine refuses to play while it is non-zero.
+# That gate is not decoration: the engine and the explosion's noise are
+# both channel 0 WITH THE FLUSH BIT, so without it the next thrust tick
+# cuts the explosion off after a frame.
+SOUND_TIMER = 0x1F
+# run_engine sets the pitch to 5 and resets it to 2 on the way out, so the
+# shield - which enters at run_engine_ext without setting it - plays the
+# same block two octaves down.  6502 at .run_engine / .run_engine_ext.
+ENGINE_PITCH_SHIELD = 2
+
 ENVELOPE_2_NOTE = """
 '  Envelope 2 is not quite the original's bytes, and here is why.
 '
@@ -69,6 +80,9 @@ def envelope(n):
         + [td.signed(v) for v in e[8:12]] + list(e[12:14])
 
 
+BLOCK_ARGS = {}
+
+
 def data_lines():
     out = td.bar('Sound')
     out[2:2] = [
@@ -107,6 +121,7 @@ def data_lines():
         out.append("' %-13s channel %d, %s" % (name + ':', chan & 3,
                                                ', '.join(bits)))
         out.append("'   %s" % what)
+        BLOCK_ARGS[name] = (ch, amp, pitch, dur)
         out.append('SUB Snd%s' % ''.join(p.title() for p in name.split('_')))
         out.append('  PLAY BBC SOUND %s, %d, %d, %d' % (ch, amp, pitch, dur))
         out.append('END SUB')
@@ -114,7 +129,64 @@ def data_lines():
     return out
 
 
+def composites(blocks):
+    """The wrappers the game actually calls, with their behaviour."""
+    eng = blocks['engine']
+    out = td.bar('What the game actually calls')
+    out[2:2] = [
+        "'  The nine blocks above are primitives.  These are the original's",
+        "'  own wrapper routines, and they are where the behaviour lives."]
+    out += [
+        "",
+        "' explosion_sound: both halves, and mute the engine for %d frames."
+        % SOUND_TIMER,
+        "' The engine and the explosion's noise are both channel 0 with the",
+        "' flush bit, so without this gate a thrusting player cuts their own",
+        "' explosion off after one frame.",
+        'SUB SndExplosion',
+        '  sndTimer = %d' % SOUND_TIMER,
+        '  SndExplosion1',
+        '  SndExplosion2',
+        'END SUB',
+        "",
+        "' collect_pod_fuel_sound: note, rest, note - a double chirp, not a",
+        "' single one.  Played when the pod attaches and when a fuel cell is",
+        "' used up.",
+        'SUB SndCollectPodFuel',
+        '  SndCollect1',
+        '  SndCollect2',
+        '  SndCollect1',
+        'END SUB',
+        "",
+        "' countdown_sound: despite the name this is the EXTRA LIFE jingle,",
+        "' played by add_A_to_score when the thousands digit changes.  The",
+        "' planet countdown's per-second tick is collect_1 on its own.",
+        'SUB SndExtraLife',
+        '  SndCollect2',
+        '  SndCountdown',
+        'END SUB',
+        "",
+        "' run_engine: thrust.  Silent while the tractor key is held, and",
+        "' while an explosion is still sounding.",
+        'SUB SndRunEngine',
+        '  IF kTract <> 0 THEN EXIT SUB',
+        '  IF sndTimer > 0 THEN EXIT SUB',
+        '  PLAY BBC SOUND %s, %d, %d, %d' % eng,
+        'END SUB',
+        "",
+        "' run_engine_ext: the same block at the pitch run_engine leaves",
+        "' behind, which is what the shield makes.",
+        'SUB SndRunEngineShield',
+        '  IF sndTimer > 0 THEN EXIT SUB',
+        '  PLAY BBC SOUND %s, %d, %d, %d'
+        % (eng[0], eng[1], ENGINE_PITCH_SHIELD, eng[3]),
+        'END SUB',
+        ""]
+    return out
+
+
 if __name__ == '__main__':
     lines = data_lines()
+    lines += composites(BLOCK_ARGS)
     td.emit(lines, 'sound.bas')
     print('\n'.join(lines))

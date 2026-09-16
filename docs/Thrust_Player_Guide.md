@@ -63,9 +63,17 @@ Lift the **Klystron pod** off its stand and carry it up out of the cave.
 - **Leaving without the pod costs you a ship.** There is a `NO POD — TURN
   BACK` warning in the panel before you cross the line.
 
-The **reactor** is worth 2000 points. Shoot it fifty times and the planet goes
-with it — and you have ten seconds to get clear, counted down in the panel. It
-is the difference between a 2000-point mission and a 4000-point one.
+The **reactor** is worth 2000 points. Every shot that lands on it does a
+random amount of damage, and when the damage overflows the byte it is kept in,
+the planet goes with it — about thirteen hits, but never quite the same number
+twice. You then have ten seconds to get clear, counted down in the panel. It is
+the difference between a 2000-point mission and a 4000-point one.
+
+You get **an extra ship every time the thousands digit of your score turns
+over**, which is the original's rule: one ship per addition that carries, not
+one per thousand points, so a 4000-point bonus is worth a single ship.
+
+You can have **four shots in the air at once**. A fifth replaces the oldest.
 
 Limpet guns are bolted into the rock and shoot at you. They are worth 75 each,
 fuel cells 15 if you shoot them instead of drinking them.

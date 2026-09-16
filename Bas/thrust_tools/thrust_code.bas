@@ -137,7 +137,14 @@ CONST MAXOBJ = 20                 ' nineteen is the most any level has
 CONST OBJ_FUEL = 4
 CONST OBJ_POD = 5
 CONST OBJ_REACTOR = 6
-CONST RHP0 = 50              ' $32, generator_total_damage
+'  The reactor is not a hit counter.  generator_total_damage starts at
+'  $32 and each bullet adds a random 0 to $1F to it; the planet goes when
+'  that 8-bit sum OVERFLOWS, so it takes about thirteen hits rather than
+'  fifty, and how many varies.  Every hit makes a full explosion, not
+'  just the last.
+CONST RHP0 = 50                   ' $32, the damage it starts with
+CONST RHPMAX = 255                ' overflow of the byte is critical
+CONST RHPHIT = 32                 ' RND AND $1F, so 0 to 31
 '  Ten seconds, counted in frames: the original holds a seconds counter
 '  and steps it once every $20 frames, which at 33.3 Hz is very nearly a
 '  second, sounding a note each time.
@@ -150,6 +157,9 @@ CONST SCOREFUEL = 15
 '  Bullets and debris share one pool of 32 slots, as the original's does.
 '  A bullet's velocity is the angle table itself, unscaled - five pixels
 '  a step either way, which is quick.
+'  The original keeps player bullets in four fixed slots and cycles
+'  round them, so a fifth shot replaces the oldest.
+CONST MAXPLAYERBULLET = 4
 CONST MAXPART = 32
 CONST PT_PLAYER = 0
 CONST PT_HOSTILE = 3
@@ -242,6 +252,7 @@ DIM FLOAT paX(MAXPART - 1), paY(MAXPART - 1)
 DIM FLOAT paDX(MAXPART - 1), paDY(MAXPART - 1)
 DIM INTEGER paLife(MAXPART - 1), paType(MAXPART - 1)
 DIM INTEGER score, reactorHP, countdown, fuelBeam, fireHeld, nPart
+DIM INTEGER sndTimer
 DIM INTEGER lives, mission, gunProb, gunPen, planetDead, ending, gameOver
 DIM INTEGER warnUp, revGrav, invLand, hiScore, saidRev, saidInv
 CONST HIFILE = "A:/thrust.hi"
@@ -551,7 +562,7 @@ SUB StartShip
   fuel = FUEL0 : crashed = 0
   podAtt = 0 : beamOn = 0 : tethAng = 0 : tethVel = 0
   podX = podHomeX : podY = podHomeY
-  countdown = 0 : fuelBeam = 0 : fireHeld = 0
+  countdown = 0 : fuelBeam = 0 : fireHeld = 0 : sndTimer = 0
   FOR nPart = 0 TO MAXPART - 1 : paLife(nPart) = 0 : NEXT nPart
   nPart = 0
   ' Crash while carrying the pod and you get it back, hanging straight
@@ -670,7 +681,7 @@ SUB NextMission
   LOCAL INTEGER b
   b = BONUSBASE * (level + 5)
   IF planetDead <> 0 THEN b = b + BONUSPLANET
-  score = score + b
+  AddScore b
   mission = mission + 1
   IF mission >= 3 THEN
     gunProb = gunProb + 1
@@ -854,7 +865,7 @@ SUB SimStep
       velX = velX + angX(shipAng) / d
       velY = velY + angY(shipAng) / d
       fuel = fuel - 1
-      SndEngine
+      SndRunEngine
       ' Thrust off the tether's axis is what swings the pod.  There is no
       ' gravity term here and that is right: gravity pulls equally on
       ' ship and pod, so it moves the midpoint without twisting the
@@ -878,11 +889,12 @@ SUB SimStep
   IF (kTract <> 0) AND (fuel > 0) AND ((tick AND SHIELDDUTY) <> 0) THEN
     shieldOn = 1
     fuel = fuel - 1
-    SndEngine
+    SndRunEngineShield
   ELSE
     shieldOn = 0
   ENDIF
   tick = tick + 1
+  IF sndTimer > 0 THEN sndTimer = sndTimer - 1   ' update_sound_timer
   Tractor
   Refuel
   UpdateGuns
@@ -892,7 +904,9 @@ SUB SimStep
   IF kTract <> 0 THEN fireHeld = 1
   IF countdown > 0 THEN
     countdown = countdown - 1
-    IF (countdown MOD CDOWNSEC) = 0 THEN SndCountdown
+    ' the per-second tick is collect_1 on its own; SndCountdown is part
+    ' of the extra-life jingle, which is a different thing entirely
+    IF (countdown MOD CDOWNSEC) = 0 THEN SndCollect1
     IF countdown = 0 THEN Explode
   ENDIF
   ' Above scanline 288 is orbit.  Arriving with the pod finishes the
@@ -988,8 +1002,7 @@ SUB Tractor
   tethVel = (dx * velY * ROWPX - dy * velX * COLPX) / r * NANG / (2 * PI)
   podAtt = 1
   beamOn = 1
-  SndCollect1
-  SndCollect2
+  SndCollectPodFuel
   DeriveShip
 END SUB
 
@@ -1016,9 +1029,8 @@ SUB Refuel
             objTC(fi) = objTC(fi) + 1
             IF objTC(fi) >= FUELFRAMES THEN
               objLive(fi) = 0
-              score = score + SCOREFUELCELL
-              SndCollect1
-              SndCollect2
+              AddScore SCOREFUELCELL
+              SndCollectPodFuel
             ENDIF
             EXIT SUB
           ENDIF
@@ -1098,9 +1110,25 @@ END FUNCTION
 ' velocity and no inheritance from the ship, then is stepped twice at
 ' once so it clears the nose - create_new_player_bullet's LDY #$02 loop.
 SUB FirePlayer
-  LOCAL INTEGER p
+  LOCAL INTEGER p, i, n
   IF crashed <> 0 THEN EXIT SUB
-  p = FreePart()
+  ' Four bullets at a time, as the original's four-slot round robin
+  ' allows; a fifth shot replaces the oldest rather than being refused.
+  n = 0
+  FOR i = 0 TO MAXPART - 1
+    IF paLife(i) > 0 AND paType(i) = PT_PLAYER THEN n = n + 1
+  NEXT i
+  IF n >= MAXPLAYERBULLET THEN
+    p = -1
+    FOR i = 0 TO MAXPART - 1
+      IF paLife(i) > 0 AND paType(i) = PT_PLAYER THEN
+        IF p < 0 THEN p = i
+        IF paLife(i) < paLife(p) THEN p = i
+      ENDIF
+    NEXT i
+  ELSE
+    p = FreePart()
+  ENDIF
   IF p < 0 THEN EXIT SUB
   paType(p) = PT_PLAYER : paLife(p) = PARTLIFE
   paDX(p) = angX(shipAng) : paDY(p) = angY(shipAng)
@@ -1151,23 +1179,38 @@ END SUB
 ' then the planet goes, which starts the ten seconds to get clear.
 SUB HitObject(j AS INTEGER)
   IF objT(j) = OBJ_REACTOR THEN
-    reactorHP = reactorHP - 1
-    SndExplosion2
-    IF reactorHP <= 0 THEN
+    ' Every hit explodes, and the damage it does is random.  Critical is
+    ' the byte overflowing, not a count running out.
+    Debris objX(j) + 2, objY(j) + 5, 6
+    SndExplosion
+    reactorHP = reactorHP + INT(RND * RHPHIT)
+    IF reactorHP > RHPMAX AND countdown = 0 THEN
       objLive(j) = 0
       planetDead = 1
       countdown = CDOWN0
-      Debris objX(j) + 2, objY(j) + 5, 8
-      SndExplosion1
-      SndExplosion2
     ENDIF
     EXIT SUB
   ENDIF
   objLive(j) = 0
-  IF objT(j) = OBJ_FUEL THEN score = score + SCOREFUEL ELSE score = score + SCOREGUN
+  IF objT(j) = OBJ_FUEL THEN AddScore SCOREFUEL ELSE AddScore SCOREGUN
   Debris objX(j) + 2, objY(j) + 4, 6
-  SndExplosion1
-  SndExplosion2
+  SndExplosion
+END SUB
+
+' ----------------------------------------------------------------------
+'  add_A_to_score awards a life whenever an addition carries the score's
+'  thousands digit over, and plays countdown_sound - which is the extra
+'  life jingle, not the countdown.  One life per addition, not one per
+'  thousand, so a 4000 point bonus is worth a single ship.
+' ----------------------------------------------------------------------
+SUB AddScore(n AS INTEGER)
+  LOCAL INTEGER was
+  was = (score \ 1000) MOD 10
+  score = score + n
+  IF ((score \ 1000) MOD 10) <> was THEN
+    lives = lives + 1
+    SndExtraLife
+  ENDIF
 END SUB
 
 SUB Debris(x AS FLOAT, y AS FLOAT, n AS INTEGER)
@@ -1188,8 +1231,7 @@ SUB Explode
   keepPod = podAtt
   deaths = deaths + 1
   Debris shipX, shipY, 8
-  SndExplosion1
-  SndExplosion2
+  SndExplosion
 END SUB
 
 ' ----------------------------------------------------------------------
