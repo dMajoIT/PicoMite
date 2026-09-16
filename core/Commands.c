@@ -7919,6 +7919,24 @@ void cmd_endfun(void)
 	nextstmt = (unsigned char *)"\0\0\0"; // now terminate this run of ExecuteProgram()
 }
 
+/* DATA is one flat space: the program first, then the library.  When a scan
+   runs off the end of the program, carry on at LibMemory instead of giving up
+   - a program may keep its DATA in the library, and a library routine's own
+   DATA is reachable no other way (NextDataLine is always primed to ProgMemory
+   by ClearStack).  Not the reverse: once the scan is in the library the next
+   end really is the end.  Returns true if the scan was moved. */
+static int DataFallToLibrary(unsigned char **p, unsigned char **lineptr)
+{
+	if (Option.LIBRARY_FLASH_SIZE != MAX_PROG_SIZE || LibMemory == NULL)
+		return 0;
+	if (*p >= LibMemory && *p < LibMemory + MAX_PROG_SIZE)
+		return 0; // already scanning the library
+	if (LibMemory[0] == 0 || LibMemory[0] == 0xff)
+		return 0; // no library saved
+	*p = *lineptr = LibMemory;
+	return 1;
+}
+
 void MIPS16 cmd_read(void)
 {
 	int i, j, k, len, card;
@@ -8025,7 +8043,7 @@ void MIPS16 cmd_read(void)
 	vidx = 0;
 	datatoken = GetCommandValue((unsigned char *)"Data");
 	p = lineptr = NextDataLine;
-	if (*p == 0xff)
+	if (*p == 0xff && !DataFallToLibrary(&p, &lineptr))
 		error("No DATA to read"); // error if there is no program
 
 	// search looking for a DATA statement.  We keep returning to this point until all the data is found
@@ -8035,7 +8053,12 @@ search_again:
 		if (*p == 0)
 			p++; // if it is at the end of an element skip the zero marker
 		if (*p == 0 /* || *p == 0xff*/)
-			error("No DATA to read"); // end of the program and we still need more data
+		{
+			// end of this region - fall through to the library, or give up
+			if (!DataFallToLibrary(&p, &lineptr))
+				error("No DATA to read");
+			continue;
+		}
 		if (*p == T_NEWLINE)
 		{
 			lineptr = p;
