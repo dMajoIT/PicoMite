@@ -1,7 +1,7 @@
 # Exile's sounds, and when you should hear them
 
-The game has forty-eight sounds. Forty-five of them are in the port; the three
-that are not are listed at the end.
+The game has forty-nine sounds, counting the scream as the two it really is.
+All of them are now in the port.
 
 ## How they work, in one paragraph
 
@@ -86,17 +86,15 @@ with a function key.
 | A rumble | The earthquake, once it has started |
 | A soft thud | Touching a mushroom tile, and a mushroom ball bursting |
 
-## The three that are not in yet
+## The three that arrived last
 
-| What you should hear | When | Why it is missing |
-|---|---|---|
-| The player's scream | Taking heavy damage | Its trigger condition still needs working out |
-| An imp's call | An imp about its business | The same, and its pitch is altered per imp |
-| The energy level bell | As your energy crosses a level | The game keeps a count of bells still owed, which the port does not model yet |
+These three were the last to go in, and each needed something the rest did not.
 
-None of the three can break anything by arriving later. A sound is put on a
-queue that nothing inside the physics reads, so adding one cannot change how
-the game plays.
+| What you hear | When |
+|---|---|
+| The player's scream | Taking eight damage or more at once. It is two sounds played back to back, and the worse the damage the more likely it is: at seven or more it is certain. A crew member screams on the same terms. |
+| An imp's call | An imp squeals at a fixed pitch the moment it is hurt; otherwise one frame in sixteen, half the time, at a pitch set by its mood and whether it is climbing. It is the only sound in the game whose pitch is not the one in the table, so the queue now carries a pitch alongside the sound and the distance. |
+| The energy level bell | One bell for each &800 of energy in a weapon as you select it, and one more each time you pour energy across. They are rung one every four frames until they run out, so a full weapon chimes several times. |
 
 ## If something sounds wrong
 

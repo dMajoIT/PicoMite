@@ -298,8 +298,8 @@ End Sub
 ' n carries the sound in its low byte and how far off the middle of the screen
 ' it happened in the next, which is how much quieter it is.
 Sub StartSound(q)
-  Local ch, i, b, at, n, far, v
-  n = q And 255 : far = (q >> 8) And 15
+  Local ch, i, b, at, n, far, v, pit
+  n = q And 255 : far = (q >> 8) And 15 : pit = (q >> 16) And 255
   at = T_SOUND + n * 5
   If Peek(VAR tbl(), at + 4) Then       ' the call that takes channel zero
     ch = 0
@@ -322,6 +322,7 @@ Sub StartSound(q)
   sEv(ch * 2) = v : sDur(ch * 2) = b And 15
   sSoff(ch * 2) = Peek(VAR tbl(), at)
   b = Peek(VAR tbl(), at + 3)
+  If pit Then b = pit                   ' an imp patches its own pitch before it calls
   sEv(ch * 2 + 1) = b And &HF0 : sDur(ch * 2 + 1) = b And 15
   sSoff(ch * 2 + 1) = Peek(VAR tbl(), at + 2)
   sSdur(ch * 2) = 0 : sSdur(ch * 2 + 1) = 0

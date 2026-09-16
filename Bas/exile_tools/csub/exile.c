@@ -67,6 +67,7 @@ struct G {
     int frm, angle, facing, immob, tImmob, rotVel, lying, aim, aimVel, aimFlip;
     int jetOk, inWater, tbColl, surr, wedged, signs, windSign, relTX, relTY, walkSpd, maxAcc0;
     int fireCool, waterTile, boosterCol, suitCol, cross[3];
+    int bells;                    /* &25: energy level bells still owed */
     int weapon, fired, blaster, pockUsed, telRem, telNext, scrollX, scrollY;   /* &084d, &29d7, &36, &0847, &0822, &0821, &14c8, &14ca */
     int wLo[6], wHi[6], pocket[5], telX[5], telY[5];                           /* &084e, &0854, &0848, &0823, &0828 */
     int eventsOn, promoteOn, wlDes[4];                     /* whether update_events runs; &0836 the waterlines' desired y */
@@ -348,7 +349,7 @@ static void move_particle(struct P *p, int i)
    put in wherever the game has one without disturbing the physics. */
 static int distance_from_screen_centre(struct P *p, int y);
 
-static void play_sound(struct P *p, int n)
+static void play_sound_pitch(struct P *p, int n, int pitch)
 {
     struct G *g = p->g;
     int d, cy = p->cy, ov = p->ov;
@@ -358,9 +359,29 @@ static void play_sound(struct P *p, int n)
            distance rides in the top half of the queue entry. */
         d = distance_from_screen_centre(p, p->slot);
         if (!(d & 128) && d < 0x10)
-            g->game[G_SND0 + g->nSnd++] = n | (d << 8);
+            g->game[G_SND0 + g->nSnd++] = n | (d << 8) | (pitch << 16);
     }
     p->cy = cy; p->ov = ov;                      /* a sound must not disturb the arithmetic */
+}
+
+/* play_sound (&13fa): the four bytes after the call name the sound, so the
+   port numbers them instead.  A pitch of zero means the table's own; only an
+   imp, which patches its own parameters, ever asks for another. */
+static void play_sound(struct P *p, int n)
+{
+    play_sound_pitch(p, n, 0);
+}
+
+/* play_scream (&2497): two sounds, one after the other */
+static void play_scream(struct P *p)
+{
+    play_sound(p, 5); play_sound(p, 48);
+}
+
+/* play_scream_if_damaged (&2492): only for eight damage or more at once */
+static void scream_if_damaged(struct P *p)
+{
+    if ((p->flags & 8) == 8) play_scream(p);
 }
 
 static int free_particle(struct G *g)
@@ -548,11 +569,38 @@ static void wind_particle(struct P *p)
     particle_from_object(p, 0, 0x97, 0x41, 0x6E);
 }
 
+static int find_or_count(struct P *p, int a, int y, int counting, int ignoring);
+static int create_new_object(struct P *p, int type, int ySlots);
+
+/* create_invisible_debris_if_event (&401b): while the tiles are being swept
+   for an event rather than for a collision, wind and water put a piece of
+   invisible debris in the air, up to four at a time, which is what makes a
+   river look as though it is flowing.  The game insists on a slot for it even
+   when every slot is taken.  Returns non-zero when this was an event, which
+   tells the caller not to blow anything about. */
+static int debris_if_event(struct P *p)
+{
+    struct G *g = p->g;
+    long long *obj = g->obj;
+    int y;
+    if (!(g->mode & 0x10)) return 0;             /* &401f: a collision, not an event */
+    find_or_count(p, 0x35, 0x7F, 1, 0);          /* &4025 count_objects_of_type_A */
+    if (p->count >= 4) return 0xFF;              /* four is as many as the air will hold */
+    y = create_new_object(p, 0x35, 0);           /* &1e5a, even if no slots are free */
+    if (y < 0) return 0xFF;
+    OS(O_X, y, p->tileX); OS(O_TX, y, p->tileX); /* &2867 */
+    OS(O_Y, y, p->tileY); OS(O_TY, y, p->tileY);
+    OS(O_YF, y, read_rnd_byte(g, 0x4035, 0));    /* anywhere within the tile */
+    OS(O_XF, y, read_rnd_byte(g, 0x403A, 1));
+    return 0xFF;
+}
+
 /* apply_wind_velocities_from_vector (&3f4f), less the debris an event would make */
 static void wind_apply(struct P *p)
 {
     struct G *g = p->g;
     int xi, yy;
+    if (debris_if_event(p)) return;
     for (xi = 2; xi >= 0; xi -= 2) {
         yy = p->weight;
         if (yy < 4) yy++;
@@ -576,7 +624,9 @@ static int tile_effect(struct P *p, int t, int flp);
 static void tile_water(struct P *p, int flp)
 {
     struct G *g = p->g;
-    int wv = g->tab[T_WATERVEL + (((flp >> 7) << 1) | ((flp >> 6) & 1))];
+    int wv;
+    if (debris_if_event(p)) return;              /* &3fa3, before the current is worked out */
+    wv = g->tab[T_WATERVEL + (((flp >> 7) << 1) | ((flp >> 6) & 1))];
     if (wv) wind_from_a(p, wv);
     else g->waterTile = 128 | (g->waterTile >> 1);
 }
@@ -996,6 +1046,7 @@ static int damage_slot(struct P *p, int y, int dmg)
         if (!(g->suitCol & 128) || (reduce_weapon_energy(p, 5), reduce_weapon_energy(p, 5),
                                     !check_reliability(p, 5)))
             for (i = 0; i < 3; i++) { c = dmg >> 7; dmg = (dmg << 1) & 255; if (c) dmg = (dmg >> 1) | 128; }
+        if ((read_rnd_byte(g, 0x24DA, 1) & 7) < dmg) play_scream(p);   /* &24da, always at seven or more */
     }
     if (dmg >= 8) OS(O_FLAGS, y, OT(O_FLAGS, y) | 8);
     old = OT(O_ENERGY, y);
@@ -1451,6 +1502,8 @@ static void change_weapon(struct P *p, int key)
             if (!(g->collected[8 + x] & 128)) return;   /* never collected */
         }
         g->weapon = x;
+        g->bells = g->wHi[x] >> 3;                /* &2cfd: one bell per &800 of energy */
+        play_sound(p, 1);                         /* &2cff: the high beep, energy or not */
         return;
     }
     if (x != 0) {                                 /* with SHIFT: give it &800 of the current weapon's energy */
@@ -1461,6 +1514,7 @@ static void change_weapon(struct P *p, int key)
     g->wHi[x] -= 8;
     x = g->weapon;
     if (g->wHi[x] + 8 <= 255) g->wHi[x] += 8;
+    g->bells = 1;                                 /* &2d21: one bell to say it moved */
 }
 
 /* calculate_firing_vector_from_angle_A (&3311) then from this object's velocity */
@@ -1940,6 +1994,10 @@ static void update_player(struct P *p)
             add_to_pos(p, 0, w, (p->flags & 128) != 0);
         }
     }
+    if (g->frm % 4 == 0 && g->bells != 0) {       /* &4a5b: the energy level bells, one in four frames */
+        g->bells = (g->bells - 1) & 255;
+        play_sound(p, 37);
+    }
     g->fireCool = (g->fireCool - 1) & 255;
     if (g->fireCool == 0) g->kh[13] >>= 1;
     if (g->blaster & 128) {                       /* the blaster goes on discharging for five frames */
@@ -2310,16 +2368,19 @@ static int hit_by_control(struct P *p, int t)
 }
 
 /* update_remote_control_device (&4351): when the player shoots it, it answers
-   with a sound and a puff of aim particles.  Neither is the kernel's business,
-   but putting the particles on the player's side turns the device round, and
-   the vector it fires them along costs a random draw. */
+   with a sound and a puff of aim particles, along the vector it is aimed.  The
+   game turns the device round to put the particles on the player's side, and
+   then falls straight through flip_this_object_horizontally a second time, so
+   the device ends the tick facing the way it started. */
 static void update_remote_control_device(struct P *p)
 {
     struct G *g = p->g;
     if (p->slot != g->fired) return;                  /* &0bbf: only the one just shot */
     play_sound(p, 22);
-    firing_vector_from_angle(p, g->aimFlip);
+    firing_vector_from_angle(p, g->aimFlip);          /* &312b create_aim_particle */
     p->xFlip ^= 0x80;
+    add_particles_t(p, 1, p->ps[0], p->ps[2], 0xA8, 0x07, 0x42);
+    p->xFlip ^= 0x80;                                 /* &3133 falls into &3136 again */
 }
 
 /* update_cannon (&40ee): fires a cannonball when its own control device is shot */
@@ -2708,7 +2769,16 @@ at_target:
 set_sprite:
     if (flipQ) consider_flipping(p, 3);
     change_sprite(p, spr);
-    if (!(p->flags & 8) && p->fc16 == 0) read_site(g, 0x45FB);   /* a 1 in 2 chance of a call, a sound */
+    /* &45f0: hurt, an imp squeals at a fixed pitch; otherwise one frame in
+       sixteen it calls, half the time, at a pitch set by its mood */
+    if (p->flags & 8) { play_sound_pitch(p, 29, 0xA5); return; }
+    if (p->fc16 != 0) return;
+    a = read_rnd_byte(g, 0x45FB, 0);
+    c = a & 1; a = (a >> 1) & 255;
+    a = ((c << 7) | (a >> 1)) & 255;
+    if (!(a & 128)) return;
+    a = ((a ^ p->state) & 0xE0) >> 1;
+    play_sound_pitch(p, 29, a | 5);
 }
 
 /* ---- fluffy (&4288) ---------------------------------------------------------------------- */
@@ -3739,7 +3809,7 @@ static void update_transporter_beam(struct P *p)
     if (!(p->yFlip & 128)) v = neg8(v);          /* a base in the floor: the beam moves down */
     p->pf[2] = (v - 1) & 255;
 colour:
-    if (!hit_by_remote_control(p)) toggle_lock(p, 1);   /* &31ac, the door */
+    if (!hit_by_remote_control(p)) toggle_lock(p, 0);   /* &31ac: a beam, so keys three to six */
     p->pal = g->tab[T_TRANSPAL + ((p->fc >> 2) & 3)];
 }
 
@@ -3794,7 +3864,7 @@ static void update_door(struct P *p)
     p->ps[xo] = p->state;                        /* fixed to its tile */
     p->pf[xo] = 0xFF;
     g->doorSup = p->tdataOff;
-    if (!hit_by_remote_control(p)) toggle_lock(p, 0);   /* &31ac, the transporter beam */
+    if (!hit_by_remote_control(p)) toggle_lock(p, 1);   /* &31ac: a door, so the data bits */
     g->doorSup = 0x80 | (g->doorSup >> 1);
     d = p->data | 4;                             /* moving, by default */
     f9f = (((d >> 1) & 1) << 7) | ((d & 1) << 6) | (d >> 3);   /* opening, locked */
@@ -3929,6 +3999,7 @@ static void suit_sprite_and_palette(struct P *p, int a, int yy)
 
 static void update_crew_member(struct P *p)
 {
+    scream_if_damaged(p);                        /* &46f0 */
     walk_state(p, p->data);                      /* with X = the data byte, as the original leaves it */
     energy_up_if_not_zero(p);
     consider_flipping(p, 7);
@@ -4479,8 +4550,8 @@ static void update_object(struct G *g, int slot)
         x = 0;
         if (OT(O_FLAGS, 0) & 128) {
             a = add8(p, p->siz[0], 0x10, p->cy);
-            x = 0xFF;
-            a = inv_neg(a);
+            x = 0xFF;                              /* and the DEX that sets it also sets the sign flag, */
+            a = neg8(a);                          /* so the invert_if_negative below always inverts */
         }
         a = add8(p, a, OT(O_XF, 0), 0);
         p->pf[0] = a; p->heldF[0] = a;
@@ -4745,10 +4816,18 @@ static void update_events(struct G *g, struct P *p)
                 a = ((c << 7) | ((a & 255) >> 1)) & 255;
                 if (!(g->flood & 128) && (g->eastOf76 & 128)) a = neg8(a);
                 if (a & 128) off = 2;            /* maggots while flooding or west of &76 */
-                y = spawn_from_nest(p, off, off, 6, v & 0xC0);
-                if (y >= 0 && (((g->tert[off] << 1) & 255) >= read_rnd_byte(g, 0x26A7, 2))) {
+                /* &26a7: how many of that kind are left is weighed BEFORE the
+                   creature is made, so a failed weighing makes nothing at all */
+                if (((g->tert[off] << 1) & 255) >= read_rnd_byte(g, 0x26A7, 2))
+                    y = spawn_from_nest(p, off, off, 6, v & 0xC0);
+                else
+                    y = -1;
+                if (y >= 0) {
                     OS(O_YF, y, p->vecA);
-                    a = sub8(p, OT(O_X, 0), p->tileX, 1); OS(O_VX, y, a);
+                    /* &26b6: spawn_object_in_event returns carry clear when it
+                       made the object, and the SBC that sets the creature's
+                       velocity takes that carry, so this one borrows */
+                    a = sub8(p, OT(O_X, 0), p->tileX, 0); OS(O_VX, y, a);
                     a = sub8(p, OT(O_Y, 0), p->tileY, p->cy); OS(O_VY, y, a);
                     OS(O_STATE, y, 0x80);        /* it wants to dig its way out */
                 }
@@ -4797,7 +4876,7 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     IN(rotVel, G_ROTVEL); IN(lying, G_LYING); IN(aim, G_AIM); IN(aimVel, G_AIMVEL); IN(aimFlip, G_AIMFLIP);
     IN(jetOk, G_JETOK); IN(inWater, G_INWATER); IN(tbColl, G_TBCOLL); IN(surr, G_SURR); IN(wedged, G_WEDGED);
     IN(signs, G_SIGNS); IN(windSign, G_WINDSIGN); IN(relTX, G_RELTX); IN(relTY, G_RELTY); IN(walkSpd, G_WALKSPD);
-    IN(maxAcc0, G_MAXACC0); IN(fireCool, G_FIRECOOL); IN(waterTile, G_WATERTILE);
+    IN(maxAcc0, G_MAXACC0); IN(fireCool, G_FIRECOOL); IN(waterTile, G_WATERTILE); IN(bells, G_BELLS);
     IN(weapon, G_WEAPON); IN(fired, G_FIRED); IN(blaster, G_BLASTER); IN(pockUsed, G_POCKUSED);
     IN(eventsOn, G_EVENTSON); IN(promoteOn, G_PROMOTEON);
     g->nPart = (int)(signed char)game[G_NPART];
@@ -4889,7 +4968,7 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     OUT(rotVel, G_ROTVEL); OUT(lying, G_LYING); OUT(aim, G_AIM); OUT(aimVel, G_AIMVEL); OUT(aimFlip, G_AIMFLIP);
     OUT(jetOk, G_JETOK); OUT(inWater, G_INWATER); OUT(tbColl, G_TBCOLL); OUT(surr, G_SURR); OUT(wedged, G_WEDGED);
     OUT(signs, G_SIGNS); OUT(windSign, G_WINDSIGN); OUT(relTX, G_RELTX); OUT(relTY, G_RELTY); OUT(walkSpd, G_WALKSPD);
-    OUT(maxAcc0, G_MAXACC0); OUT(fireCool, G_FIRECOOL); OUT(waterTile, G_WATERTILE);
+    OUT(maxAcc0, G_MAXACC0); OUT(fireCool, G_FIRECOOL); OUT(waterTile, G_WATERTILE); OUT(bells, G_BELLS);
     OUT(weapon, G_WEAPON); OUT(fired, G_FIRED); OUT(blaster, G_BLASTER); OUT(pockUsed, G_POCKUSED);
     OUT(orgF[0], G_ORGXF); OUT(orgF[2], G_ORGYF); OUT(frac[0], G_FRACX); OUT(sgn[0], G_SGNX);
     OUT(frac[2], G_FRACY); OUT(sgn[2], G_SGNY); OUT(secs[0], G_SECSX); OUT(secs[2], G_SECSY);

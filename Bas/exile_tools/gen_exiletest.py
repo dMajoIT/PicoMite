@@ -36,7 +36,7 @@ GAME = (['frame', 'angle', 'facing', 'immob', 'timmob', 'rotvel', 'lying', 'aim'
          'preang', 'premag', 'retrieve', 'viewpoint', 'npcw0',
          'tgtx', 'tgtxf', 'tgty', 'tgtyf', 'x17', 'y17', 'wlblock', 'doorsup', 'routebest',
          'exptimer', 'flood', 'bluemush', 'immunity', 'accpower', 'accsign', 'accdmg', 'lasttile', 'plotw',
-         'fireimm', 'doortimer', 'quake', 'shipmoving', 'radimm', 'whistle1', 'whistle2', 'chatterres', 'eastof76']
+         'fireimm', 'doortimer', 'quake', 'shipmoving', 'radimm', 'whistle1', 'whistle2', 'chatterres', 'eastof76', 'bells']
         + ['clawavail%d' % i for i in range(4)] + ['clawtel%d' % i for i in range(4)]
         + ['weapon', 'fired', 'blaster', 'pockused', 'telrem', 'telnext', 'scrollx', 'scrolly']
         + ['wlo%d' % i for i in range(6)] + ['whi%d' % i for i in range(6)]
@@ -107,6 +107,7 @@ SOUNDS = [
     0x33, 0xF3, 0x09, 0xB4, 0,   # 45 &4ea9 worm or maggot squealing
     0x33, 0xF3, 0x07, 0xB5, 0,   # 46 &4eb0 worm or maggot squealing
     0x33, 0xF3, 0x4F, 0x35, 0,   # 47 &4f57 piranha or wasp
+    0x33, 0x03, 0x2B, 0x25, 0,   # 48 &249e the second half of the scream
 ]
 
 
@@ -146,7 +147,7 @@ TABLES = [('OBPAT', 'ObstructionPatterns', 168), ('OBOFF', 'ObstructionPatternOf
     # the forty-eight sounds the game plays, five bytes each: the two bytes of
     # the volume envelope, the two of the frequency envelope, and whether the
     # call was the one that takes channel zero
-    ('SOUND', SOUNDS, 5 * 48),
+    ('SOUND', SOUNDS, 5 * 49),
     ('SCROFFYF', 0x3590, 2), ('SCROFFY', 0x3592, 2)]
 
 
@@ -171,6 +172,7 @@ def game_init(mem, pokes=None):
         g['pocket%d' % i] = m[0x0848 + i]; g['telx%d' % i] = m[0x0823 + i]; g['tely%d' % i] = m[0x0828 + i]
     g['boostercol'] = m[0x080E]; g['suitcol'] = m[0x0813]
     g['firecool'] = m[0x29D6]
+    g['bells'] = m[0x25]
     g['maxacc0'] = m[0x3969]; g['npcw0'] = m[0x3970]
     g['held'] = 0xFF
     g['heldcoll'] = m[0x19B3]; g['demat'] = m[0x19B5]

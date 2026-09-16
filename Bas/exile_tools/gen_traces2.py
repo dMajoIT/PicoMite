@@ -216,7 +216,9 @@ SCENARIOS = {
     'wind_constant': ((0xB8, 0x60), [], [((), 140)], 'clear'),
     'switch_tile': ((0x46, 0x54), [], [((), 40), (('W',), 40), (('Q',), 60)], 'clear'),
     'door_tile': ((0x99, 0x4A), [], [((), 60), (('W',), 40), ((), 60)], 'clear'),
-    'invisible_switch': ((0xA8, 0x67), [], [((), 60), (('W',), 40), ((), 40)], 'clear'),
+    # the invisible switch at &87,&77, walked over: the world has twelve of them
+    # and this is the only one with open ground either side of it
+    'invisible_switch': ((0x8A, 0x77), [], [((), 30), (('Q',), 70), ((), 40)], 'clear'),
     # carrying something and putting it down, and the weight slowing the walk
     'drop_boulder': ((0x88, 0x4D), [(1, BOULDER, 0x8A, 0x4C)],
                      [((), 20), (('<',), 10), (('W',), 30), (('M',), 10), ((), 40)], 'clear'),
@@ -225,8 +227,159 @@ SCENARIOS = {
     # the arrow keys, which move the view without moving the player
     'scroll_view': ((0x88, 0x4D), [], [((), 10), (('RIGHT',), 30), (('DOWN',), 30),
                                        (('LEFT',), 30), (('UP',), 30)], 'clear'),
+    # a stone door, which the player can fall onto here
+    'stone_door': ((0x50, 0x5E), [], [((), 60), (('W',), 40), (('Q',), 40)], 'clear'),
+    # the remote control device worked at a door, which is what it is for and
+    # what nothing had tried: every key is collected so the lock will turn
+    # the remote control device worked at a locked door.  The device starts in a
+    # pocket and is taken out with G, which is the only way to get it in hand
+    # without solving the touching geometry as well; the door at &9f,&71 has a
+    # floor beside it at &a0,&71, so the player can stand level with it and face
+    # it, and any other angle is too wide for the game to accept.
+    'remote_door': ((0xA0, 0x71), [],
+                    [((), 20), (('Q',), 10), (('G',), 4), ((), 6),
+                     (('SPACE',), 10), ((), 30), (('SPACE',), 10), ((), 30)],
+                    'clear', False, False,
+                    dict([(0x0806 + i, 0x80) for i in range(16)] + [(0x0847, 1), (0x0848, 0x4E)])),
+    # a door walked into.  Every door in the world starts locked, so this one
+    # only leans on it: the code that swings a door open is in door_unlocked.
+    'door_touch': ((0xAC, 0x62), [], [((), 30), (('W',), 60), ((), 30), (('Q',), 40)], 'clear'),
+    # the same door as remote_door, unlocked with the control and then walked
+    # through: it opens above the player's head and it is the only way to see a
+    # door finish its travel
+    'door_unlocked': ((0xA0, 0x71), [],
+                      [((), 20), (('Q',), 10), (('G',), 4), ((), 6),
+                       (('SPACE',), 10), ((), 10), (('Q',), 70), ((), 30)],
+                      'clear', False, False,
+                      dict([(0x0806 + i, 0x80) for i in range(16)] + [(0x0847, 1), (0x0848, 0x4E)])),
+    # a metal door of colour pair zero (&bf,&80), which is the kind that shuts
+    # itself again once it is fully open: unlock it and wait
+    'door_auto': ((0xC1, 0x80), [],
+                  [((), 20), (('Q',), 10), (('G',), 4), ((), 6),
+                   (('SPACE',), 10), ((), 130)],
+                  'clear', False, False,
+                  dict([(0x0806 + i, 0x80) for i in range(16)] + [(0x0847, 1), (0x0848, 0x4E)])),
+    # a plasma ball, and something for it to run into
+    'plasma_ball': ((0x88, 0x4D), [(1, 0x19, 0x8B, 0x4B), (2, BOULDER, 0x8D, 0x4C)],
+                    [((), 140)], 'clear'),
+    # a plasma ball driven into a boulder: it becomes a fireball on contact
+    'plasma_hit': ((0x88, 0x4D), [(1, 0x19, 0x8B, 0x4C, {'vx': 0x40}), (2, BOULDER, 0x8D, 0x4C)],
+                  [((), 100)], 'clear'),
+    # the river at the bottom of Triax's lab, whose wind tiles carry no data of
+    # their own and so run the variable water routine instead
+    'water_variable': ((0x68, 0xDE), [], [((), 140)], 'clear', True),
+    # water processed as an event, which is the one place the game insists on
+    # making an object whether or not a slot is free
+    'water_event': ((0x57, 0x68), [], [((), 140)], 'clear', True),
+    # an active chatter, which looses lightning at what it can see
+    'chatter_lightning': ((0x88, 0x4D), [(1, 0x01, 0x8D, 0x4B)], [((), 160)], 'clear'),
+    # a chatter with something to shoot at.  It fires only at a cyan/red turret,
+    # only within about fourteen degrees of horizontal and never backwards.  The
+    # turret needs a tertiary data byte of its own: with the zero a bare spawn
+    # leaves, the game reads a projectile type of zero and runs the turret as a
+    # rolling robot instead, which no turret on the planet ever does.  Tertiary
+    # slots 0 to 2 belong to no square, so slot 0 is free to borrow: &2a is what
+    # the turret at &aa,&98 carries, a live turret firing cannonballs.
+    'chatter_fire': ((0x88, 0x4D), [(1, 0x01, 0x8B, 0x4B), (2, 0x20, 0x90, 0x4B)],
+                     [((), 160)], 'clear', False, False, {0x0986: 0x2A}),
+    # worms and maggots crawling out of the ground, which is an event rather than
+    # anything an object does.  It takes a random tile within four squares of the
+    # player being solid earth, one frame in sixteen, and the deeper the likelier;
+    # &a1,&c8 is an open square with 79 of its 81 neighbours earth, far enough
+    # down that the odds are worth having.
+    'worm_emerges': ((0xA1, 0xC8), [], [((), 200)], 'clear', True),
+    # a rolling robot shot by the cannon.  A cannonball does 110 damage, which is
+    # the easiest way to kill something outright, and the noisy kinds of creature
+    # take a different exit from the quiet ones.
+    'cannon_kill': ((0x9C, 0x47), [(2, 0x46, 0x9E, 0x47), (3, 0x1C, 0xA0, 0x47)],
+                    [((), 24), (('G',), 4), ((), 8), (('SPACE',), 10), ((), 90)],
+                    'clear', False, False, {0x0847: 1, 0x0848: 0x4F}),
+    # plasma balls under water, which have a one-in-four chance each tick of
+    # simply going out.  The waterline is per x range, not global: for x below
+    # &54 it is row &ce, so &23,&d1 is three rows under.  Five balls, because one
+    # has a short life and one chance in four needs a few tries.
+    'plasma_water': ((0x23, 0xCF), [(s, 0x19, 0x23, 0xD1) for s in range(1, 6)],
+                     [((), 120)], 'clear'),
+    # Four conversions, each of which turns one object into another.  They are
+    # cheap to set up because they need only two objects touching, and none had
+    # ever run: the game has to be watched doing them or the port's transcription
+    # of them is guesswork.
+    #
+    # a fireball landing on a mushroom ball, which makes a coronium crystal
+    'mushroom_fireball': ((0x88, 0x4D), [(1, 0x33, 0x8A, 0x4C), (2, 0x37, 0x8A, 0x4C)],
+                          [((), 60)], 'clear'),
+    # a green slime fed a coronium crystal, which turns it yellow.  It needs the
+    # events on: with them off the slime never takes the crystal, wherever the
+    # crystal is put.  Slot 1 is the one that changes, from &0a to &0b, so it is
+    # this slime being fed and not one an event brought in.
+    'slime_crystal': ((0x88, 0x4D), [(1, 0x0A, 0x8A, 0x4C), (2, 0x58, 0x8A, 0x4C)],
+                      [((), 200)], 'clear', True),
+    # a red drop falling on a yellow slime, which makes a coronium boulder
+    'slime_boulder': ((0x88, 0x4D), [(1, 0x0B, 0x8A, 0x4C), (2, 0x36, 0x8A, 0x4B)],
+                      [((), 80)], 'clear'),
+    # an inactive chatter woken by whistle one.  Two things about this are not
+    # what they look like.  The key is U, not Y: the listing's key table lists the
+    # two whistle handlers against the wrong keys, and the routine it calls
+    # handle_playing_whistle_two is the one that tests whistle ONE collected and
+    # sets whistle_one_active, which is what the chatter listens for.  And the
+    # chatter wakes only while its energy reserve is above zero; the reserve
+    # starts empty, so the scene fills it, as feeding it crystals would in play.
+    'chatter_whistle': ((0x88, 0x4D), [(1, 0x38, 0x8B, 0x4C)],
+                        [((), 5), (('U',), 10), ((), 85)],
+                        'clear', False, False, {0x081C: 4, 0x0816: 0x80}),
+    # standing still on the flat ledge the cannon scene uses, with nothing else
+    # in it: the control against which that scene's faults are read
+    'flat_ledge': ((0x9C, 0x47), [], [((), 60)], 'clear'),
+    # the cannon, which fires when the player shoots its own control device at it.
+    # The cone it will accept is narrow: the angle from the device to the cannon
+    # has the distance added to it before the test, so both the height and the
+    # range matter.  &9c,&47 is flat ground five squares wide, which is what it
+    # takes for the player to stand still with the device level with the cannon;
+    # on the sloping ledge tried first the player slid east and the shot missed.
+    'cannon_fire': ((0x9C, 0x47), [(2, 0x46, 0x9E, 0x47)],
+                    [((), 24), (('G',), 4), ((), 8),
+                     (('SPACE',), 10), ((), 54)],
+                    'clear', False, False, {0x0847: 1, 0x0848: 0x4F}),
+    # a boulder carried into the air: the player's weight while holding one is
+    # six, which is the only way the walking acceleration gets halved
+    'hold_fly': ((0xA0, 0x71), [],
+                 [((), 20), (('G',), 4), ((), 6), (('P',), 60), ((), 30)],
+                 'clear', False, False, {0x0847: 1, 0x0848: 0x45}),
     # two boulders and a piano in a heap
     'heap': ((0x88, 0x4D), [(1, BOULDER, 0x8B, 0x4A), (2, BOULDER, 0x8B, 0x47), (3, PIANO, 0x8C, 0x44)], [((), 120)], False),
+}
+
+# What each scene is for.  A scene that passes proves nothing unless the code it
+# was written for actually ran, and three scenes here have at some point passed
+# while never entering the routine they were aimed at: the aim was too wide, the
+# object was never picked up, the door was never touched.  Each entry below names
+# routines in the listing that the scene must reach; audit_coverage.py --proves
+# checks them, and a scene that stops exercising its subject fails there rather
+# than sitting green.
+PROVES = {
+    'remote_door': ['consider_toggling_lock', 'check_if_object_hit_by_other_control'],
+    # this one never toggles the door: unlocking it sets it opening already, so
+    # what it is for is the travel afterwards and the door coming to rest
+    'door_unlocked': ['stop_door', 'not_at_end_of_track', 'is_unlocked'],
+    'door_auto': ['toggle_door_opening'],
+    'door_touch': ['update_door', 'skip_toggling_door_lock'],
+    'cannon_fire': ['update_cannon', 'create_projectile_with_zero_velocity_y',
+                    'update_cannonball'],
+    'chatter_fire': ['create_lightning'],
+    'mushroom_fireball': ['convert_mushroom_ball_to_coronium_crystal'],
+    'slime_crystal': ['change_slime_type'],
+    'slime_boulder': ['convert_yellow_slime_to_coronium_boulder'],
+    'cannon_kill': ['explode_object_with_loud_squeal'],
+    'worm_emerges': ['emerge_worm_or_maggot', 'spawn_object_in_event'],
+    'plasma_water': ['remove_plasma_ball_or_fireball'],
+    'chatter_whistle': ['activate_chatter'],
+    'hold_fly': ['consider_dropping_held_object'],
+    'plasma_ball': ['update_plasma_ball'],
+    'stone_door': ['update_door'],
+    'sucking_nest': ['update_sucking_nest'],
+    'two_nests': ['update_sucking_nest', 'update_dense_nest'],
+    'whistles': ['handle_playing_whistle_one', 'handle_playing_whistle_two'],
+    'teleport_back': ['handle_teleporting'],
 }
 
 
