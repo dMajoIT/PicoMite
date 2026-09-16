@@ -132,11 +132,14 @@ def main():
         consts.append("Const O_%s = %d" % (f.upper(), i))
     want = ('kmask', 'fault', 'faultarg', 'scr0', 'scr1', 'orgxf', 'orgyf', 'frame',
             'angle', 'aim', 'weapon', 'held', 'feedmode', 'eventson', 'promoteon',
-            'wl0', 'wldes0', 'pocket0', 'pockused', 'wlo0', 'whi0', 'viewpoint')
+            'wl0', 'wldes0', 'pocket0', 'pockused', 'wlo0', 'whi0', 'viewpoint', 'npart')
     for n in want:
         consts.append("Const G_%s = %d" % (n.upper(), GAME.index(n)))
     consts.append("Const NGAME = %d, NSLOT = %d" % (len(GAME), NSLOT))
     consts.append("Const NSPRITE = %d, TABLES_BYTES = %d" % (NSPRITE, tables_bytes()))
+    # a particle is eight words: the two velocities, the two position fractions,
+    # the two squares, the time to live, and the colour with its flags
+    consts.append("Const P_VX = 0, P_VY = 1, P_XF = 2, P_YF = 3, P_X = 4, P_Y = 5, P_TTL = 6, P_CF = 7")
     consts.append("Const OS_START = %d, OS_COUNT = %d, OS_PAL = %d, OS_GEO = %d, OS_N = %d"
                   % (OS_START, OS_COUNT, OS_PAL, OS_GEO, OS_N))
     for i, a in enumerate(ACTIONS):

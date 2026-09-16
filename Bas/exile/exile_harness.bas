@@ -40,6 +40,7 @@ Dim obj(287), game(NGAME - 1), world(25599), tbl(511), feed(7)
 Dim part(255)                          ' the particle system, eight words a particle
 Dim sheet(OS_N - 1)
 Dim wlx(4)
+Dim pcol(7)                            ' the eight colours a particle can be
 Dim keyHeld(38)
 Dim quitting
 Dim homeDir$
@@ -53,6 +54,8 @@ Sub Main
   Local Float t0, t1, tNext, tickAcc, drawAcc
   homeDir$ = MM.Info(Path) : If homeDir$ = "NONE" Then homeDir$ = "A:/"
   wlx(0) = 0 : wlx(1) = &H54 : wlx(2) = &H74 : wlx(3) = &HA0 : wlx(4) = 256
+  pcol(0) = RGB(BLACK)  : pcol(1) = RGB(RED)     : pcol(2) = RGB(GREEN) : pcol(3) = RGB(YELLOW)
+  pcol(4) = RGB(BLUE)   : pcol(5) = RGB(MAGENTA) : pcol(6) = RGB(CYAN)  : pcol(7) = RGB(WHITE)
   LoadAll
   t0 = Timer
   tNext = Timer + MSPERTICK
@@ -197,6 +200,7 @@ Sub DrawFrame
   Box 0, 0, VIEWW, VIEWH, 0, RGB(BLACK), RGB(BLACK)
   DrawWater vx, vy
   DrawObjects vx, vy
+  DrawParticles vx, vy
   Tilemap DRAW 1, F, vx, vy, 0, 0, VIEWW, VIEWH, 0
   Tilemap DRAW 2, F, vx, vy, 0, 0, VIEWW, VIEWH, 0
   DrawPanel
@@ -258,6 +262,23 @@ Sub DrawObjects(vx, vy)
       EndIf
     EndIf
   Next s
+End Sub
+
+' The particle system, straight from the kernel's own array.  A particle is one
+' BBC pixel, which is two of ours across, and its colour is the low three bits
+' of its flags byte.  They go under the tiles, as the game has them: a particle
+' that reaches solid ground is gone by the next tick anyway.
+Sub DrawParticles(vx, vy)
+  Local i, n, sx, sy
+  n = game(G_NPART)
+  If n > 127 Then Exit Sub               ' &FF is the game's way of saying none
+  For i = 0 To n
+    sx = part(i * 8 + P_X) * TW + (part(i * 8 + P_XF) \ 8) - vx
+    sy = part(i * 8 + P_Y) * TH + (part(i * 8 + P_YF) \ 8) - vy
+    If sx >= 0 And sx < VIEWW - 1 And sy >= 0 And sy < VIEWH - 1 Then
+      Box sx, sy, 2, 2, 0, pcol(part(i * 8 + P_CF) And 7), pcol(part(i * 8 + P_CF) And 7)
+    EndIf
+  Next i
 End Sub
 
 ' ---------------------------------------------------------------- the panel
