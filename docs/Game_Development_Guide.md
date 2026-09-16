@@ -53,6 +53,56 @@ Most game subsystems (TILEMAP, RAY, BLIT operations) work with the 4-bit RGB121 
 | 6 | GREEN | 14 | YELLOW |
 | 7 | CYAN | 15 | WHITE |
 
+### Recolouring Without Redrawing - the MAP Command
+
+Those sixteen slots are not fixed colours: they are *indexes*. What each one
+looks like is decided by the display at scanout, from a sixteen-entry colour
+map. Change the map and everything already on the screen in that slot changes
+colour - with no redraw, and no per-frame cost at all.
+
+That makes it the cheapest animation on the machine. A pulsing crystal, a
+throbbing force field, a warning lamp, water shifting between shades, a power-up
+that glints: draw the object once in a reserved slot, then just move the map.
+
+```basic
+CONST GLOW = 10                    ' a slot nothing else in the artwork uses
+DIM INTEGER glow(5), phase
+glow(0) = RGB(0,0,96)    : glow(1) = RGB(0,64,160)  : glow(2) = RGB(0,128,224)
+glow(3) = RGB(96,192,255): glow(4) = RGB(0,128,224) : glow(5) = RGB(0,64,160)
+
+' ... draw the crystal once, using colour GLOW ...
+
+DO
+  phase = (phase + 1) MOD 6
+  MAP(GLOW) = glow(phase)
+  MAP SET                          ' commits every pending change at once
+  ' ... the rest of the frame ...
+LOOP
+```
+
+`MAP SET` is what makes staged changes live, so several slots can be moved and
+committed together. `MAP RESET` puts the standard sixteen back.
+
+Four things to know before relying on it:
+
+**Reserve the slot.** The map is global. Recolour a slot your hero's sprite also
+uses and your hero changes colour too. Decide early which slots are "effect"
+slots and keep the artwork out of them.
+
+**`MAP(i)` does not read back the colour.** As a function it returns the RGB
+value that *selects* slot `i`, not the colour that slot is currently showing.
+Nothing can ask the display what a slot looks like, so keep your own copy if you
+need to know.
+
+**The map survives RUN.** It is display state, not program state. A game that
+leaves a slot recoloured finds it still recoloured next run - and so does the
+next program the user starts. `MAP RESET : MAP SET` during start-up, and again
+on the way out, saves a great deal of confusion.
+
+**Firmware before 6.03.02b8 ignores the map in `SAVE IMAGE`.** Screenshots come
+out in the default palette, so a map effect cannot be checked from a saved BMP
+on older firmware - look at the screen.
+
 ---
 
 ## The Framebuffer — Your Rendering Canvas
@@ -753,6 +803,67 @@ BLIT FLASH 1, F, 0, 0, 0, 0, 320, 240              ' Full background
 BLIT FLASH 2, F, 0, 0, 250, 5, 64, 16, 0           ' UI element with transparency
 ```
 
+### Installing Assets Once - and Knowing They Are Yours
+
+`FLASH LOAD IMAGE` erases and rewrites a whole flash slot. That takes a
+noticeable moment and wears the flash, so a game that does it on every run pays
+for it every run. Write the slot once, then check it.
+
+The check is built in: **without `OVERWRITE`, `FLASH LOAD IMAGE` refuses with
+"Already programmed" when the slot is in use.** A skipped error is therefore the
+program asking "has this already been done?":
+
+```basic
+SUB InstallImage(slot, file$)
+  LOCAL e$
+  ON ERROR CLEAR                  ' so a stale error cannot be mistaken for ours
+  ON ERROR SKIP 1
+  FLASH LOAD IMAGE slot, file$
+  e$ = MM.ERRMSG$
+  ON ERROR CLEAR
+  IF e$ <> "" AND INSTR(e$, "Already programmed") = 0 THEN ERROR e$
+END SUB
+```
+
+That answers "is something in the slot?" but not "is it *mine*?", and the
+difference matters more than it sounds. The user may have another game's images
+in those slots, and your own artwork changes between versions. Loading the wrong
+sheet does not crash - it draws a plausible-looking picture made of the wrong
+squares, which is a far more baffling bug report than a crash would be.
+
+A flash image begins with its own dimensions, so start there:
+
+```basic
+LOCAL a
+a = MM.INFO(FLASH ADDRESS slot)
+IF PEEK(WORD a) <> wantW OR PEEK(WORD a + 4) <> wantH THEN
+  ERROR "FLASH ERASE " + STR$(slot) + ", then run again"
+ENDIF
+```
+
+**But the same size does not mean the same picture.** If a new version of your
+artwork renumbers the tiles without changing the sheet's dimensions, the size
+check passes and the map cheerfully indexes the old tiles. To catch that,
+compare a few words of the picture itself. What `FLASH LOAD IMAGE` stores is
+exactly determined by the BMP, so a build script can work out what those words
+must be and emit them as `DATA`:
+
+| Offset | Contents |
+|--------|----------|
+| 0 | image width, 32-bit |
+| 4 | image height, 32-bit |
+| 8 onward | the picture, **top row first**, `width / 2` bytes per row |
+
+Each byte holds two pixels with the **left one in the low nibble**. The nibble
+is the RGB121 code - red bit 7, green bits 7 and 6, blue bit 7 of the colour -
+which is *not* the BMP's own palette index, so a build script must put the BMP
+palette through the same conversion. Sample words from several places in the
+image, and skip any that come out blank: a run of zeroes matches any other
+image's blank run and proves nothing.
+
+Note the ordering. BMPs store their rows bottom-up, but the flash image is
+written top row first, so the *last* row in the file is the *first* in flash.
+
 ### Scaling with BLIT RESIZE
 
 ```basic
@@ -787,6 +898,43 @@ IF KEYDOWN(131) THEN move_right    ' Right arrow
 IF KEYDOWN(32) THEN fire           ' Space
 n% = KEYDOWN(0)                    ' Number of keys currently pressed
 ```
+
+**Press versus hold.** `KEYDOWN` reports what is held *now*, so
+`IF KEYDOWN(32) THEN Fire` fires on every frame the key is down. For actions
+that should happen once per press - jump, a single shot, opening a door,
+changing weapon - remember what was held last frame and require a release
+first:
+
+```basic
+DIM INTEGER kNow(255), kWas(255)
+
+SUB ReadKeys
+  LOCAL INTEGER i, n
+  FOR i = 0 TO 255 : kWas(i) = kNow(i) : kNow(i) = 0 : NEXT i
+  n = KEYDOWN(0)
+  FOR i = 1 TO n : kNow(KEYDOWN(i)) = 1 : NEXT i
+END SUB
+
+FUNCTION Held(k)    : Held = kNow(k) : END FUNCTION
+FUNCTION Pressed(k) : Pressed = kNow(k) AND kWas(k) = 0 : END FUNCTION
+```
+
+Call `ReadKeys` once at the top of the frame - never twice, or the second call
+overwrites the previous state and `Pressed()` never fires. Then use `Held()` for
+movement and thrust, `Pressed()` for everything else. Keep the whole key set in
+one array and the two behaviours stay one line apart rather than scattered
+through the game.
+
+**Do not mix `INKEY$` and `KEYDOWN` for the same key.** `INKEY$` takes a
+keypress out of the console buffer; `KEYDOWN` reports the physical state of the
+keyboard. Consuming a key with `INKEY$` does *not* stop `KEYDOWN` reporting it
+as still down until it is physically released, so a game that reads both will
+act on the same press twice. Pick one and use it throughout.
+
+**Testing note:** writing key codes to the console over a serial link does not
+drive a `KEYDOWN` loop - a `KEYDOWN` call clears pending console input as a side
+effect. A game built on `KEYDOWN` can only be driven from a real keyboard, so
+plan another way to test it automatically.
 
 ### USB Gamepad (USB Keyboard Builds)
 
@@ -1048,6 +1196,20 @@ END
 8. **Use string maps for RAY** — 1 byte per cell vs 8 bytes for integer arrays
 9. **Use SPRITE COPY** — shared image data saves memory when you need many identical sprites
 10. **Use tile attributes** — one TILEMAP(COLLISION ..., mask) call replaces dozens of individual tile checks
+11. **Separate the simulation tick from the draw** - run the game's logic at a
+    fixed rate and draw whatever the clock allows, rather than letting the
+    physics run as fast as the frame does. A game whose speed depends on how
+    much is on screen is very hard to tune, and impossible to reproduce a bug
+    in. Time the two halves separately: knowing that a slow frame is 0.3 ms of
+    logic and 6.8 ms of drawing tells you immediately which one to attack.
+12. **Move the hot loop into a CSUB when interpretation dominates.** Above a
+    certain amount of per-object work, the cost is the interpreter reading
+    statements, not the arithmetic in them - and no amount of tightening the
+    BASIC helps. Rewriting one inner loop in C can be a hundredfold: a
+    per-object physics update measured at 9.8 ms in BASIC ran in 0.28 ms as a
+    CSUB doing exactly the same arithmetic. Keep the CSUB's state in an integer
+    array shared with the BASIC so nothing has to be copied across the boundary
+    each call.
 
 ### Memory Considerations
 
@@ -1200,6 +1362,152 @@ DATA SOLID        ' Tile 2: platform
 DATA 0            ' Tile 3: player graphic
 DATA COLLECT      ' Tile 4: collectible
 ```
+
+---
+
+## Porting an Existing Game
+
+If you are bringing a game across from another machine rather than inventing
+one, the hardest part is not the graphics - it is knowing whether your version
+behaves like the original. A few habits make that tractable.
+
+**Get a reference you can run.** A disassembly you read is not the same as an
+implementation you can execute. If you can run the original - in an emulator, or
+in a small interpreter for its CPU - you can put it side by side with your port
+and compare, which turns "does this feel right?" into a question with an answer.
+
+**Drive both sides with the same randomness.** Record every random number the
+original draws, keyed by where it drew it, and feed those numbers to your port
+at the matching places. Otherwise the two diverge immediately for reasons that
+have nothing to do with your code being wrong.
+
+**Compare all the state, not just the obvious part.** The temptation is to
+compare the things you already think about - the objects, the player. Everything
+else drifts in silence, and the bug surfaces hours later somewhere unrelated. In
+this project the object table was compared for weeks while a single timer
+elsewhere was never decremented, which meant no door in the game could open; the
+scenes that covered doors all passed. Widening the comparison to the whole of
+the shared state found that in one run, and three more bugs with it.
+
+**Prove that each check can fail.** A comparison that has never failed may be
+watching nothing at all. Deliberately reintroduce a bug you have fixed and
+confirm the harness catches it, and where. This is the cheapest test you will
+ever write and it repeatedly finds checks that were quietly disabled.
+
+**Reaching the code is not exercising it.** Coverage tells you a routine ran,
+not that it did anything. Three scenes reached the door-handling routine every
+time and all passed, while no door was capable of opening.
+
+**Where exactness is impossible, measure the gap instead of hiding it.** Some
+original behaviour depends on things your port does not have - reading pixels
+back from the screen, for instance, or exact timing. Do not quietly let those
+cases pass. Count how often they agree, report the number, and write down why it
+cannot be 100%, so that a change making it worse is visible rather than
+invisible.
+
+---
+
+## Shipping a Finished Game
+
+A game that only runs from the root of `A:` is awkward to hand to anyone else.
+Two firmware features let it live in a folder on any drive and start with a
+single `RUN`.
+
+### Finding your own assets
+
+`MM.INFO(PATH)` is the directory the running program was loaded from. Use it for
+every asset path and the game works wherever it is installed:
+
+```basic
+DIM home$
+home$ = MM.INFO(PATH)
+IF home$ = "NONE" THEN home$ = "A:/"
+OPEN home$ + "level1.dat" FOR INPUT AS #1
+```
+
+The path comes from a `'#filename` header the loader writes as the program's
+first line, so it is only available to a program **loaded from a file**. One
+that arrived over `AUTOSAVE` has no header and `MM.INFO(PATH)` returns `"NONE"`,
+which is why the fallback is worth keeping while developing.
+
+### Code too big for program memory
+
+A large CSUB costs its hex text as well as its compiled code and can easily
+exceed program memory. Put it in the library instead - and have the program
+install its own, rather than relying on the user having run `LIBRARY SAVE`:
+
+```basic
+LIBRARY LOAD MM.INFO(PATH) + "mygame_lib.bas"
+OPTION EXPLICIT
+' ... the rest of the program ...
+```
+
+Three rules come with it:
+
+- **It must be the program's first statement.** The library's own top level runs
+  before your program's first line, so one loaded later would arrive too late to
+  be initialised. Comment lines ahead of it are fine, including the `'#filename`
+  header the loader added.
+- **It is idempotent.** The hash of the source is kept in the options, so a
+  program doing this on every run reads the file, finds the library already
+  matches, and touches no flash at all. Only a *different* library costs
+  anything.
+- **It restarts the program.** A library cannot be initialised mid-run, so when
+  one is written execution begins again at line 1 - where the command is now a
+  no-op. Your program sees a clean start, not a resumed one, so do not put
+  anything before it that should happen once.
+
+Do not add `OVERWRITE` in a released game. Without it the board asks before
+replacing a library that may belong to something the user cares about, and the
+question only appears when the library actually differs - so an ordinary run is
+silent anyway.
+
+### One RUN from nothing
+
+Put that together with the flash-slot install above and the whole thing is
+automatic: the library writes itself and restarts, the flash slots fill if they
+are empty and are verified if they are not, and everything else loads from
+`home$`. The user copies one folder and types one command. The first run takes a
+minute; every run after that starts in a second.
+
+Ship a plain-text README in the same folder. It is the only documentation most
+players will ever see, and it is the right place for the keys, the install
+command, and what to include in a bug report.
+
+---
+
+## MMBasic Traps Worth Knowing
+
+A few that are easy to hit and hard to diagnose:
+
+**`RESTORE` to a label, always.** An unqualified `READ` takes the program's
+*first* `DATA` statement, wherever that happens to be. Add a generated `DATA`
+block ahead of an existing one and the old `READ` silently starts consuming the
+new numbers - which surfaces as a nonsense error a long way from the cause.
+
+```basic
+RESTORE LevelData
+FOR i = 1 TO n : READ tile(i) : NEXT i
+LevelData:
+DATA 1, 2, 3, 4
+```
+
+**`TEXT` with a background colour only erases its own width.** Printing a
+shorter string over a longer one leaves the tail of the old one behind. Pad to a
+fixed width, or clear the area first.
+
+**Work out how many characters actually fit.** Font 7 is 6 pixels wide, font 1
+is 8. A 64-pixel status panel holds ten characters of font 7 and no more, so
+`"SCORE 1000"` fits and `"SCORE 10000"` does not - and the overflow is silent.
+Count before designing a panel, and leave headroom for the largest value a field
+can reach, not the value it shows at the start.
+
+**Names are unique irrespective of type suffix.** `k` and `k$` are the same
+name, and a no-argument built-in function name cannot be used as a variable.
+
+**Variables cannot be invented at the prompt** once a program using
+`OPTION EXPLICIT` has run, and the command line truncates around 250
+characters - both worth knowing when poking at a running game from the console.
 
 ---
 
