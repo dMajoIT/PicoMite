@@ -41,6 +41,9 @@ Dim part(255)                          ' the particle system, eight words a part
 Dim sheet(OS_N - 1)
 Dim wlx(4)
 Dim pcol(7)                            ' the eight colours a particle can be
+Dim glowPal, glowShown                 ' the palette the reserved slots are wearing
+Dim kdown(38), kprev(38)               ' what is down now, and what was down last tick
+Dim kRepeat(38)                        ' 1 if the action repeats while held (&121d)
 Dim sAct(3), sWhat(3), sNext           ' which of the four channels are sounding, and with what
 Dim sEv(7), sDur(7), sSoff(7), sSdur(7), sLoop(7), sLoff(7)
 Dim keyHeld(38)
@@ -57,6 +60,13 @@ Sub Main
   homeDir$ = MM.Info(Path) : If homeDir$ = "NONE" Then homeDir$ = "A:/"
   wlx(0) = 0 : wlx(1) = &H54 : wlx(2) = &H74 : wlx(3) = &HA0 : wlx(4) = 256
   sNext = 1
+  ' which actions repeat while held, from the game's own table at &121d;
+  ' every other action fires once and waits for the key to be let go
+  Local kr, kri
+  For kri = 0 To 14
+    Read kr : kRepeat(kr) = 1
+  Next kri
+  Data 0, 11, 14, 19, 20, 21, 22, 28, 29, 30, 33, 34, 35, 37, 38
   pcol(0) = RGB(BLACK)  : pcol(1) = RGB(RED)     : pcol(2) = RGB(GREEN) : pcol(3) = RGB(YELLOW)
   pcol(4) = RGB(BLUE)   : pcol(5) = RGB(MAGENTA) : pcol(6) = RGB(CYAN)  : pcol(7) = RGB(WHITE)
   LoadAll
@@ -106,6 +116,10 @@ End Sub
 Sub LoadAll
   Local Float t0
   MODE 2
+  ' The colour map survives a RUN, so a previous run's glow would still be in
+  ' the slots.  Start from the board's own sixteen.
+  Map RESET
+  Map SET
   CLS
   FRAMEBUFFER CREATE
   Print "Exile: the tilesets into flash ..."
@@ -140,7 +154,7 @@ End Sub
 ' input buffer, so nothing else may read it.
 Sub ReadKeys
   Local i, k, sh
-  For i = 0 To 38 : keyHeld(i) = 0 : Next i
+  For i = 0 To 38 : keyHeld(i) = 0 : kdown(i) = 0 : Next i
   quitting = 0
   For i = 1 To 6
     k = KEYDOWN(i)
@@ -151,34 +165,48 @@ Sub ReadKeys
     ' the function keys pick a weapon up, or with shift pour energy into it;
     ' the game calls them f0 to f9 and F1 is its f0, so the numbers line up
     If k >= 145 And k <= 154 Then
-      keyHeld(k - 144) = 1
+      kdown(k - 144) = 1
     Else
       Select Case k
-        Case 113 : keyHeld(K_Q) = 1          ' left
-        Case 119 : keyHeld(K_W) = 1          ' right
-        Case 112 : keyHeld(K_P) = 1          ' up
-        Case 108 : keyHeld(K_L) = 1          ' down
-        Case 32  : keyHeld(K_SPACE) = 1      ' fire
-        Case 128 : keyHeld(K_UP) = 1         ' the arrows move the view alone
-        Case 129 : keyHeld(K_DOWN) = 1
-        Case 130 : keyHeld(K_LEFT) = 1
-        Case 131 : keyHeld(K_RIGHT) = 1
-        Case 9   : keyHeld(K_TAB) = 1        ' the map
-        Case 103 : keyHeld(K_G) = 1          ' retrieve from a pocket
-        Case 115 : keyHeld(K_S) = 1          ' store into one
-        Case 116 : keyHeld(K_T) = 1          ' teleport
-        Case 114 : keyHeld(K_R) = 1          ' remember where you are
-        Case 121 : keyHeld(K_Y) = 1          ' the whistles
-        Case 117 : keyHeld(K_U) = 1
-        Case 109 : keyHeld(K_M) = 1          ' pick up and drop
-        Case 107 : keyHeld(K_K) = 1          ' aim
-        Case 111 : keyHeld(K_O) = 1
-        Case 46  : keyHeld(K_GT) = 1         ' throw
+        Case 113 : kdown(K_Q) = 1            ' left
+        Case 119 : kdown(K_W) = 1            ' right
+        Case 112 : kdown(K_P) = 1            ' up
+        Case 108 : kdown(K_L) = 1            ' down
+        Case 32  : kdown(K_SPACE) = 1        ' fire
+        Case 128 : kdown(K_UP) = 1           ' the arrows move the view alone
+        Case 129 : kdown(K_DOWN) = 1
+        Case 130 : kdown(K_LEFT) = 1
+        Case 131 : kdown(K_RIGHT) = 1
+        Case 9   : kdown(K_TAB) = 1          ' the map
+        Case 103 : kdown(K_G) = 1            ' retrieve from a pocket
+        Case 115 : kdown(K_S) = 1            ' store into one
+        Case 116 : kdown(K_T) = 1            ' teleport
+        Case 114 : kdown(K_R) = 1            ' remember where you are
+        Case 121 : kdown(K_Y) = 1            ' the whistles
+        Case 117 : kdown(K_U) = 1
+        Case 109 : kdown(K_M) = 1            ' pick up and drop
+        Case 107 : kdown(K_K) = 1            ' aim
+        Case 111 : kdown(K_O) = 1
+        Case 46  : kdown(K_GT) = 1           ' throw
         Case 27  : quitting = 1              ' quit, which is not the game's
       End Select
     EndIf
   Next i
-  If sh Then keyHeld(K_SHIFT) = 1
+  If sh Then kdown(K_SHIFT) = 1
+  ' The game's table at &121d says which actions repeat while the key is held
+  ' and which fire once.  One that repeats just wants the state.  One that fires
+  ' once wants the press, and KEYDOWN goes on reporting a key for as long as it
+  ' is down, so the press is the tick it first appears: after that nothing more
+  ' happens until KEYDOWN stops seeing it, and only then does the next push
+  ' count.  Without waiting for the release, one long push is a run of presses.
+  For i = 0 To 38
+    If kRepeat(i) Then
+      keyHeld(i) = kdown(i)
+    ElseIf kdown(i) And kprev(i) = 0 Then
+      keyHeld(i) = 1
+    EndIf
+    kprev(i) = kdown(i)
+  Next i
 End Sub
 
 Function KeyMask()
@@ -205,6 +233,7 @@ Sub DrawFrame
   DrawWater vx, vy
   DrawObjects vx, vy
   DrawParticles vx, vy
+  SetGlowColours
   Tilemap DRAW 1, F, vx, vy, 0, 0, VIEWW, VIEWH, 0
   Tilemap DRAW 2, F, vx, vy, 0, 0, VIEWW, VIEWH, 0
   DrawPanel
@@ -232,8 +261,24 @@ End Sub
 ' Every live slot, from the kernel's own tables.  The sheet holds each
 ' (sprite, palette) in its four orientations; a sprite has six palettes at
 ' most and usually one, so finding the pair is a short walk.
+' What the three reserved slots are wearing this frame.  The map is one for the
+' whole screen, so everything drawn this way glows together where the game gives
+' each its own phase; seven slots are spare, so a second such object could have
+' its own three if that ever matters.
+Sub SetGlowColours
+  Local pc
+  If glowPal < 0 Or glowPal = glowShown Then Exit Sub
+  glowShown = glowPal
+  pc = sheet(OS_PALCOL + glowPal)
+  Map(GLOW0) = pcol(pc And 7)
+  Map(GLOW1) = pcol((pc >> 8) And 7)
+  Map(GLOW2) = pcol((pc >> 16) And 7)
+  Map SET
+End Sub
+
 Sub DrawObjects(vx, vy)
   Local s, spr, pal, flg, fl, i, st, cn, pr, geo, ox, oy, ow, oh, sx, sy
+  glowPal = -1
   For s = 0 To NSLOT - 1
     If obj(O_Y * NSLOT + s) <> 0 Then
       spr = obj(O_SPRITE * NSLOT + s)
@@ -246,6 +291,19 @@ Sub DrawObjects(vx, vy)
         For i = 0 To cn - 1
           If sheet(OS_PAL + st + i) = pal Then pr = st + i : Exit For
         Next i
+        ' An object whose palette the sheet does not hold was drawn as nothing at
+        ' all.  Some change palette as they live - a coronium boulder cycles
+        ' through thirty-odd as it glows - and no sheet has room for every one.
+        ' Those sprites carry one copy drawn in the three reserved display slots, and
+        ' SetGlowColours says what the three mean.  The display applies a map
+        ' change at scanout, so it costs nothing and redraws nothing.
+        If pr < 0 Then
+          For i = 0 To cn - 1
+            If sheet(OS_PAL + st + i) = GLOW_PALETTE Then
+              pr = st + i : glowPal = pal : Exit For
+            EndIf
+          Next i
+        EndIf
       EndIf
       If pr >= 0 Then
         geo = sheet(OS_GEO + pr * 4 + fl)

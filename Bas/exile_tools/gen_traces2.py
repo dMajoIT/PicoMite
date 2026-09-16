@@ -288,6 +288,27 @@ SCENARIOS = {
     # &a1,&c8 is an open square with 79 of its 81 neighbours earth, far enough
     # down that the odds are worth having.
     'worm_emerges': ((0xA1, 0xC8), [], [((), 200)], 'clear', True),
+    # the game's own opening: the player standing in the ship.  The two hatches
+    # are the only doors of the fifty in the world whose tertiary byte has bit 7
+    # clear in the snapshot the listing was taken from, which tells the game they
+    # have already become primary objects and stops it ever making them; the
+    # pokes put them back as a new game has them.  Nothing here is pressed: what
+    # is being watched is whether the first redraw makes the hatches at all.
+    'ship_start': ((0x9B, 0x3B), [], [((), 120)], 'clear', False, False,
+                   {0x0995: 0x81, 0x09AF: 0x81}),
+    # the same, with the events running, which is how the game plays it: the
+    # stars drifting in the sky above the ship are made in update_events, one
+    # at a time at a random tile near the player, so with the events off there
+    # is no stardust at all.
+    'ship_stars': ((0x9B, 0x3B), [], [((), 120)], 'clear', True, False,
+                   {0x0995: 0x81, 0x09AF: 0x81}),
+    # the arrow keys moving the view on its own, pressed and released one at a
+    # time.  They suppress auto-repeat, so holding one does nothing after the
+    # first tick and each separate press is worth one tile, up to two tiles in
+    # x and four in y.  What is being checked is that every press counts.
+    'view_scroll': ((0x9B, 0x3B), [],
+                    [((), 10), (('UP',), 2), ((), 3), (('UP',), 2), ((), 3), (('UP',), 2), ((), 3), (('UP',), 2), ((), 3), (('DOWN',), 2), ((), 3), (('DOWN',), 2), ((), 3), (('LEFT',), 2), ((), 3), (('LEFT',), 2), ((), 3), (('RIGHT',), 2), ((), 3), (('RIGHT',), 2), ((), 3), ((), 10)],
+                    'clear'),
     # a rolling robot shot by the cannon.  A cannonball does 110 damage, which is
     # the easiest way to kill something outright, and the noisy kinds of creature
     # take a different exit from the quiet ones.
@@ -370,6 +391,7 @@ PROVES = {
     'slime_crystal': ['change_slime_type'],
     'slime_boulder': ['convert_yellow_slime_to_coronium_boulder'],
     'cannon_kill': ['explode_object_with_loud_squeal'],
+    'ship_start': ['update_door', 'update_metal_door_tile'],
     'worm_emerges': ['emerge_worm_or_maggot', 'spawn_object_in_event'],
     'plasma_water': ['remove_plasma_ball_or_fireball'],
     'chatter_whistle': ['activate_chatter'],

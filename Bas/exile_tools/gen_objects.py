@@ -39,6 +39,28 @@ from gen_tiles import Sheet, palette_colours, read_bmp4, write_bmp4, save_png, B
 
 KEY = 8                      # palette slot in the BMP that quantises to RGB121 index 2
 KEY_RGB = (0, 100, 0)
+GLOW_PALETTE = 0xFF          # the sheet entry that means "colour me with MAP"
+# The display slots MAP will fill in.  They have to be ones nothing else lands
+# in, and the eight BBC colours do NOT occupy slots 0-7: the board puts each
+# colour in whichever of its sixteen is nearest, which for these works out as
+# black 0, blue 1, green 6, cyan 7, red 8, MAGENTA 9, yellow 14, white 15, with
+# the transparency key on 2.  That leaves 3, 4, 5, 10, 11, 12 and 13 free.
+# Slot 9 was reserved here first, and every magenta line in the game changed
+# colour with the glow.
+RESERVED = (10, 11, 12)
+
+# The sheet is a four-bit image, so what matters is which of the sixteen display
+# slots each colour lands in when the board loads it, and the board picks the
+# slot whose colour is nearest.  Slots 0-7 take the BBC colours and 8 the key,
+# which leaves 9-15 spare; writing the board's own colours for 9, 10 and 11
+# (MAP16DEF in graphics/HDMI.c) puts the reserved pixels in exactly those slots,
+# and the game then says what they mean with MAP as it draws.
+MAP16DEF = [0x000000, 0x0000FF, 0x005500, 0x0055FF, 0x00AA00, 0x00AAFF, 0x00FF00, 0x00FFFF,
+            0xFF0000, 0xFF00FF, 0xFF5500, 0xFF55FF, 0xFFAA00, 0xFFAAFF, 0xFFFF00, 0xFFFFFF]
+SHEET_PALETTE = (BBC_RGB + [KEY_RGB] +
+                 [((MAP16DEF[i] >> 16) & 255, (MAP16DEF[i] >> 8) & 255, MAP16DEF[i] & 255)
+                  for i in RESERVED] +
+                 [(0, 0, 0)] * (7 - len(RESERVED)))
 SHEET_WIDTH = 256
 SLOT_BYTES = 144 * 1024          # MAX_PROG_SIZE on the PC3: one flash slot
 
@@ -52,6 +74,30 @@ def family(sprite):
         if lo <= sprite <= hi:
             return list(range(lo, hi + 1))
     return [sprite]
+
+
+# The palette bytes the sheet renders are the ones an object is born with, but
+# some objects change palette as they live: a coronium crystal and a coronium
+# boulder cycle theirs as they glow, through dozens of values apiece, and no
+# sheet has room for that.  Those are rendered once in colours 9, 10 and 11
+# instead - three of the seven of the sixteen that nothing else uses - and the
+# game sets what those three mean with MAP as it draws, which the display
+# applies at scanout, so the glow costs nothing and needs no redrawing.
+
+
+def render_sprite_reserved(sheet, sprite):
+    """Rows as render_sprite, but in the three colours MAP will fill in."""
+    left, top, w, h, src_fh, src_fv = sheet.sprite(sprite)
+    colours = (KEY,) + RESERVED
+    rows = []
+    for y in range(h):
+        sy = (h - 1 - y) if src_fv else y
+        row = []
+        for x in range(w):
+            sx = (w - 1 - x) if src_fh else x
+            row += [colours[sheet.pixel(left + sx, top + sy)]] * 2
+        rows.append(row)
+    return rows
 
 
 def render_sprite(sheet, sprite, pal):
@@ -86,6 +132,39 @@ def pack(items, width):
     return pos, y + shelf
 
 
+def door_palettes(mem, sprites_of_type):
+    """The palettes a door can wear, which are not the one in the types table.
+
+    object_types_palette_and_pickup_table gives each type one palette, and for
+    most objects that is the only one they ever have.  A door is not like that:
+    update_door (&4d64) looks its palette up in doors_palette_table by its own
+    colour, and clears colour three while it is unlocked, so one door type wears
+    two palettes for each of the eight colours.  A pair the sheet does not hold
+    cannot be drawn at all, which is why the ship's hatches were invisible even
+    once the objects existed.
+
+    Only the colours that are actually on the planet are rendered - all fifty
+    doors between them want a dozen pairs, where covering every colour would
+    want fifty-eight and the slot has no room to waste.
+    """
+    world = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'out', 'world_types.bin')
+    w = open(world, 'rb').read()
+    tf, tdata = w[0:65536], w[65536:131072]
+    want = {}
+    for i in range(65536):
+        t = tf[i] & 0x3F
+        if t not in (0x03, 0x04):
+            continue
+        flip = tf[i] & 0xC0
+        colour = (mem[0x0986 + tdata[i]] >> 4) & 7
+        base = mem[0x4D7A + colour]
+        vertical = 1 if (bool(flip & 0x80) ^ bool(flip & 0x40)) else 0
+        ty = (0x3C if t == 0x03 else 0x3E) + vertical
+        for pal in (base, base & 0x0F):        # locked, and unlocked
+            want.setdefault((sprites_of_type[ty], pal & 0x7F), []).append(ty)
+    return want
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -107,9 +186,15 @@ def main():
     for t, (s, p) in enumerate(zip(sprites_of_type, palettes_of_type)):
         for member in family(s):
             entries.setdefault((member, p & 0x7F), []).append(t)
+    for (s, p), ts in door_palettes(mem, sprites_of_type).items():
+        for member in family(s):
+            entries.setdefault((member, p & 0x7F), []).extend(ts)
+    for t in (0x55, 0x58):                 # coronium boulder and coronium crystal
+        for member in family(sprites_of_type[t]):
+            entries.setdefault((member, GLOW_PALETTE), []).append(t)
     images = {}
     for (s, p) in entries:
-        base = render_sprite(sheet, s, p)
+        base = render_sprite_reserved(sheet, s) if p == GLOW_PALETTE else render_sprite(sheet, s, p)
         images[(s, p, 0)] = base
         images[(s, p, 1)] = [list(reversed(r)) for r in base]
         images[(s, p, 2)] = list(reversed(base))
@@ -123,7 +208,7 @@ def main():
         for j, r in enumerate(img):
             rows[y + j][x:x + len(r)] = r
     save_png(os.path.join(out_dir, 'objects.png'), SHEET_WIDTH, height, rows,
-             palette=BBC_RGB + [KEY_RGB] + [(0, 0, 0)] * 7)
+             palette=SHEET_PALETTE)
     # slot 2 carries the tail of the tileset and these objects in one image.  The
     # tiles use colours 0-7 only, so the object sheet's palette (which adds the key
     # colour at 8) serves both, and the tiles keep colour 0 for TILEMAP's transparent.
@@ -132,7 +217,7 @@ def main():
         print("the tileset is %d wide and the object sheet %d: they cannot share a slot" % (tw, SHEET_WIDTH))
         return 1
     write_bmp4(os.path.join(out_dir, 'exile_slot2.bmp'), SHEET_WIDTH, tile_h + height, tile_rows + rows,
-               palette=BBC_RGB + [KEY_RGB] + [(0, 0, 0)] * 7)
+               palette=SHEET_PALETTE)
 
     ordered = sorted(images, key=lambda k: (k[0], k[1], k[2]))
     with open(os.path.join(out_dir, 'objects.json'), 'w') as f:

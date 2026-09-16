@@ -17,7 +17,7 @@ The screen state is left at zero, so the first tick finds the view nowhere
 near the player and redraws the whole of it, which is what the game does when
 it starts.
 
-    python gen_exilegame.py exile-disassembly.txt [--start &8a,&4a | --saved]
+    python gen_exilegame.py exile-disassembly.txt [--start &8a,&4a | --landing]
 """
 import json
 import os
@@ -37,7 +37,9 @@ OS_START = 0                       # first pair for a sprite
 OS_COUNT = OS_START + NSPRITE      # how many palettes that sprite has
 OS_PAL = OS_COUNT + NSPRITE        # the palette of each pair
 OS_GEO = None                      # x | y<<16 | w<<32 | h<<40, four flips a pair
+OS_PALCOL = None                   # the three colours of each of the 128 palettes
 OS_N = None
+GLOW_PALETTE = 0xFF                # the sheet entry drawn in MAP's reserved colours
 
 
 def table_offset(name):
@@ -57,15 +59,29 @@ def tables_bytes():
 
 # Where a new game puts the player.  The position in the binary is a saved one
 # - the routine that loads it is called relocate_binary_and_saved_position -
-# and it sits inside the ship, walled in by two doors that will not open until
-# the view scrolls onto their tiles, which inside the ship it never does: from
-# there the player can reach five squares by three and no more.  The landing
-# site outside gives fifty by thirty-six, which is somewhere a game can be
-# played and tested.  --start &xx,&yy overrides it.
+# and it is inside the ship, which is where Exile begins and so where this
+# begins: the first screen is the ship's hull with the player standing in it.
+#
+# From there the player can reach eight squares and no more, which was once
+# read here as the start being broken and answered by moving it outside to the
+# landing site.  That was treating the symptom.  The square the player stands
+# on is an invisible switch that only OBJECT_DESTINATOR (&4a) can trip, the
+# destinator is in the ship at &99,&3c, and the two doors out at &9c,&3c and
+# &9c,&3d are locked to keys of colour 0 and 2 that a new game does not have.
+# Getting out is the game's own opening puzzle, not a fault to be worked
+# around, and a start that skips it is a start that never tests it.
+#
+# --start &xx,&yy puts the player anywhere; LANDING_SITE is the open ground
+# outside, fifty squares by thirty-six, which is useful for exercising the
+# world but is not how the game begins.
 LANDING_SITE = (0x8A, 0x4A)
+SHIP = None
+
+# the tertiary data offsets of the ship's two hatches, &9c,&3c and &9c,&3d
+SHIP_DOOR_OFFSETS = (0x0F, 0x29)                      # None means the binary's own saved position
 
 
-def start_arrays(mem, start=LANDING_SITE):
+def start_arrays(mem, start=SHIP):
     """The slots and the game array as a new game begins."""
     slots = [0] * (NSLOT * len(FIELDS))
     for f in FIELDS:
@@ -76,7 +92,31 @@ def start_arrays(mem, start=LANDING_SITE):
         slots[FIELDS.index('y') * NSLOT] = start[1]
         slots[FIELDS.index('xf') * NSLOT] = 0x80
         slots[FIELDS.index('yf') * NSLOT] = 0
+    # relocate_binary_and_saved_position (&78ed) wipes zero page &01-&df before
+    # the first frame, which exilegame.Game copies and this must too.  It is not
+    # housekeeping: the screen origin lives at &c7-&d1, so wiping it leaves the
+    # view nowhere near the player, and the first tick answers that with
+    # redraw_screen - which looks at every tile on the screen and makes the
+    # objects they carry.  Without it the view starts already correct, nothing
+    # is ever swept, and every door, beam and tile-borne object that the player
+    # does not walk into simply never exists.  That is why the ship had no
+    # hatches even once their tertiary bytes were put back.
+    mem = bytearray(mem)
+    for a in range(1, 0xE0):
+        mem[a] = 0
+    mem[0x35] = 0x28         # acceleration_power, five tiles
+    mem[0xDE] = 0xC0         # the player upright
+    mem[0xDD] = 0xFF         # holding nothing
     g = game_init(mem)
+    # The two doors out of the ship are the only ones of the fifty in the world
+    # whose tertiary data byte has bit 7 clear.  Bit 7 clear tells the game the
+    # object "has already become primary" (&404d), so it will never create it -
+    # and the sixteen object slots the snapshot carries are empty, so it never
+    # became anything.  That is an artefact of where the snapshot was taken:
+    # with the player standing in the ship and both hatches live as objects.
+    # A new game has them waiting as tertiary objects, so put them back.
+    for off in SHIP_DOOR_OFFSETS:
+        g['tert%d' % off] |= 0x80
     g['feedmode'] = 0        # its own random numbers, and the keys from the array
     g['eventson'] = 1
     g['promoteon'] = 1
@@ -90,19 +130,26 @@ def start_arrays(mem, start=LANDING_SITE):
 
 def object_sheet():
     """The slot 2 image's index, packed small enough to read in a frame."""
-    global OS_GEO, OS_N
+    global OS_GEO, OS_PALCOL, OS_N
     rows = json.load(open(os.path.join(out, 'objects.json')))
     pairs = sorted({(r['sprite'], r['palette']) for r in rows})
     assert max(s for s, _ in pairs) < NSPRITE, "a sprite id past the table"
     at = {(r['sprite'], r['palette'], r['flip']): r for r in rows}
     index = {sp: i for i, sp in enumerate(pairs)}
     OS_GEO = OS_PAL + len(pairs)
-    OS_N = OS_GEO + len(pairs) * 4
+    OS_PALCOL = OS_GEO + len(pairs) * 4
+    OS_N = OS_PALCOL + 128
     words = [0] * OS_N
     for sprite in range(NSPRITE):
         mine = [i for i, (s, _) in enumerate(pairs) if s == sprite]
         words[OS_START + sprite] = mine[0] if mine else 0
         words[OS_COUNT + sprite] = len(mine)
+    # what each palette's three colours are, so an object drawn in the reserved
+    # colours can have MAP told what they mean
+    from gen_tiles import palette_colours
+    for pal in range(128):
+        c1, c2, c3 = palette_colours(pal)
+        words[OS_PALCOL + pal] = (c1 & 7) | ((c2 & 7) << 8) | ((c3 & 7) << 16)
     for (s, p), i in index.items():
         words[OS_PAL + i] = p
         for fl in range(4):
@@ -118,12 +165,12 @@ def main():
         print(__doc__)
         return 2
     mem = load_listing(sys.argv[1])
-    start = LANDING_SITE
+    start = SHIP                     # the ship, as the game itself begins
     if '--start' in sys.argv:
         a, b = sys.argv[sys.argv.index('--start') + 1].replace('&', '').split(',')
         start = (int(a, 16), int(b, 16))
-    elif '--saved' in sys.argv:
-        start = None                 # wherever the binary's saved position puts it
+    elif '--landing' in sys.argv:
+        start = LANDING_SITE         # open ground outside, for exercising the world
     gdir = os.path.join(out, 'game')
     os.makedirs(gdir, exist_ok=True)
 
@@ -155,6 +202,9 @@ def main():
                   % (table_offset('ENVELOPE'), table_offset('SOUND')))
     consts.append("Const OS_START = %d, OS_COUNT = %d, OS_PAL = %d, OS_GEO = %d, OS_N = %d"
                   % (OS_START, OS_COUNT, OS_PAL, OS_GEO, OS_N))
+    consts.append("Const OS_PALCOL = %d, GLOW_PALETTE = %d" % (OS_PALCOL, GLOW_PALETTE))
+    from gen_objects import RESERVED
+    consts.append("Const GLOW0 = %d, GLOW1 = %d, GLOW2 = %d" % RESERVED)
     for i, a in enumerate(ACTIONS):
         consts.append("Const K_%s = %d" % (a.upper().replace('@', 'AT').replace('>', 'GT').replace('<', 'LT'), i))
 

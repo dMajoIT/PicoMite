@@ -33,8 +33,25 @@ from exile6502 import CPU, load_listing
 
 SPRITE_NONE = 0x46          # tiles_sprite_and_y_flip_table entry &C6 & &7F
 GET_TILE_AND_SET_SPRITE_VARIABLES = 0x2398
-PLOT_MODE = 0x20            # tile_processing_mode as the game plots a tile
-DOOR_TILES = (0x03, 0x04)   # the only tiles whose look a routine settles
+
+# tile_processing_mode decides which tile update routines run:
+#   &80 PLOTTING   &40 OBSTRUCTION   &20 COLLISION   &10 EVENTS
+# The sweep below asks with none of them set, and that is right.  Eleven of the
+# sixteen tile types do have a routine that runs while the game plots, but not
+# one of them changes how the square looks: they create objects.  Asked with
+# &00 and with &80 every square in the world answers identically, which was
+# measured across all sixteen types before this comment was written.
+#
+# Doors were once re-asked here with &20, on the belief that a door's look came
+# from its routine.  It does not.  Under &20 or &40 the routine swaps the door
+# for the solid tile that matches it for physics (&03 -> &17), which is a
+# substitute for collision, not a picture; under &80, which is what the game
+# draws with, a door square keeps type &03 and sprite &46 = SPRITE_NONE and so
+# draws nothing at all.  The hatch you see in the game is the door OBJECT drawn
+# over the top.  Baking &17 in painted a solid floor across all fifty door
+# squares in the world and hid every hatch - and because the census check is
+# handed cdrawn, taken before the re-ask, the one independent check the
+# generator has never saw those fifty squares.
 
 
 def generate(mem, progress=True):
@@ -75,24 +92,6 @@ def generate(mem, progress=True):
                 frommap[i >> 3] |= 1 << (i & 7)
             ttype[i] = mem[0xBE] if mem[0xBD] else 0
             cdrawn[i] = drawn[i]; cflips[i] = flips[i]; cpal[i] = pal[i]
-            # A door's look comes from its own routine, so asked with the
-            # routines off it answers blank and the square is drawn as nothing
-            # at all.  That is how the player came to be standing on thin air
-            # inside the ship: the floor there is a door.  Ask again and let
-            # the routine run - for a door it only settles the type, it makes
-            # no object and touches nothing else.
-            if types[i] in DOOR_TILES:
-                mem[0x95] = x
-                mem[0x97] = y
-                mem[0x2D] = PLOT_MODE
-                mem[0x00] = 0
-                cpu.run(GET_TILE_AND_SET_SPRITE_VARIABLES)
-                flips[i] = mem[0x09]
-                drawn[i] = cpu.y
-                pal[i] = mem[0x73]
-                spr[i] = mem[0x75]
-                yfrac[i] = mem[0x51]
-                xfrac[i] = mem[0x4F]
         if progress and (y & 15) == 15:
             sys.stderr.write("\r  row %3d of 256, %5.1f s" % (y + 1, time.time() - t0))
     if progress:
