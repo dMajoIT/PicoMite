@@ -27,12 +27,7 @@ out = os.path.join(here, 'out')
 # Scenes that do not match yet, with what is known about each.  They are run
 # and reported, but they do not count as failures: a defect that is understood
 # and written down is more use than a deleted test.
-KNOWN = {
-    'two_nests': "a sucking nest beside a dense nest: the nest is removed at tick 82 in "
-                 "both, but the sucker stays active in the kernel and goes looking for "
-                 "something to pull, which the game does not.  Either alone matches for "
-                 "all 150 ticks, so it is the pair that is wrong.",
-}
+KNOWN = {}
 scratch = os.environ.get('EXILE_SCRATCH', os.path.join(out, 'host'))
 VCVARS = r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
 

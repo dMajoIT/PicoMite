@@ -86,14 +86,24 @@ the invisible frogman, yellow slime, dense nest, sucking nest, active grenade,
 tracer bullet, gargoyle, red magenta bird, inactive chatter, engine fire and
 switch beside the player and watch them. All but one matched.
 
-**One real divergence, and it only appears with two objects.** A dense nest
-and a sucking nest side by side: at tick 82 the nest is removed in both, but
-the kernel's sucker stays active and goes looking for something to pull, which
-the game does not. Either nest alone matches for all 150 ticks, so it is the
-pair that is wrong, not the pieces. It is kept as a scene and listed as known
-rather than deleted, so the suite reports 94 scenes, 0 failed, 1 known.
+**One real bug, and it only appeared with two objects.** A dense nest and a
+sucking nest side by side diverged at tick 82. Either nest alone matched for
+all 150 ticks, so the fault was in the pair, not the pieces.
 
-Ninety-four scenes now, 11,496 ticks.
+It turned out to be a table read running off the end. A sucking nest picks its
+trigger, its power and its colour out of three nine-entry tables, indexed by
+its own data byte. That byte is not bounded, and here it was &80. The game
+reads straight past the end of its own table into the code that follows and
+uses whatever byte is there. The port packs its tables next to each other in a
+different order, so it read a different byte, decided the nest was still
+working, and went looking for something to pull.
+
+The fix is to pack those three tables a whole page long, so the port reads the
+same bytes the game does when the index runs off the end. This is the sort of
+thing only a comparison against the original can find: the code was a correct
+transcription of the routine, and the routine reads out of bounds.
+
+Ninety-four scenes now, 11,565 ticks, all matching.
 
 ## What to do about it
 

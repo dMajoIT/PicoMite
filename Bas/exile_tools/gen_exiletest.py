@@ -128,7 +128,11 @@ TABLES = [('OBPAT', 'ObstructionPatterns', 168), ('OBOFF', 'ObstructionPatternOf
           ('ROBOTMINE', 0x4F18, 6), ('ROBOTBULLET', 0x4F1E, 3), ('FIREPAL', 0x4ACE, 8), ('TRANSPAL', 0x4D82, 4),
           ('TERTTYPE', 0x0A71, 256), ('SWITCHFX', 0x4958, 68), ('TRANSX', 0x314A, 16), ('TRANSY', 0x315A, 16),
           ('DOORTILES', 0x3E91, 4), ('DOORSPEED', 0x4D72, 4), ('DOORENERGY', 0x4D76, 4), ('DOORPAL', 0x4D7A, 8),
-          ('GARG', 0x418B, 20), ('SUCKTRIG', 0x4E37, 9), ('SUCKPOW', 0x4E40, 9), ('SUCKPAL', 0x4E49, 9),
+          ('GARG', 0x418B, 20), # A sucking nest indexes these by its data byte, which can be &80 and is not
+          # bounded: the game reads straight past the end of its own nine entries into
+          # the code that follows, and gets whatever byte is there.  The port has to
+          # read the same bytes, so each table is packed a whole page long.
+          ('SUCKTRIG', 0x4E37, 256), ('SUCKPOW', 0x4E40, 256), ('SUCKPAL', 0x4E49, 256),
           ('CLAWEN', 0x48A3, 4), ('WALKANG256', 0x3962, 256),
           ('WEAPONBULLET', 0x2CDC, 6), ('THROWVEL', 0x32D2, 8), ('SCROLLDELTA', 0x2C15, 4), ('SCROLLLIMIT', 0x2C19, 4),
           ('SCRCENTRE', 0x14C7, 4), ('SCROFFXF', 0x358C, 2), ('SCROFFX', 0x358E, 2),
