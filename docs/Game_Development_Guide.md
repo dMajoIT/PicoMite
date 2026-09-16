@@ -280,6 +280,9 @@ The SPRITE engine is ideal for **arcade-style games** with individual moving obj
 ### Key Capabilities
 
 - **Up to 64 sprites** (numbered 1–64)
+- **Plus 64 static objects**, numbered 1-64 in their own right - invisible
+  collision rectangles that cost no sprite slot and no image memory, taking
+  the number of things a sprite can collide with to 128
 - **5 layers** (0–4) for z-ordering
 - **Automatic collision detection**: sprite-to-sprite, sprite-to-edge, sprite-to-static-object
 - **Background preservation**: sprites save and restore the background beneath them
@@ -393,6 +396,39 @@ wall_hit:
   obj% = SPRITE(ST, OBJECT)             ' Which static object?
   IRETURN
 ```
+
+Static objects are a **separate pool of 64**, numbered 1 to 64 independently of
+the sprites, so a game that needs more collidable things than the sprite engine
+offers can have 128 of them. They are much the cheaper half: a static object is
+four numbers, with no image, no buffer and no background to save and restore, so
+it costs neither a sprite slot nor any of the memory a sprite costs.
+
+Reach for them whenever the thing being collided with is already being drawn by
+something else. Level geometry that a tilemap or a piece of background art is
+already putting on the screen does not need a sprite - it needs a rectangle in
+the same place. The same goes for anything deliberately invisible: doorways,
+ladders, damage zones, the boundary that turns an enemy round at the end of its
+platform.
+
+Two details worth knowing. They **scroll with the background**, as layer 0
+sprites do, so the geometry of a scrolling level stays where it belongs without
+your moving each one. And they come back through the *same* collision list as
+sprites - which is what the `&h80` test in the sprite-to-sprite handler above is
+really distinguishing. A collision code of `&h80` to `&hBF` is a static object,
+and the object number is the code `AND &h3F`:
+
+```basic
+other% = SPRITE(C, #who%, i%)
+IF other% < &h80 THEN
+  PRINT "hit sprite"; other%
+ELSE
+  PRINT "hit static object"; other% AND &h3F
+ENDIF
+```
+
+`SPRITE STATIC #n, OFF` removes one and `SPRITE STATIC CLEAR` removes all of
+them, so changing level is a clear and a rebuild rather than bookkeeping.
+
 
 **4. Background Pixel Collision** — tests sprite pixels against the background:
 ```basic
