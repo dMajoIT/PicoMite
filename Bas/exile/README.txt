@@ -57,6 +57,10 @@ original's packaging said them too:
 
 INSTALLING
 ----------
+You need PicoMite firmware 6.03.02b7 or later.  The game checks and says
+so if the board is older; PRINT MM.VER at the prompt reports what you
+have.
+
 Copy the whole Exile folder onto a drive on the board, keeping the
 files together.  It does not matter which drive, or what the folder
 is called - the game finds everything beside itself.  Then:

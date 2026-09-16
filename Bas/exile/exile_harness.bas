@@ -40,6 +40,13 @@ Option BASE 0
 Option CONSOLE SERIAL
 
 Const VERSION$ = "0.9"
+' The firmware this needs.  MM.VER turns "6.03.02b7" into 6.030207 - and a
+' FINAL release into 6.0302, which is LOWER than any of its own betas, so one
+' comparison cannot do it.  Anything after 6.03.02 is fine (6.0303 and 6.04 are
+' both above the beta numbers), so only that one release has to be named.
+Const MINVER = 6.030206                ' the game needs b7: every later beta is above this
+Const RELVER = 6.0302                  ' the 6.03.02 release itself
+Const VEREPS = 0.0000005               ' half a step: 6.030201 is a whole one away
 Const TW = 32, TH = 32                 ' a square is 16 x 32 BBC pixels, drawn 2:1
 Const VIEWW = 256, VIEWH = 240         ' the play area, 8 by 7.5 squares
 Const PANELX = 256, PANELW = 64        ' the panel beside it
@@ -72,6 +79,7 @@ End
 Sub Main
   Local n, quit, shown
   Local Float t0, t1, tNext, tickAcc, drawAcc
+  CheckFirmware
   homeDir$ = MM.Info(Path) : If homeDir$ = "NONE" Then homeDir$ = "A:/"
   wlx(0) = 0 : wlx(1) = &H54 : wlx(2) = &H74 : wlx(3) = &HA0 : wlx(4) = 256
   sNext = 1
@@ -135,6 +143,21 @@ RepeatingKeys:
 End Sub
 
 ' ---------------------------------------------------------------- loading
+' The game needs 6.03.02b7.  Two arms are needed because MM.VER turns a beta
+' into a number ABOVE the release it belongs to: b7 is 6.030207 while the
+' 6.03.02 release itself is 6.0302.  Everything issued after that - 6.0303,
+' 6.04 - is above the beta numbers again, so only 6.03.02 has to be named.
+' Checked on a board: 6.030207 and 6.0303 and 6.04 all pass the first arm,
+' 6.0302 passes the second, and b1 (6.030201) is correctly refused.
+Sub CheckFirmware
+  If MM.VER > MINVER Then Exit Sub
+  If Abs(MM.VER - RELVER) < VEREPS Then Exit Sub
+  Option CONSOLE BOTH
+  Print "Exile needs PicoMite firmware 6.03.02b7 or later."
+  Print "This board is running "; Str$(MM.VER, 1, 6); "."
+  Error "firmware too old for this game"
+End Sub
+
 Sub LoadAll
   Local Float t0
   MODE 2
