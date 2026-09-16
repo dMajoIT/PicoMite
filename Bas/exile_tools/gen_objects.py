@@ -165,6 +165,41 @@ def door_palettes(mem, sprites_of_type):
     return want
 
 
+def glow_sprites(entries):
+    """Sprites that need a copy in the reserved colours, from what the game does.
+
+    A sheet entry is one sprite in one palette, and an object whose palette is
+    not there is drawn as nothing at all.  Most objects keep the palette in the
+    types table for life, but some do not: an explosion flickers through thirty,
+    coronium glows through as many, and the player flashes when it is hurt.
+    There is no room to render every combination and no way to know them from
+    the tables alone - the palette is decided as the object lives.
+
+    So the answer comes from the recorded scenes, which are the game's own
+    behaviour: any sprite seen wearing a palette the sheet does not hold gets
+    one extra copy drawn in the three reserved display slots, and the game sets
+    what those mean with MAP as it draws it.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    tdir = os.path.join(here, 'out', 'traces2')
+    if not os.path.isdir(tdir):
+        return {}
+    from exilegame import FIELDS
+    si, pi, yi, ti = (FIELDS.index(n) for n in ('sprite', 'palette', 'y', 'type'))
+    want = {}
+    for f in sorted(os.listdir(tdir)):
+        if not f.endswith('.json'):
+            continue
+        for tick in json.load(open(os.path.join(tdir, f)))['ticks']:
+            for sl in tick['slots']:
+                if not sl[yi]:
+                    continue
+                key = (sl[si], sl[pi] & 0x7F)
+                if key not in entries:
+                    want.setdefault(sl[si], set()).add(sl[ti])
+    return {s: sorted(ts) for s, ts in want.items()}
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -189,9 +224,8 @@ def main():
     for (s, p), ts in door_palettes(mem, sprites_of_type).items():
         for member in family(s):
             entries.setdefault((member, p & 0x7F), []).extend(ts)
-    for t in (0x55, 0x58):                 # coronium boulder and coronium crystal
-        for member in family(sprites_of_type[t]):
-            entries.setdefault((member, GLOW_PALETTE), []).append(t)
+    for s, ts in glow_sprites(entries).items():
+        entries.setdefault((s, GLOW_PALETTE), []).extend(ts)
     images = {}
     for (s, p) in entries:
         base = render_sprite_reserved(sheet, s) if p == GLOW_PALETTE else render_sprite(sheet, s, p)
