@@ -61,6 +61,7 @@ struct G {
     long long *obj, *game, *feed, *part;
     int nPart;                    /* &1e58: the last particle's index, -1 for none */
     int jetFlags;                 /* &0217: the one table byte the game rewrites as it runs */
+    int nSnd;                     /* how many sounds started this tick, for the drawing to play */
     const u8 *world, *tab;
     int frm, angle, facing, immob, tImmob, rotVel, lying, aim, aimVel, aimFlip;
     int jetOk, inWater, tbColl, surr, wedged, signs, windSign, relTX, relTY, walkSpd, maxAcc0;
@@ -340,6 +341,15 @@ static void move_particle(struct P *p, int i)
 
 /* find_free_particle_slot (&215d): the next one, or a random one to replace
    once all thirty-two are in use */
+/* play_sound (&13fa): the kernel does not make a noise, it says which of the
+   game's forty-eight sounds started this tick and leaves the rest to the
+   program that draws.  Nothing here can move a random draw, so a sound can be
+   put in wherever the game has one without disturbing the physics. */
+static void play_sound(struct G *g, int n)
+{
+    if (g->nSnd < 8) g->game[G_SND0 + g->nSnd++] = n;
+}
+
 static int free_particle(struct G *g)
 {
     /* The two draws a particle can make on its own account - which one to
@@ -1468,7 +1478,10 @@ static void handle_firing(struct P *p)
     t = g->tab[T_WEAPONBULLET + x];
     if (t == 0) return;                           /* the jetpack and the suit do not fire */
     g->blaster = t;
-    if (!(t & 128)) { if (create_child(p, t) < 0) return; }   /* the blaster discharges instead */
+    if (!(t & 128)) {                             /* the blaster discharges instead */
+        if (create_child(p, t) < 0) return;
+        play_sound(g, g->weapon == 1 ? 12 : (g->weapon == 2 ? 11 : 2));   /* pistol, icer, or the plasma gun's low beep */
+    }
     reduce_weapon_energy(p, g->weapon);
 }
 
@@ -1505,6 +1518,7 @@ static void retrieve_object(struct P *p)
         x = create_child(p, g->pocket[g->pockUsed - 1]);
         if (x < 0) return;
         g->held = x;
+        play_sound(g, 14);
         OS(O_VX, x, p->vel[0]); OS(O_VY, x, p->vel[2]);
         g->pockUsed = (g->pockUsed - 1) & 255;
     }
@@ -1925,6 +1939,7 @@ static void update_collectable(struct P *p)
     struct G *g = p->g;
     if (g->held == p->slot) {
         g->collected[p->type - 0x51] = (g->collected[p->type - 0x51] - 1) & 255;
+        play_sound(g, 39);
         p->flags |= 0x20;
         return;
     }
@@ -1947,7 +1962,7 @@ static void update_bird(struct P *p, int kind)
     if (kind == 1) read_rnd_byte(g, 0x4621, 1);            /* 1 in 256: whistle two, a sound */
     else {
         if (kind == 2 && p->state == 0) p->visibility >>= 1;
-        read_site(g, 0x4631);                               /* 1 in 64: the bird calls, a sound */
+        if ((read_site(g, 0x4631) & 0x3F) == 0) play_sound(g, 30);   /* 1 in 64: the bird calls */
     }
     if (p->touch == 0) damage_slot(p, 0, g->tab[T_BIRDDMG + x]);
     a = give_min_energy(p, g->tab[T_BIRDEN + x]);
@@ -2283,6 +2298,7 @@ static void update_remote_control_device(struct P *p)
 {
     struct G *g = p->g;
     if (p->slot != g->fired) return;                  /* &0bbf: only the one just shot */
+    play_sound(g, 22);
     firing_vector_from_angle(p, g->aimFlip);
     p->xFlip ^= 0x80;
 }
@@ -2387,6 +2403,7 @@ static void turn_into_fireball(struct P *p, int d)
 /* explode_object_with_duration_A_but_no_sound (&40e2) */
 static void explode_with_duration(struct P *p, int d)
 {
+    play_sound(p->g, 17);
     p->tdataOff = d;
     p->type = 0x44;
     p->g->expTimer = 0xCE;
@@ -2397,6 +2414,7 @@ static void explode_with_squeal(struct P *p)
 {
     struct G *g = p->g;
     int e = g->tab[T_RANGEENERGY + range_of_type(g, p->type)];
+    play_sound(g, 3);                            /* &40c5 play_squeal */
     explode_with_duration(p, ((e >> 5) + 3 + ((e >> 4) & 1)) & 255);
 }
 
@@ -2878,7 +2896,7 @@ static void update_green_slime(struct P *p)
     update_path(p);
     consider_burrowing(p);
     c = p->stimuli & 1; p->stimuli >>= 1;
-    if (c) { change_type(p, 0x0B); return; }      /* fed a coronium crystal: yellow */
+    if (c) { play_sound(g, 18); change_type(p, 0x0B); return; }   /* fed a coronium crystal: yellow */
     g->walkSpd = 0x0C;
     update_walking_npc_and_check(p, 3);
     if ((p->state & 15) >= 10) p->timer = 0x0F;   /* a boulder while jumping */
@@ -3075,10 +3093,10 @@ static void update_hovering_ball(struct P *p, int invisible)
     long long *obj = g->obj;
     int y = p->touch;
     if (!invisible) p->pal = g->tab[T_TRANSPAL + ((p->fc >> 2) & 3)];
-    if (!(y & 128) && OT(O_TYPE, y) != p->type) damage_slot(p, y, 3);
+    if (!(y & 128) && OT(O_TYPE, y) != p->type) { damage_slot(p, y, 3); play_sound(g, 26); }
     p->energy &= 4;
     p->timer = (p->timer - 1) & 255;
-    if (p->timer == 0) { p->removal |= 0x80; return; }     /* back to its nest, with a sound */
+    if (p->timer == 0) { play_sound(g, 27); p->removal |= 0x80; return; }   /* back to its nest */
     move_hovering_npc(p);
     thrust_towards_target(p);                    /* twice as fast as other flying things */
 }
@@ -3485,6 +3503,7 @@ static void process_switch_effects(struct P *p, int a, int mask)
     for (;;) {
         v = g->tert[x];
         g->tert[x] = (v & mask) ^ toggle;
+        play_sound(g, 36);
         y++;
         x = g->tab[T_SWITCHFX + y];
         if (x == 0) break;
@@ -3603,6 +3622,7 @@ static void update_switch(struct P *p)
         a = (p->tx << 1) & 255;
         if (a == 0) {
             p->data ^= 1;
+            play_sound(p->g, 35);
             process_switch_effects(p, p->data, 0xFF);
         }
     }
@@ -3660,6 +3680,7 @@ static void toggle_lock(struct P *p, int isDoor)
         a = ((a << 1) | c) & 255;
     }
     p->data = a;
+    play_sound(g, 13);
 }
 
 static void update_transporter_beam(struct P *p)
@@ -3771,7 +3792,8 @@ skip_stop:
         if (g->doorTimer != 0) goto set_from_y;
         g->doorTimer = 0x3C;
 toggle:
-        d ^= 2;                                  /* opening becomes closing and back, with a sound */
+        d ^= 2;                                  /* opening becomes closing, and back */
+        play_sound(g, (d & 2) ? 42 : 43);
 set_from_y:
         v = yv;
     }
@@ -3844,7 +3866,7 @@ static void update_hovering_robot(struct P *p)
 {
     struct G *g = p->g;
     if (!gain_energy_and_flash(p, g->tab[T_ROBOTMINE + (p->type - 0x1C)])) return;
-    read_rnd_byte(g, 0x4809, 3);                 /* 1 in 128: a sound */
+    if ((read_rnd_byte(g, 0x4809, 3) >> 1) == 0) play_sound(g, 32);   /* 1 in 128 */
     if (read_rnd_byte(g, 0x4815, 0) >= 0x40) { move_hovering_npc(p); return; }
     fire_and_move_hovering(p, 0x18, 1);
 }
@@ -3881,7 +3903,7 @@ static void update_power_pod(struct P *p)
 {
     if (p->energy) p->energy--;
     p->pal = p->g->tab[T_OBJPAL + p->type] & 0x7F;
-    if (p->fc16 < 2) p->pal ^= 0x30;             /* it pulses */
+    if (p->fc16 < 2) { p->pal ^= 0x30; play_sound(p->g, 23); }   /* it pulses */
 }
 
 static void update_blue_death_ball(struct P *p)
@@ -3925,9 +3947,12 @@ static void update_destinator(struct P *p)
 {
     struct G *g = p->g;
     if (g->shipMoving & 128) return;
-    if (!(g->tert[0x28] & 1)) g->shipMoving = 0x80 | (g->shipMoving >> 1);   /* back in the ship: it leaves */
+    if (!(g->tert[0x28] & 1)) {                  /* back in the ship: it leaves */
+        g->shipMoving = 0x80 | (g->shipMoving >> 1);
+        play_sound(g, 24);
+    }
     p->pal = g->tab[T_OBJPAL + p->type] & 0x7F;
-    if ((p->fc & 0x1F) < 1) p->pal ^= 0x30;
+    if ((p->fc & 0x1F) < 1) { p->pal ^= 0x30; play_sound(g, 25); }
 }
 
 static void update_empty_flask(struct P *p)
@@ -3958,6 +3983,7 @@ static void update_sucking_nest(struct P *p)
 {
     struct G *g = p->g;
     int x = p->data, t, y, r, dmg = 2;
+    if (!(p->touch & 128)) play_sound(g, 44);    /* &4e2d, when it has hold of something */
     p->pal = g->tab[T_SUCKPAL + x] >> 1;
     if (p->fc16 != 0) {
         t = g->tab[T_SUCKTRIG + x];
@@ -4044,6 +4070,7 @@ static void update_active_grenade(struct P *p)
     if (p->energy == 0) { explode_with_duration(p, 0x0A); return; }
     if (t >= 0x60) { explode_with_duration(p, 0x10); return; }
     p->timer = (t + 1) & 255;
+    if ((t & 0x0F) == 0) play_sound(p->g, 21);
     p->pal = p->g->tab[T_TRANSPAL + ((t >> 2) & 3)];
 }
 
@@ -4758,6 +4785,7 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     for (i = 0; i < 4; i++) { g->clawAvail[i] = (int)game[G_CLAWAVAIL0 + i]; g->clawTel[i] = (int)game[G_CLAWTEL0 + i]; }
     for (i = 0; i < 5; i++) g->gifts[i] = (int)game[G_GIFT0 + i];
     g->mode = 0x20;
+    g->nSnd = 0;                                  /* the tick's sounds start empty */
     g->cross[1] = 0;
     for (i = 0; i < 8; i++) g->wl[i] = (int)game[G_WL0 + i];
     for (i = 0; i < 4; i++) g->rnd[i] = (int)game[G_RND0 + i];
@@ -4828,6 +4856,7 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     OUT(sVel[0], G_SVELX); OUT(sVel[2], G_SVELY); OUT(newTiles, G_NEWTILES);
     OUT(secMode, G_SECMODE); OUT(secNext, G_SECNEXT); OUT(secShuf, G_SECSHUF); OUT(secDist, G_SECDIST);
     game[G_NPART] = g->nPart & 255;
+    game[G_NSND] = g->nSnd;
     for (i = 0; i < 4; i++) game[G_WLDES0 + i] = g->wlDes[i];
     OUT(telRem, G_TELREM); OUT(telNext, G_TELNEXT); OUT(scrollX, G_SCROLLX); OUT(scrollY, G_SCROLLY); OUT(retrieve, G_RETRIEVE);
     for (i = 0; i < 6; i++) { game[G_WLO0 + i] = g->wLo[i]; game[G_WHI0 + i] = g->wHi[i]; }

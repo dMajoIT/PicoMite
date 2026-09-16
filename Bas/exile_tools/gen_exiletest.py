@@ -41,7 +41,8 @@ GAME = (['frame', 'angle', 'facing', 'immob', 'timmob', 'rotvel', 'lying', 'aim'
         + ['weapon', 'fired', 'blaster', 'pockused', 'telrem', 'telnext', 'scrollx', 'scrolly']
         + ['wlo%d' % i for i in range(6)] + ['whi%d' % i for i in range(6)]
         + ['pocket%d' % i for i in range(5)] + ['telx%d' % i for i in range(5)] + ['tely%d' % i for i in range(5)]
-        + ['eventson', 'promoteon', 'npart'] + ['wldes%d' % i for i in range(4)]
+        + ['eventson', 'promoteon', 'npart', 'nsnd'] + ['snd%d' % i for i in range(8)]
+        + ['wldes%d' % i for i in range(4)]
         + ['orgxf', 'orgyf', 'fracx', 'sgnx', 'fracy', 'sgny', 'secsx', 'secsy',
            'svelx', 'svely', 'newtiles', 'secmode', 'secnext', 'secshuf', 'secdist']
         + ['gift%d' % i for i in range(5)]
@@ -53,6 +54,62 @@ GAME = (['frame', 'angle', 'facing', 'immob', 'timmob', 'rotvel', 'lying', 'aim'
 GAME_SIZE = 640
 
 # the packed tables: (C name, tables.bas label or memory address, size)
+# The forty-eight sounds the game plays, in the order their calls appear.
+# Five bytes each: the volume envelope and its start, the frequency envelope
+# and its start, and whether the call was the one that takes channel zero.
+# The kernel names them S_0 .. S_47 and pushes the number onto a queue.
+SOUNDS = [
+    0x17, 0xE3, 0x2F, 0x72, 0,   #  0 &149d middle beep
+    0x17, 0x82, 0x13, 0xF2, 0,   #  1 &14a5 high beep
+    0x5D, 0x04, 0xFF, 0x05, 0,   #  2 &14ad low beep
+    0x33, 0x03, 0x2D, 0x84, 0,   #  3 &14b5 squeal
+    0x33, 0xF3, 0x63, 0xF3, 0,   #  4 &1c32 object changing position in teleport
+    0x33, 0x03, 0x2D, 0x24, 0,   #  5 &2497 scream
+    0x70, 0xC2, 0x6E, 0xA3, 1,   #  6 &261f waterfall or earthquake
+    0x23, 0xE3, 0x82, 0x12, 0,   #  7 &2a17 NPC starting to burrow
+    0x3D, 0x04, 0x11, 0xD4, 0,   #  8 &2c34 scrolling viewpoint
+    0xB0, 0x24, 0xB6, 0xE2, 0,   #  9 &2c9e playing whistle two
+    0xB0, 0x24, 0xB6, 0xB3, 0,   # 10 &2cb4 playing whistle one or two
+    0x3D, 0x04, 0x3D, 0xD3, 0,   # 11 &2d66 firing icer
+    0x3D, 0x04, 0x3D, 0x04, 0,   # 12 &2d6f firing pistol
+    0x94, 0x64, 0xBA, 0xC4, 0,   # 13 &31d0 locking or unlocking door or beam
+    0x17, 0x82, 0x13, 0xC2, 0,   # 14 &351a retrieving object
+    0x33, 0xF3, 0x1D, 0x03, 0,   # 15 &3ff9 collision with mushroom tile
+    0x57, 0x07, 0x43, 0xF6, 0,   # 16 &40be loud squeal
+    0x17, 0x03, 0x11, 0x04, 1,   # 17 &40db exploding object
+    0xB0, 0x24, 0xB6, 0xE2, 0,   # 18 &423e slime changing colour
+    0xB0, 0x24, 0xB6, 0xE2, 0,   # 19 &42be Fluffy squealing
+    0xC7, 0x81, 0xC1, 0xF3, 0,   # 20 &42d4 Fluffy purring
+    0x57, 0x07, 0xCB, 0x82, 0,   # 21 &431e active grenade
+    0x57, 0x07, 0xC1, 0xD3, 0,   # 22 &4356 firing remote control device
+    0x05, 0xF2, 0xFF, 0xC5, 0,   # 23 &436c power pod pulsing
+    0x91, 0x02, 0x85, 0x47, 0,   # 24 &437f destinator activation
+    0x33, 0x03, 0x85, 0x12, 0,   # 25 &4394 destinator pulsing
+    0x33, 0x03, 0x85, 0x02, 0,   # 26 &43f9 hovering ball damaging object
+    0x29, 0xC2, 0x37, 0xF3, 0,   # 27 &440d object teleporting
+    0x17, 0x03, 0x1B, 0x02, 1,   # 28 &4425 exploding bullet
+    0x9C, 0x05, 0xA6, 0xA5, 0,   # 29 &460c imp (pitch is modified)
+    0x57, 0x07, 0x43, 0xF6, 0,   # 30 &4638 bird calling
+    0x17, 0x03, 0x1B, 0x02, 1,   # 31 &47aa object being damaged by red drop
+    0x33, 0xF3, 0x63, 0xE3, 0,   # 32 &480e hovering robot
+    0x17, 0x03, 0x68, 0xA3, 0,   # 33 &4858 clawed robot
+    0x33, 0xF3, 0xCD, 0x82, 0,   # 34 &4928 Chatter chattering
+    0x3D, 0x04, 0x11, 0xD4, 0,   # 35 &49b6 switch being pressed
+    0xC7, 0xC3, 0xC1, 0x03, 0,   # 36 &4a09 switch having an effect
+    0x17, 0xE3, 0x2F, 0x82, 0,   # 37 &4a61 energy level bell
+    0x17, 0x03, 0x11, 0x04, 1,   # 38 &4a7d discharging blaster
+    0x72, 0xA5, 0x7B, 0x85, 0,   # 39 &4b93 collecting object
+    0x33, 0xF3, 0x4F, 0x35, 0,   # 40 &4be0 hive spawning
+    0x70, 0xC2, 0x6E, 0xA3, 1,   # 41 &4c61 engine fire
+    0xC7, 0xC3, 0xC1, 0x13, 0,   # 42 &4d2a door opening
+    0xC7, 0xC3, 0xC1, 0x03, 0,   # 43 &4d33 door closing
+    0x57, 0x07, 0x57, 0x97, 0,   # 44 &4e2d sucking nest touching object
+    0x33, 0xF3, 0x09, 0xB4, 0,   # 45 &4ea9 worm or maggot squealing
+    0x33, 0xF3, 0x07, 0xB5, 0,   # 46 &4eb0 worm or maggot squealing
+    0x33, 0xF3, 0x4F, 0x35, 0,   # 47 &4f57 piranha or wasp
+]
+
+
 TABLES = [('OBPAT', 'ObstructionPatterns', 168), ('OBOFF', 'ObstructionPatternOffsets', 40),
           ('YOFF', 'TileObstructionYOffsets', 64), ('PAT', 'TileYOffsetAndPattern', 64),
           ('SPRF', 'TileSprites', 64), ('RTFLAGS', 'UpdateRoutineFlags', 121),
@@ -80,6 +137,12 @@ TABLES = [('OBPAT', 'ObstructionPatterns', 168), ('OBOFF', 'ObstructionPatternOf
     # its randomness, the flags that place them, and the randomness on position
     # and velocity in x and y
     ('PARTTYPE', 0x0206, 121),
+    # the sound chip's envelopes, stepped one place every vsync
+    ('ENVELOPE', 0x2DB9, 208),
+    # the forty-eight sounds the game plays, five bytes each: the two bytes of
+    # the volume envelope, the two of the frequency envelope, and whether the
+    # call was the one that takes channel zero
+    ('SOUND', SOUNDS, 5 * 48),
     ('SCROFFYF', 0x3590, 2), ('SCROFFY', 0x3592, 2)]
 
 
@@ -175,7 +238,10 @@ def main():
     packed = bytearray()
     off = 0
     for cname, src, size in TABLES:
-        vals = tabs[src][:size] if isinstance(src, str) else [mem[src + i] for i in range(size)]
+        if isinstance(src, (list, tuple)):
+            vals = list(src)[:size]
+        else:
+            vals = tabs[src][:size] if isinstance(src, str) else [mem[src + i] for i in range(size)]
         if cname == 'NOREPEAT':
             vals = [v & 1 for v in vals]
         assert len(vals) == size, (cname, len(vals), size)

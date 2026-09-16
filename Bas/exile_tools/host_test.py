@@ -47,7 +47,10 @@ def pack_tables(mem):
     tabs = read_tables_bas()
     packed = bytearray()
     for cname, src, size in TABLES:
-        vals = tabs[src][:size] if isinstance(src, str) else [mem[src + i] for i in range(size)]
+        if isinstance(src, (list, tuple)):
+            vals = list(src)[:size]
+        else:
+            vals = tabs[src][:size] if isinstance(src, str) else [mem[src + i] for i in range(size)]
         if cname == 'NOREPEAT':
             vals = [v & 1 for v in vals]
         packed += bytes(vals)
