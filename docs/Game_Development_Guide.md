@@ -138,6 +138,24 @@ LOOP UNTIL done%
 FRAMEBUFFER CLOSE
 ```
 
+### Do not hand the flip to the other core
+
+`FRAMEBUFFER COPY F, N` has a third form, `FRAMEBUFFER COPY F, N, B`, which
+gives the copy to core 1 and returns immediately. It looks like free
+performance and in a game loop it is a trap, because the very next thing the
+loop does is `CLS` the buffer that is still being copied. On a display fast
+enough you get away with it; on a slower one the screen is shown a frame being
+blanked underneath it, which reads as flashing that comes and goes with how
+much you are drawing - and looks for all the world like a tearing or
+double-buffering problem rather than what it is.
+
+Use the plain two-argument form in the loop. If you want the background copy,
+you must not touch that buffer until the copy has finished, which in practice
+means having something else to draw into. Note also that the form is only
+honoured by some display types and is silently a no-op on the rest, so it can
+appear to work for months on the machine you develop on.
+
+
 ### Layer Compositing
 
 The framebuffer system supports multiple buffers for compositing:
@@ -197,6 +215,40 @@ On RP2350 VGA/HDMI in certain modes (MODE 2, 3, 5), a **Top Layer** (`T`) is als
 Each layer has its own transparency colour. This allows separating different overlay elements — for example, the Layer for in-game particle effects and the Top Layer for a fixed HUD.
 
 ### Writing Portable Code
+
+Two more things differ between machines, and both are cheap to allow for.
+
+**`MODE` may not exist.** A VGA or HDMI build has modes; an SPI panel has one
+fixed resolution and the command is an error there, which stops your program on
+its second line. Ask for the mode you want and let it fail:
+
+```basic
+ON ERROR SKIP 1
+MODE 2
+ON ERROR CLEAR
+```
+
+Whatever the display already is, is what you then draw on.
+
+**The screen may be taller than the area you draw.** If you have written for
+320x240 and the panel is 320x320, everything still works - but `FRAMEBUFFER
+CREATE` takes `HRES * VRES / 2` bytes, so you are paying for eighty rows you
+never use. `POKE DISPLAY VRES n` changes MMBasic's own idea of the height, with
+nothing written to flash, and must come **before** `FRAMEBUFFER CREATE`:
+
+```basic
+DIM INTEGER realVres
+realVres = MM.VRES
+IF realVres > 240 THEN POKE DISPLAY VRES 240
+FRAMEBUFFER CREATE
+```
+
+On the 320x320 panel that is 12 KB of heap back - which, as the next section
+explains, is the difference between a game that runs and one that does not. Put
+the height back on the way out, on every exit path, and be aware that `OPTION
+DISPLAY VRES` is a *different* command that is refused outright when the panel
+is the console.
+
 
 If your game needs to run on both LCD and VGA/HDMI hardware, structure the rendering so that the layer compositing step can differ:
 
@@ -1252,6 +1304,48 @@ END
     array shared with the BASIC so nothing has to be copied across the boundary
     each call.
 
+### The trace cache
+
+`OPTION TRACECACHE ON n` compiles the assignments and `IF` conditions it sees
+into a form it can replay, which is worth having in a game because a game is a
+handful of statements executed hundreds of times a frame. Three things about it
+are not obvious and each one cost a measurement to learn.
+
+**The size rounds up to a power of two.** `ON 100` and `ON 80` are the same 128
+slots; only 128 and 256 differ in that range. A carefully chosen number between
+them changes nothing at all, which is an easy afternoon to lose.
+
+**Aim it.** `OPTION CACHE SUB DrawStars, DrawScanner` restricts caching to the
+subs you name, so the slots go to the loops that run every frame instead of
+being spent on start-up code that runs once. `OPTION CACHE DEBUG ON` then prints
+every statement that would not compile, which is how you find out that the inner
+loop you were counting on is built round a call to one of your own
+`FUNCTION`s - the cache cannot compile those, and the statement stays
+interpreted however many slots you give it.
+
+**It comes out of the same heap as everything else,** at roughly 216 bytes a
+slot: 128 slots is about 27 KB and 256 about 54 KB. It is also taken *lazily*,
+at the first statement that wants a slot, which is long after your start-up code
+has worked out how much room it has for other things.
+
+So the size is a machine-dependent decision, not a constant. Ask at run time:
+
+```basic
+IF MM.INFO(PSRAM SIZE) > 0 THEN
+  OPTION TRACECACHE ON 256
+ELSE
+  OPTION TRACECACHE ON 128
+ENDIF
+```
+
+Measured on one game over an identical 300-frame run, going from 128 to 256
+slots on a machine with PSRAM took the cache misses from 18,618 to 757 and the
+frame from 41.9 ms to 37.7 ms - about a tenth, for nothing but a number. 512
+slots took the misses to zero and the frame to 37.1 ms, which was not worth
+another 54 KB. `OPTION PROFILING ON` reports all of those counters at `END`; see
+`option-profiling-cache.pdf` for the full reference.
+
+
 ### Memory Considerations
 
 PicoMite has limited RAM. Budget carefully:
@@ -1267,6 +1361,61 @@ PicoMite has limited RAM. Budget carefully:
 | Flash images | Stored in flash, not RAM |
 
 Use `FLASH LOAD IMAGE` to keep large images in flash rather than RAM. Use SPRITE COPY for multiple instances of the same sprite. Use string-array maps for the raycaster.
+
+### Living within the heap
+
+Everything above competes for one pool, and several of the biggest consumers are
+invisible in your source: the framebuffer, the trace cache, each `DRAW3D`
+object, the audio buffers. `MM.INFO(HEAP)` reports what is free and `MEMORY`
+breaks it down. Three habits make the difference between a game that fits and
+one that dies unpredictably.
+
+**Claim fixed-size buffers at start up, not on first use.** A `STATIC` array
+inside a SUB is allocated the first time that SUB runs, which for a dashboard or
+a scratch buffer is somewhere in the middle of the first level - by which time
+the title screen's image has been and gone and the world is full of objects.
+The same array declared globally is claimed when the heap is empty and can never
+fail. It is the same memory either way; only the moment differs, and the late
+moment is the one that fails.
+
+**Never find a limit by running into it.** The obvious way to discover how many
+objects you can afford is to create them until one fails and count. Do not:
+taking the heap to nothing takes the interpreter with it, and the error then
+surfaces from whatever statement runs *next* rather than from the allocation, so
+the `ON ERROR SKIP` you carefully put on the allocation never sees it. What you
+get is `Not enough System Heap memory` reported against an innocent line.
+
+Price one unit instead and do the arithmetic, keeping a reserve back for
+everything still to come:
+
+```basic
+h0 = MM.INFO(HEAP)
+Draw3D CREATE 1, nv, nf, 1, v(), fc(), f(), col(), ec()
+cost = h0 - MM.INFO(HEAP)
+Draw3D CLOSE 1
+maxObj = (h0 - HEAPRESERVE) \ cost
+```
+
+The reserve is doing real work, not being timid: in the game this comes from,
+three objects at 4 KB each still left an in-flight floor of only 7.6 KB, so a
+fourth would have left 3.5 KB and a fifth none.
+
+**Let the allocation fail softly anyway.** However good the sum, the moment an
+object is actually wanted is not the moment you measured, so guard the real
+call: if it fails, do without that object this frame - draw the ship as a dash
+on the scanner rather than a mesh - and bring the cap down to what the machine
+really has. The player sees slightly less detail; the alternative is the program
+stopping.
+
+**A heap error names the allocation that asked, not the one at fault.** This is
+worth internalising because it will mislead you for hours. The pool is shared,
+so whichever allocation happens to ask when it is empty is the one reported -
+and it is usually an innocent bystander. In one case a 10 KB dashboard buffer
+was blamed three times running; the real fault was an object pool
+over-committed ten to one, and the buffer was simply the next thing to ask.
+**If you suspect an allocation, move it to start up and see where the failure
+goes.** If it moves, the thing you suspected was innocent.
+
 
 ---
 
@@ -1547,6 +1696,22 @@ which is why the fallback is worth keeping while developing.
 
 ### Code too big for program memory
 
+Program memory is split into two halves of the same size - the program and the
+library - and a large game can outgrow the program half on its own, with no CSUB
+involved. The library is not only for code: **every `CONST`, `DIM` and `DATA`
+block you move into it costs the program nothing**, because the library's top
+level runs before your first line and its declarations are simply there when you
+start. A game whose declarations and generated tables ran to 33 KB moved all of
+them and bought back the whole of that from the program half.
+
+That splits the build as well as the program, so let a script do it: keep the
+declarations in their own source file, have `build.py` emit both halves, and
+have it check that what it puts in the library is only declarations. The one
+rule to enforce is that nothing game-specific can go in
+the library that another program would choke on, because a library runs in front
+of *every* program on the machine, not just yours.
+
+
 A large CSUB costs its hex text as well as its compiled code and can easily
 exceed program memory. Put it in the library instead - and have the program
 install its own, rather than relying on the user having run `LIBRARY SAVE`:
@@ -1594,6 +1759,26 @@ command, and what to include in a bug report.
 ## MMBasic Traps Worth Knowing
 
 A few that are easy to hit and hard to diagnose:
+
+**The board remembers its last error.** When a game dies while you are not
+watching the console - which is most of the time, because the console is usually
+the screen the game is using - the information is still there at the prompt
+afterwards:
+
+```basic
+PRINT MM.ERRNO          ' the number
+PRINT MM.ERRMSG$        ' the text
+PRINT MM.ERRLINE        ' the line, 1-based
+PRINT MM.INFO(CURRENT)  ' which file it was
+```
+
+Those are cleared by `RUN` and by `ON ERROR CLEAR`, and by nothing else - not by
+`PRINT`, not by Ctrl-C. So a crash stays diagnosable long after the fact, and
+reading them is almost always quicker than reproducing the fault. Read them
+*first*, before you try anything that might run the program again and wipe them.
+The line number maps onto the built `.bas` if your build strips comments, which
+is another reason to have the build write the file you actually load.
+
 
 **`RESTORE` to a label, always.** An unqualified `READ` takes the program's
 *first* `DATA` statement, wherever that happens to be. Add a generated `DATA`
