@@ -37,6 +37,7 @@ Const SHOTAT = 60                      ' the one screenshot, for checking from t
 ' @@CONSTS@@
 
 Dim obj(287), game(NGAME - 1), world(25599), tbl(511), feed(7)
+Dim part(255)                          ' the particle system, eight words a particle
 Dim sheet(OS_N - 1)
 Dim wlx(4)
 Dim keyHeld(38)
@@ -60,7 +61,7 @@ Sub Main
     If quitting Then quit = 1
     game(G_KMASK) = KeyMask()
     t1 = Timer
-    ExileTick obj(), game(), world(), tbl(), feed()
+    ExileTick obj(), game(), world(), tbl(), feed(), part()
     tickAcc = tickAcc + (Timer - t1)
     If game(G_FAULT) Then
       Print "fault "; game(G_FAULT); " arg &"; Hex$(game(G_FAULTARG)); " at frame "; game(G_FRAME)

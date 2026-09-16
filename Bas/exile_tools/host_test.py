@@ -97,6 +97,7 @@ def run_scene(lib, mem, world, tables, t, verbose=False):
     world_a = ctypes.create_string_buffer(world, len(world))
     tab_a = ctypes.create_string_buffer(tables, len(tables))
     feed_a = ctypes.create_string_buffer(feed + b'\0' * 64, len(feed) + 64)
+    part_a = (ctypes.c_longlong * 256)()      # the particle system, eight words a particle
     yi, fi = FIELDS.index('y'), FIELDS.index('flags')
     nslots = 1 if t.get('lonely') else NSLOT
     gf, ga = GAME.index('fault'), GAME.index('faultarg')
@@ -105,7 +106,7 @@ def run_scene(lib, mem, world, tables, t, verbose=False):
         if t.get('lonely'):
             for s in range(1, NSLOT):
                 obj_a[yi * NSLOT + s] = 0
-        lib.exile_tick(obj_a, game_a, world_a, tab_a, feed_a)
+        lib.exile_tick(obj_a, game_a, world_a, tab_a, feed_a, part_a)
         if game_a[gf]:
             code, arg = game_a[gf], game_a[ga]
             if code == 3:
@@ -151,7 +152,7 @@ def main():
     dll = build()
     lib = ctypes.CDLL(dll)
     lib.exile_tick.restype = ctypes.c_longlong
-    lib.exile_tick.argtypes = [ctypes.c_void_p] * 5
+    lib.exile_tick.argtypes = [ctypes.c_void_p] * 6
     tdir = os.path.join(out, 'traces2')
     names = args[1:] or sorted(f[:-5] for f in os.listdir(tdir) if f.endswith('.json'))
     failed = 0

@@ -41,7 +41,7 @@ GAME = (['frame', 'angle', 'facing', 'immob', 'timmob', 'rotvel', 'lying', 'aim'
         + ['weapon', 'fired', 'blaster', 'pockused', 'telrem', 'telnext', 'scrollx', 'scrolly']
         + ['wlo%d' % i for i in range(6)] + ['whi%d' % i for i in range(6)]
         + ['pocket%d' % i for i in range(5)] + ['telx%d' % i for i in range(5)] + ['tely%d' % i for i in range(5)]
-        + ['eventson', 'promoteon'] + ['wldes%d' % i for i in range(4)]
+        + ['eventson', 'promoteon', 'npart'] + ['wldes%d' % i for i in range(4)]
         + ['orgxf', 'orgyf', 'fracx', 'sgnx', 'fracy', 'sgny', 'secsx', 'secsy',
            'svelx', 'svely', 'newtiles', 'secmode', 'secnext', 'secshuf', 'secdist']
         + ['gift%d' % i for i in range(5)]
@@ -75,7 +75,12 @@ TABLES = [('OBPAT', 'ObstructionPatterns', 168), ('OBOFF', 'ObstructionPatternOf
           ('CLAWEN', 0x48A3, 4), ('WALKANG256', 0x3962, 256),
           ('WEAPONBULLET', 0x2CDC, 6), ('THROWVEL', 0x32D2, 8), ('SCROLLDELTA', 0x2C15, 4), ('SCROLLLIMIT', 0x2C19, 4),
           ('SCRCENTRE', 0x14C7, 4), ('SCROFFXF', 0x358C, 2), ('SCROFFX', 0x358E, 2),
-          ('SCROFFYF', 0x3590, 2), ('SCROFFY', 0x3592, 2)]
+          # eleven particle types, eleven bytes each at &0206: how long they live and
+    # how fast they go with the randomness on each, their colour and flags with
+    # its randomness, the flags that place them, and the randomness on position
+    # and velocity in x and y
+    ('PARTTYPE', 0x0206, 121),
+    ('SCROFFYF', 0x3590, 2), ('SCROFFY', 0x3592, 2)]
 
 
 def game_init(mem):

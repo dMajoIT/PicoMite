@@ -18,7 +18,8 @@ Option BASE 0
 ' PRINT goes to the serial console only: the host script captures it and the screen is left alone
 Option CONSOLE SERIAL
 
-Dim obj(287), game(639), world(25599), tbl(511), feed(65535)   ' world: 64 KB of tiles, the two tertiary-object maps, then the mapped-square bits
+Dim obj(287), game(639), world(25599), tbl(511), feed(65535)
+Dim part(255)                          ' the particle system, eight words a particle   ' world: 64 KB of tiles, the two tertiary-object maps, then the mapped-square bits
 Dim homeDir$
 
 ' @@CONSTS@@
@@ -59,7 +60,7 @@ Sub Main
         For s = 1 To 15 : obj(O_Y * 16 + s) = 0 : Next s
       EndIf
       t1 = Timer
-      ExileTick obj(), game(), world(), tbl(), feed()
+      ExileTick obj(), game(), world(), tbl(), feed(), part()
       tk1 = tk1 + (Timer - t1)
       For s = 0 To 15
         If obj(O_Y * 16 + s) Then PrintSlot tk, s

@@ -58,7 +58,8 @@ typedef unsigned char u8;
 #define SITE_TILE        0x1787   /* a tile's routine called: x | y << 8 | mode << 16 */
 
 struct G {
-    long long *obj, *game, *feed;
+    long long *obj, *game, *feed, *part;
+    int nPart;                    /* &1e58: the last particle's index, -1 for none */
     const u8 *world, *tab;
     int frm, angle, facing, immob, tImmob, rotVel, lying, aim, aimVel, aimFlip;
     int jetOk, inWater, tbColl, surr, wedged, signs, windSign, relTX, relTY, walkSpd, maxAcc0;
@@ -4514,11 +4515,11 @@ static void update_events(struct G *g, struct P *p)
     OS(O_Y, y, 0xFE); OS(O_TARGET, y, 0xC0);
 }
 
-EXPORT long long exile_tick(long long *obj, long long *game, long long *world, long long *tbl, long long *feed)
+EXPORT long long exile_tick(long long *obj, long long *game, long long *world, long long *tbl, long long *feed, long long *part)
 {
     struct G gg, *g = &gg;
     int i;
-    g->obj = obj; g->game = game; g->feed = feed;
+    g->obj = obj; g->game = game; g->feed = feed; g->part = part;
     g->world = (const u8 *)world; g->tab = (const u8 *)tbl;
     g->fault = 0; g->faultArg = 0;
 #define IN(field, idx) g->field = (int)game[idx]
@@ -4528,7 +4529,7 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     IN(signs, G_SIGNS); IN(windSign, G_WINDSIGN); IN(relTX, G_RELTX); IN(relTY, G_RELTY); IN(walkSpd, G_WALKSPD);
     IN(maxAcc0, G_MAXACC0); IN(fireCool, G_FIRECOOL); IN(waterTile, G_WATERTILE);
     IN(weapon, G_WEAPON); IN(fired, G_FIRED); IN(blaster, G_BLASTER); IN(pockUsed, G_POCKUSED);
-    IN(eventsOn, G_EVENTSON); IN(promoteOn, G_PROMOTEON);
+    IN(eventsOn, G_EVENTSON); IN(promoteOn, G_PROMOTEON); IN(nPart, G_NPART);
     IN(orgF[0], G_ORGXF); IN(orgF[2], G_ORGYF); IN(frac[0], G_FRACX); IN(sgn[0], G_SGNX);
     IN(frac[2], G_FRACY); IN(sgn[2], G_SGNY); IN(secs[0], G_SECSX); IN(secs[2], G_SECSY);
     IN(sVel[0], G_SVELX); IN(sVel[2], G_SVELY); IN(newTiles, G_NEWTILES);
@@ -4619,6 +4620,7 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     OUT(frac[2], G_FRACY); OUT(sgn[2], G_SGNY); OUT(secs[0], G_SECSX); OUT(secs[2], G_SECSY);
     OUT(sVel[0], G_SVELX); OUT(sVel[2], G_SVELY); OUT(newTiles, G_NEWTILES);
     OUT(secMode, G_SECMODE); OUT(secNext, G_SECNEXT); OUT(secShuf, G_SECSHUF); OUT(secDist, G_SECDIST);
+    OUT(nPart, G_NPART);
     for (i = 0; i < 4; i++) game[G_WLDES0 + i] = g->wlDes[i];
     OUT(telRem, G_TELREM); OUT(telNext, G_TELNEXT); OUT(scrollX, G_SCROLLX); OUT(scrollY, G_SCROLLY); OUT(retrieve, G_RETRIEVE);
     for (i = 0; i < 6; i++) { game[G_WLO0 + i] = g->wLo[i]; game[G_WHI0 + i] = g->wHi[i]; }
