@@ -953,6 +953,8 @@ next:   ;
 
 /* ---- damage and the surface wind ---------------------------------------------- */
 
+static void reduce_weapon_energy(struct P *p, int x);   /* &2d79, defined below */
+
 static int damage_slot(struct P *p, int y, int dmg)
 {
     struct G *g = p->g;
@@ -964,8 +966,12 @@ static int damage_slot(struct P *p, int y, int dmg)
             g->lying >>= 1;
             if (dmg >= g->immob) g->immob = dmg;
         }
-        if (g->suitCol & 128) fault(g, 8, 0);
-        for (i = 0; i < 3; i++) { c = dmg >> 7; dmg = (dmg << 1) & 255; if (c) dmg = (dmg >> 1) | 128; }
+        /* &24bb: the protection suit takes twice the damage out of its own
+           energy, and while it is reliable the player takes it plain; without
+           it, or when it fails, the damage is multiplied by eight */
+        if (!(g->suitCol & 128) || (reduce_weapon_energy(p, 5), reduce_weapon_energy(p, 5),
+                                    !check_reliability(p, 5)))
+            for (i = 0; i < 3; i++) { c = dmg >> 7; dmg = (dmg << 1) & 255; if (c) dmg = (dmg >> 1) | 128; }
     }
     if (dmg >= 8) OS(O_FLAGS, y, OT(O_FLAGS, y) | 8);
     old = OT(O_ENERGY, y);
@@ -3561,7 +3567,7 @@ static int tile_effect(struct P *p, int t, int flp)
         if (y >= 0) { OS(O_XF, y, 0x40); OS(O_YF, y, 0x80); }
         break;
     case 0x03: case 0x04: return tile_door(p, t, bd, flp);
-    case 0x02:                                   /* update_tile_with_object_from_data: a placeholder for now */
+    case 0x02:                                   /* update_tile_with_object_from_data: the game marks it a placeholder too */
         y = create_from_tertiary(p, g->tert[bd] & 0x7F, 0, bd, flp);
         if (y >= 0) OS(O_TYPE, y, 0x49);
         break;
@@ -3630,8 +3636,30 @@ stay:
 
 /* ---- transporter beams (&4d86) and engine fires (&4c15) ------------------------------------ */
 
-/* check_if_object_hit_by_remote_control (&0bc5): the player fires nothing in this kernel yet */
-static int hit_by_remote_control(struct P *p) { (void)p; return 0; }
+/* check_if_object_hit_by_remote_control (&0bc5): 0 when the player has fired a
+   remote control device at this object */
+static int hit_by_remote_control(struct P *p) { return hit_by_control(p, 0x4E); }
+
+/* consider_toggling_lock (&31ac): the remote control locks and unlocks a door
+   or a transporter beam, but only for someone carrying the key of its colour.
+   A door that is unlocked by it starts opening; one that is locked stops
+   where it is. */
+static void toggle_lock(struct P *p, int isDoor)
+{
+    struct G *g = p->g;
+    int a, c, x;
+    a = isDoor ? p->data : ((p->data + 0x60) & 255) >> 1;   /* a beam uses keys three to six */
+    x = a >> 4;
+    if (x >= 19 || !(g->collected[x] & 128)) return;        /* that key has not been found */
+    a = p->data ^ 1;                                        /* lock, or unlock */
+    if (isDoor) {
+        c = a & 1;
+        a = (a >> 1) & 0xFE;                                /* it stops moving while locked */
+        if (!c) a |= 1;                                     /* and opens when it is unlocked */
+        a = ((a << 1) | c) & 255;
+    }
+    p->data = a;
+}
 
 static void update_transporter_beam(struct P *p)
 {
@@ -3655,7 +3683,7 @@ static void update_transporter_beam(struct P *p)
     if (!(p->yFlip & 128)) v = neg8(v);          /* a base in the floor: the beam moves down */
     p->pf[2] = (v - 1) & 255;
 colour:
-    if (hit_by_remote_control(p)) { }            /* consider_toggling_lock: not reached yet */
+    if (!hit_by_remote_control(p)) toggle_lock(p, 1);   /* &31ac, the door */
     p->pal = g->tab[T_TRANSPAL + ((p->fc >> 2) & 3)];
 }
 
@@ -3709,7 +3737,7 @@ static void update_door(struct P *p)
     p->ps[xo] = p->state;                        /* fixed to its tile */
     p->pf[xo] = 0xFF;
     g->doorSup = p->tdataOff;
-    if (hit_by_remote_control(p)) { }            /* consider_toggling_lock: not reached yet */
+    if (!hit_by_remote_control(p)) toggle_lock(p, 0);   /* &31ac, the transporter beam */
     g->doorSup = 0x80 | (g->doorSup >> 1);
     d = p->data | 4;                             /* moving, by default */
     f9f = (((d >> 1) & 1) << 7) | ((d & 1) << 6) | (d >> 3);   /* opening, locked */
@@ -4184,7 +4212,7 @@ static void update_clawed_robot(struct P *p)
 
 static void update_alien_weapon(struct P *p)
 {
-    energy_up_if_not_zero(p);                    /* fired only by the player, who has no weapons here yet */
+    energy_up_if_not_zero(p);                    /* it only recharges; the player is what fires it */
 }
 
 static void call_update_routine(struct P *p)
