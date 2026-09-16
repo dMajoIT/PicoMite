@@ -2841,8 +2841,8 @@ static int consider_burrowing(struct P *p)
         return 1;
     }
     if (!(g->tbColl & p->state & 128)) return 0;
+    play_sound(g, 7);                            /* &2a17, this way in only */
 creep:
-    play_sound(g, 7);
     p->acc[2] = (p->acc[2] - 1) & 255;
     for (xi = 2; xi >= 0; xi -= 2) p->vel[xi] = (get_sign(p->pvel[xi]) << 1) & 255;
     set_position_from_previous(p);
@@ -2873,7 +2873,12 @@ static void update_worm_or_maggot(struct P *p, int ta, int ty, int dmg)
     g->walkSpd = 0x10;
     if (p->tflags & 128) {                        /* has seen its target: twice as fast, and a squeal when near the middle of the screen */
         g->walkSpd = 0x20;
-        if (distance_from_screen_centre(p, p->slot) < 0x0F) read_rnd_byte(g, 0x4EA5, 2);
+        {
+            int d = distance_from_screen_centre(p, p->slot);
+            if (d < 0x0F && (d ^ 0x0F) >= read_rnd_byte(g, 0x4EA5, 2)) {
+                play_sound(g, 45); play_sound(g, 46);
+            }
+        }
     }
     c = update_walking_npc_and_check(p, 6);
     if (!c) p->timer = 6;
@@ -2988,14 +2993,13 @@ static void update_piranha_or_wasp(struct P *p)
     p->yFlip = (c << 7) | (p->yFlip >> 1);
     if (!(p->yFlip & 128)) { p->acc[2] = 4; a = 4; }     /* piranhas sink, and call small hives home */
     p->acc[2] = (p->acc[2] - 1) & 255;
-    play_sound(g, 47);
     if (!(read_rnd_byte(g, 0x4F33, 2) & 0x40)) {
         if (p->state < read_rnd_byte(g, 0x4F39, 1)) a = 0;   /* the more aggressive, the more often the player */
         consider_finding_target(p, a, p->type);
     }
     update_path(p);
     r = read_site(g, 0x4F45) & 255;
-    if (r != 0 && r >= p->state && p->touch == 0) damage_slot(p, 0, 0x18);
+    if (r != 0 && r >= p->state && p->touch == 0) { damage_slot(p, 0, 0x18); play_sound(g, 47); }
     change_sprite_base(p, sprite_offset(p, 0x0C, 3) >> 2);
     if (p->vel[0] != 0) p->xFlip = p->vel[0];
     if (!(g->tbColl & 128) && ((p->yFlip ^ g->inWater) & 128)) return;   /* out of its element */
@@ -3731,7 +3735,6 @@ static void update_engine_fire(struct P *p)
     if (p->state & 128) p->data = (a + 2) & 255; /* burnt out after 256 frames */
     r = read_rnd_byte(g, 0x4C21, 3);
     if (r < p->state) goto hide;                 /* the older the fire, the more often it hides */
-    play_sound(g, 41);
     r = (r << 1) & 255; p->xFlip = r;
     r = (r << 1) & 255; p->yFlip = r;
     if (!(y & 128)) OS(O_VX, y, (OT(O_VX, y) + 1) & 255);   /* it pushes what touches it */
@@ -3743,6 +3746,7 @@ static void update_engine_fire(struct P *p)
         g->accDmg = 0x80 | (g->accDmg >> 1);
         g->accPower = 0x50;
         accelerate_all(p, 0x14);
+        play_sound(g, 41);
         c = 1;                                   /* the sound leaves the carry set */
     }
     pal = 0x34;
