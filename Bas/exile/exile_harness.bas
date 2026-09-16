@@ -1,6 +1,10 @@
 ' exile_harness.bas - Exile, playing.  gen_exilegame.py puts the layouts where
 ' the marker is to make exile.bas.
 '
+' VERSION 0.9, 2026-09-16.  Exile (Superior Software, 1988) on the PicoMite.
+' The kernel matches the original tick for tick on 128 recorded scenes and
+' 16,219 ticks, on the desktop and on the board.  Not yet done: the sound.
+'
 ' The kernel that ran the recorded scenes now runs free: it draws its own
 ' random numbers and takes the keys from the game array, a tick at a time.
 ' Everything the game knows lives in obj() and game(), which the kernel reads
@@ -9,8 +13,16 @@
 ' The kernel is a CSUB of some 35 KB.  Pasted into a program it costs its hex
 ' text as well, which is more than program memory holds, so it lives in the
 ' library.  LIBRARY LOAD must be the program's first statement, and it hashes
-' the file, so loading an unchanged one costs nothing.  The path is literal
-' because MM.INFO(PATH) is "NONE" for a program that arrived over AUTOSAVE.
+' the file, so loading an unchanged one costs nothing.  There is no OVERWRITE
+' on it deliberately: the library it would replace may belong to another
+' program, so on the one run that installs it the board asks first.
+'
+' Everything the game needs sits beside the program, wherever that is:
+' MM.INFO(PATH) is the directory the program was loaded from, taken from the
+' '#filename header the loader writes as line one, so the whole thing can live
+' in a folder on any drive and be started with one RUN.  That only works for a
+' program in a FILE; one that arrived over AUTOSAVE has no header and PATH is
+' "NONE", which is what homeDir$ below falls back on.
 '
 '   Q W      walk or fly left and right
 '   P L      up and down
@@ -18,21 +30,22 @@
 '   F1-F10   pick a weapon up (F1 is the jetpack, which fires nothing);
 '            with shift, pour energy from the one in use into it
 '   arrows   move the view on its own
-'   TAB      the map
+'   TAB      turn round
 '   ESC      quit
-LIBRARY LOAD "A:/exile_lib.bas", O
+LIBRARY LOAD MM.INFO(PATH) + "exile_lib.bas"
 Option EXPLICIT
 Option DEFAULT INTEGER
 Option BASE 0
 ' the screen is the game's; what is printed goes to the serial console
 Option CONSOLE SERIAL
 
+Const VERSION$ = "0.9"
 Const TW = 32, TH = 32                 ' a square is 16 x 32 BBC pixels, drawn 2:1
 Const VIEWW = 256, VIEWH = 240         ' the play area, 8 by 7.5 squares
 Const PANELX = 256, PANELW = 64        ' the panel beside it
 Const WORLDW = 256 * TW, WORLDH = 256 * TH
 Const MSPERTICK = 40                      ' 25 Hz, the rate the BBC's replot fixed
-Const SHOTAT = 60                      ' the one screenshot, for checking from the desktop
+Const SHOTAT = 0                       ' >0 saves one screenshot at that tick, for checking from the desktop
 
 ' @@CONSTS@@
 
@@ -44,6 +57,7 @@ Dim pcol(7)                            ' the eight colours a particle can be
 Dim glowPal, glowShown                 ' the palette the reserved slots are wearing
 Dim kdown(38), kprev(38)               ' what is down now, and what was down last tick
 Dim wantSave, wantLoad                 ' F11 and F12, which are this port's own
+Dim msg$, msgTicks                     ' a word in the panel, and how long it stays
 Dim kRepeat(38)                        ' 1 if the action repeats while held (&121d)
 Dim sAct(3), sWhat(3), sNext           ' which of the four channels are sounding, and with what
 Dim sEv(7), sDur(7), sSoff(7), sSdur(7), sLoop(7), sLoff(7)
@@ -97,7 +111,7 @@ Sub Main
     EndIf
     ' one screenshot, once the view has settled, so the rendering can be
     ' checked from the desktop: nothing here can press the board's keys
-    If n = SHOTAT And shown = 0 Then
+    If SHOTAT > 0 And n = SHOTAT And shown = 0 Then
       shown = 1
       FRAMEBUFFER WRITE N
       Save IMAGE homeDir$ + "exile_shot.bmp"
@@ -119,15 +133,23 @@ End Sub
 Sub LoadAll
   Local Float t0
   MODE 2
+  ' the loading messages go to the screen as well: the first run on a board
+  ' writes a quarter of a megabyte to flash and is not quick
+  Option CONSOLE BOTH
   ' The colour map survives a RUN, so a previous run's glow would still be in
   ' the slots.  Start from the board's own sixteen.
   Map RESET
   Map SET
   CLS
   FRAMEBUFFER CREATE
-  Print "Exile: the tilesets into flash ..."
-  Flash LOAD IMAGE 1, homeDir$ + "exile_tiles1.bmp", O
-  Flash LOAD IMAGE 2, homeDir$ + "exile_slot2.bmp", O
+  Print "Exile "; VERSION$
+  ' The two tilesets live in flash slots 1 and 2 and stay there between runs.
+  ' FLASH LOAD IMAGE without OVERWRITE refuses with "Already programmed" when
+  ' the slot is in use, so a skipped error is how the program asks whether the
+  ' work has been done: the quarter of a megabyte only gets written on a board
+  ' that has not run the game before.  FLASH ERASE 1, 2 undoes it.
+  LoadTileset 1, "exile_tiles1.bmp", SLOT1W, SLOT1H
+  LoadTileset 2, "exile_slot2.bmp", SLOT2W, SLOT2H
   Tilemap CLOSE
   t0 = Timer
   Tilemap LOAD homeDir$ + "exile_w1.map", 1, 1, TW, TH, 8
@@ -149,6 +171,38 @@ Sub LoadAll
   MEMORY INPUT 1, NGAME * 8, game()
   Close #1
   Print "the player starts at &"; Hex$(obj(O_X * NSLOT), 2); " &"; Hex$(obj(O_Y * NSLOT), 2)
+  Option CONSOLE SERIAL                ' the screen is the game's from here on
+End Sub
+
+Sub LoadTileset(slot, file$, wantW, wantH)
+  Local e$, a, w, h
+  On Error Clear                       ' so a stale error cannot be read as ours
+  On Error Skip 1
+  Flash LOAD IMAGE slot, homeDir$ + file$
+  e$ = MM.ERRMSG$
+  On Error Clear
+  If e$ = "" Then
+    Print "  slot "; Str$(slot); ": "; file$; " written to flash"
+  ElseIf InStr(e$, "Already programmed") Then
+    Print "  slot "; Str$(slot); ": already there";
+  Else
+    Error e$                           ' a missing file must not pass for a full slot
+  EndIf
+  ' A slot that is programmed is not necessarily programmed with OURS.  A flash
+  ' image begins with its width and height as two 32-bit words - the same two
+  ' TILEMAP LOAD reads - so the picture in the slot can say whether it is the
+  ' one the game expects, and a board carrying another program's image is told
+  ' so instead of drawing a garbled planet.
+  a = MM.INFO(FLASH ADDRESS slot)
+  w = Peek(WORD a) : h = Peek(WORD a + 4)
+  If w <> wantW Or h <> wantH Then
+    Print
+    ' MMBasic clips an error message at about sixty characters, so the part
+    ' that says what to do has to come early enough to survive
+    Print "slot "; Str$(slot); " holds a "; Str$(w); "x"; Str$(h); " image; Exile needs "; Str$(wantW); "x"; Str$(wantH)
+    Error "FLASH ERASE " + Str$(slot) + ", then run again: slot holds another image"
+  EndIf
+  If e$ <> "" Then Print " ("; Str$(w); "x"; Str$(h); ", verified)"
 End Sub
 
 ' ---------------------------------------------------------------- saved games
@@ -164,27 +218,30 @@ Sub SaveGame
   Save DATA homeDir$ + "exile_obj.sav", Peek(VARADDR obj()), 288 * 8
   Save DATA homeDir$ + "exile_game.sav", Peek(VARADDR game()), NGAME * 8
   Save DATA homeDir$ + "exile_part.sav", Peek(VARADDR part()), 256 * 8
-  Option CONSOLE BOTH
+  Say "SAVED"
   Print "saved at &"; Hex$(obj(O_X * NSLOT), 2); " &"; Hex$(obj(O_Y * NSLOT), 2)
-  Option CONSOLE SERIAL
 End Sub
 
 Sub LoadGame
   Local f$
   f$ = homeDir$ + "exile_obj.sav"
   If Dir$(f$, FILE) = "" Then
-    Option CONSOLE BOTH
+    Say "NO SAVE"
     Print "no saved game"
-    Option CONSOLE SERIAL
     Exit Sub
   EndIf
   Load DATA f$, Peek(VARADDR obj())
   Load DATA homeDir$ + "exile_game.sav", Peek(VARADDR game())
   Load DATA homeDir$ + "exile_part.sav", Peek(VARADDR part())
   ' the view has to be told to catch up with wherever the player now is
-  Option CONSOLE BOTH
+  Say "RESTORED"
   Print "restored at &"; Hex$(obj(O_X * NSLOT), 2); " &"; Hex$(obj(O_Y * NSLOT), 2)
-  Option CONSOLE SERIAL
+End Sub
+
+' a word in the panel for fifty ticks, two seconds
+Sub Say(what$)
+  msg$ = what$
+  msgTicks = 50
 End Sub
 
 ' ---------------------------------------------------------------- the keys
@@ -219,7 +276,7 @@ Sub ReadKeys
         Case 129 : kdown(K_DOWN) = 1
         Case 130 : kdown(K_LEFT) = 1
         Case 131 : kdown(K_RIGHT) = 1
-        Case 9   : kdown(K_TAB) = 1          ' the map
+        Case 9   : kdown(K_TAB) = 1          ' turn round (&1e19)
         Case 103 : kdown(K_G) = 1            ' retrieve from a pocket
         Case 115 : kdown(K_S) = 1            ' store into one
         Case 116 : kdown(K_T) = 1            ' teleport
@@ -553,12 +610,28 @@ Sub DrawGauges
   For i = 0 To 4
     If i < game(G_POCKUSED) Then Box PANELX + 5 + i * 11, 91, 8, 10, 0, RGB(YELLOW), RGB(YELLOW)
   Next i
+  ' F11 and F12 are silent otherwise: the game carries on and nothing on the
+  ' screen says whether anything happened, so say so here for a couple of
+  ' seconds.  MSGTICKS is in ticks, and a tick is forty milliseconds.
+  If msgTicks > 0 Then
+    Text PANELX + 32, 180, msg$, "CT", 7, 1, RGB(YELLOW)
+    msgTicks = msgTicks - 1
+  EndIf
   w = game(G_WEAPON)
   Text PANELX + 4, 108, "WEAPON " + Str$(w) + " ", "LT", 7, 1, RGB(CYAN), RGB(BLACK)
   Box PANELX + 4, 118, 56, 6, 1, RGB(WHITE)
   e = game(G_WHI0 + w) * 56 \ 255
   If e > 2 Then Box PANELX + 5, 119, e - 2, 4, 0, RGB(GREEN), RGB(GREEN)
-  Text PANELX + 4, 200, "&" + Hex$(obj(O_X * NSLOT), 2) + " &" + Hex$(obj(O_Y * NSLOT), 2), "LT", 7, 1, RGB(WHITE), RGB(BLACK)
-  ' the tick and the draw against the 40 ms a frame the game is paced to
-  Text PANELX + 4, 212, "t" + Str$(Int(tickMs * 1000)) + " d" + Str$(Int(drawMs * 1000)) + "us  ", "LT", 7, 1, RGB(WHITE), RGB(BLACK)
+  ' Font 7 is six pixels wide and the panel is sixty, so nothing here may be
+  ' longer than TEN characters: that is why x and y have a line each (both can
+  ' reach 255) and why the times carry no "ms" (a busy DRAW can pass 10.0).
+  ' X and Y are the square of the planet the player stands on, 0 to 255 each
+  ' way - the thing to quote when something is wrong somewhere.  TICK and DRAW
+  ' are milliseconds, averaged over the last twenty-five frames, and split
+  ' into the part that IS the game and the part that draws it; together they
+  ' have to fit inside the 40 ms a frame the game is paced to.
+  Text PANELX + 4, 192, "X " + Str$(obj(O_X * NSLOT)) + "   ", "LT", 7, 1, RGB(WHITE), RGB(BLACK)
+  Text PANELX + 4, 204, "Y " + Str$(obj(O_Y * NSLOT)) + "   ", "LT", 7, 1, RGB(WHITE), RGB(BLACK)
+  Text PANELX + 4, 216, "TICK " + Str$(tickMs, 1, 1) + " ", "LT", 7, 1, RGB(WHITE), RGB(BLACK)
+  Text PANELX + 4, 228, "DRAW " + Str$(drawMs, 1, 1) + " ", "LT", 7, 1, RGB(WHITE), RGB(BLACK)
 End Sub

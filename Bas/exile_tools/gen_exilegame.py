@@ -229,6 +229,13 @@ def main():
     consts.append("Const OS_PALCOL = %d, GLOW_PALETTE = %d" % (OS_PALCOL, GLOW_PALETTE))
     from gen_objects import RESERVED
     consts.append("Const GLOW0 = %d, GLOW1 = %d, GLOW2 = %d" % RESERVED)
+    # the size of each flash image, so the game can tell its own tileset from
+    # whatever else a board may have left in the slot
+    for n, f in ((1, "exile_tiles1.bmp"), (2, "exile_slot2.bmp")):
+        hdr = open(os.path.join(out, f), "rb").read(26)
+        w, h = struct.unpack("<ii", hdr[18:26])
+        consts.append("Const SLOT%dW = %d, SLOT%dH = %d" % (n, w, n, abs(h)))
+
     for i, a in enumerate(ACTIONS):
         consts.append("Const K_%s = %d" % (a.upper().replace('@', 'AT').replace('>', 'GT').replace('<', 'LT'), i))
 
