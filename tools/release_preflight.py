@@ -32,11 +32,23 @@ VARIANTS = [
 # Everything a firmware binary is built from.  Bas/, Testfiles/, docs/ and
 # PDF/ are deliberately absent: changing a BASIC demo or the manual does not
 # invalidate a uf2.
+#
+# The two top-level wildcards carry :(glob) magic so that "*" stops at a
+# directory separator.  Without it a bare "*.c" pathspec matches at ANY depth,
+# so a hand-compiled CSUB under Bas/ counted as firmware - condemning good
+# binaries and blocking the release on work in progress, which is exactly what
+# the comment above says must not happen.  Only root-level PicoMite.c and the
+# root headers belong here.
 FIRMWARE_PATHS = [
-    "*.c", "*.h", "core", "graphics", "input", "io", "misc", "net", "video",
-    "bluetooth", "usb_host_files", "third_party_mod", "fonts", "cmake",
-    "linker_overrides", "CMakeLists.txt", "buildpicomite.bat",
+    ":(glob)*.c", ":(glob)*.h", "core", "graphics", "input", "io", "misc",
+    "net", "video", "bluetooth", "usb_host_files", "third_party_mod", "fonts",
+    "cmake", "linker_overrides", "CMakeLists.txt", "buildpicomite.bat",
 ]
+
+# Work in progress that never reaches a uf2 and so cannot block a release.
+# Listed at the end of the run so it stays visible rather than silently
+# dropped.  docs/Exile_* are the working notes for the Exile port.
+WIP_PATHS = ["Bas", "Testfiles", "docs/Exile_*"]
 
 fails = []
 def check(name, ok, detail=""):
@@ -122,13 +134,13 @@ check("manual PDF regenerated since the docx last changed",
 #    the REMOTE head, so anything unpushed is simply excluded.  An unpushed
 #    COMMIT is a blocker, because it would be excluded silently.
 release_dirty = git("status", "--porcelain", "--",
-                    ":(exclude)Bas", ":(exclude)Testfiles")
+                    *[":(exclude)" + p for p in WIP_PATHS])
 check("everything the release ships is committed", not release_dirty,
       release_dirty.replace(chr(10), "; "))
 ahead = git("rev-list", "--count", "origin/main..HEAD")
 check("HEAD pushed to origin/main", ahead == "0", "%s commit(s) unpushed" % ahead)
 
-other = git("status", "--porcelain", "--", "Bas", "Testfiles")
+other = git("status", "--porcelain", "--", *WIP_PATHS)
 if other:
     print("")
     print("  note: work in progress left out of the release:")
