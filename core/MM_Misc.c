@@ -9177,6 +9177,22 @@ void MIPS16 fun_info(void)
         return;
     }
 #ifdef PICOMITEWEB
+    else if (checkstring(ep, (unsigned char *)"TELNET"))
+    {
+        /* 1 while a telnet client is attached to the console, 0 otherwise.
+           telnet_pcb_no is 99 when no client is connected, but a clean remote
+           close can clear the pcb slot without resetting it, so require both
+           to agree. TCPstate is NULL until the TCP server has been started. */
+        iret = 0;
+        if (TCPstate)
+        {
+            int pcb = TCPstate->telnet_pcb_no;
+            if (pcb >= 0 && pcb < MaxPcb && TCPstate->client_pcb[pcb])
+                iret = 1;
+        }
+        targ = T_INT;
+        return;
+    }
     /* TLS-heap diagnostics. Kept as flat else-if checkstring tests (like
        TOUCH / TRACK above) rather than a `*ep=='t'` letter group — fun_info's
        other 'T' keywords (TILE HEIGHT, TCP PORT/REQUEST, TOUCH, TRACK) are not
