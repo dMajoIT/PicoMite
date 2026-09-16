@@ -977,18 +977,33 @@ IF k$ = "w" THEN move_forward
 IF k$ = CHR$(27) THEN quit
 ```
 
-**KEYDOWN** — simultaneous key detection (up to 7 keys):
+**KEYDOWN** — which keys are physically held right now, up to six at once.
+
+**The argument is a slot number, not a key code.** `KEYDOWN(n)` takes `n` from
+0 to 8 and **anything outside that range is an error**, so
+`IF KEYDOWN(32) THEN Fire` does not ask whether space is held - it fails. What
+comes back is the key code occupying that slot:
+
 ```basic
-IF KEYDOWN(128) THEN move_up       ' Up arrow
-IF KEYDOWN(129) THEN move_down     ' Down arrow
-IF KEYDOWN(130) THEN move_left     ' Left arrow
-IF KEYDOWN(131) THEN move_right    ' Right arrow
-IF KEYDOWN(32) THEN fire           ' Space
-n% = KEYDOWN(0)                    ' Number of keys currently pressed
+n% = KEYDOWN(0)                    ' how many keys are held, 0 to 6
+FOR i% = 1 TO n%
+  PRINT "held: "; KEYDOWN(i%)      ' the key code in slot i%
+NEXT i%
 ```
 
-**Press versus hold.** `KEYDOWN` reports what is held *now*, so
-`IF KEYDOWN(32) THEN Fire` fires on every frame the key is down. For actions
+| argument | returns |
+|----------|---------|
+| `0` | how many keys are held, 0 to 6 |
+| `1` to `6` | the key code in that slot, 0 if the slot is empty |
+| `7` | modifier bits: 1 left Alt, 2 left Ctrl, 4 left GUI, 8 left Shift, 16 right Alt, 32 right Ctrl, 64 right GUI, 128 right Shift |
+| `8` | lock state: 1 caps, 2 num, 4 scroll |
+
+So asking "is the up arrow down?" means looking through the slots for its code.
+A game wants that answered for several keys every frame, so scan them once into
+an array instead - which is what the next section does.
+
+**Press versus hold.** `KEYDOWN` reports what is held *now*, so acting on a key
+directly fires on every frame it is down. For actions
 that should happen once per press - jump, a single shot, opening a door,
 changing weapon - remember what was held last frame and require a release
 first:
@@ -1276,10 +1291,10 @@ playerX! = 160 : playerY! = 120 : lives% = 3
 ' ===== Main Game Loop =====
 DO
   ' --- Input ---
-  k$ = INKEY$
-  IF KEYDOWN(130) THEN playerVelX! = playerVelX! - 0.5
-  IF KEYDOWN(131) THEN playerVelX! = playerVelX! + 0.5
-  IF KEYDOWN(128) THEN playerVelY! = playerVelY! - 0.5
+  ReadKeys                           ' see Input Handling: fills kNow()/kWas()
+  IF Held(130) THEN playerVelX! = playerVelX! - 0.5
+  IF Held(131) THEN playerVelX! = playerVelX! + 0.5
+  IF Held(128) THEN playerVelY! = playerVelY! - 0.5
 
   ' --- Update ---
   playerX! = playerX! + playerVelX!
@@ -1511,10 +1526,11 @@ FRAMEBUFFER WRITE F
 ' --- Game Loop ---
 DO
   ' Input
-  IF KEYDOWN(130) THEN vx! = -2
-  IF KEYDOWN(131) THEN vx! = 2
-  IF KEYDOWN(128) AND onGround% THEN vy! = JUMP_VEL!
-  IF NOT KEYDOWN(130) AND NOT KEYDOWN(131) THEN vx! = vx! * 0.8
+  ReadKeys                           ' see Input Handling: fills kNow()/kWas()
+  IF Held(130) THEN vx! = -2
+  IF Held(131) THEN vx! = 2
+  IF Pressed(128) AND onGround% THEN vy! = JUMP_VEL!
+  IF NOT Held(130) AND NOT Held(131) THEN vx! = vx! * 0.8
 
   ' Gravity
   vy! = vy! + GRAVITY!
