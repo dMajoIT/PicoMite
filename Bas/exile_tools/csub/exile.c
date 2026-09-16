@@ -1388,6 +1388,7 @@ static int consider_absorbing(struct P *p, int type)
     if (obj_at(g, 0x0860 + p->touch) != type) return 1;
     if (touching_angle(p) & 128) return 1;
     OS(O_FLAGS, p->touch, OT(O_FLAGS, p->touch) | 0x20);
+    play_sound(g, 2);
     return 0;
 }
 
@@ -1408,6 +1409,7 @@ static void handle_dropping(struct P *p)
     struct G *g = p->g;
     if (g->held & 128) return;
     g->held = 128 | (g->held >> 1);
+    play_sound(g, 1);
 }
 
 static int check_reliability(struct P *p, int xi);
@@ -1557,6 +1559,7 @@ static void handle_teleporting(struct P *p)
         g->telNext = (g->telNext - 1) & 3;
         y = g->telNext;
     }
+    play_sound(g, 4);
     p->tx = g->telX[y]; p->ty = g->telY[y];
     p->flags |= 0x10; p->timer = 0x20;
 }
@@ -1571,6 +1574,7 @@ static void remember_position(struct P *p)
     g->telX[g->telNext] = p->cen[0];
     g->telY[g->telNext] = p->cen[2];
     g->telNext = (g->telNext + 1) & 3;
+    play_sound(g, 0);
 }
 
 /* handle_scrolling_viewpoint (&2c1d), the arrow keys */
@@ -1581,6 +1585,7 @@ static void scroll_viewpoint(struct P *p, int key)
     if (v == g->tab[T_SCROLLLIMIT + x]) return;
     v = (v + g->tab[T_SCROLLDELTA + x]) & 255;
     if (x & 2) g->scrollY = v; else g->scrollX = v;
+    play_sound(g, 8);
 }
 
 static void do_action(struct P *p, int i)
@@ -1607,8 +1612,8 @@ static void do_action(struct P *p, int i)
     else if (i == 26) handle_teleporting(p);
     else if (i == 27) remember_position(p);
     else if (i >= 15 && i <= 18) scroll_viewpoint(p, i);
-    else if (i == 24) { if (g->collected[17] & 128) g->whistle2 = p->slot; }
-    else if (i == 25) { if (g->collected[16] & 128) g->whistle1 = 0x80 | (g->whistle1 >> 1); }
+    else if (i == 24) { if (g->collected[17] & 128) { g->whistle2 = p->slot; play_sound(g, 1); play_sound(g, 9); } }
+    else if (i == 25) { if (g->collected[16] & 128) { g->whistle1 = 0x80 | (g->whistle1 >> 1); play_sound(g, 1); play_sound(g, 10); } }
     else if (i == 0 || i == 11 || i == 32 || i == 38) ;       /* pause, save, sound, shift: nothing here */
     else fault(g, 4, i);
 }
@@ -1926,6 +1931,7 @@ static void update_player(struct P *p)
     if (g->fireCool == 0) g->kh[13] >>= 1;
     if (g->blaster & 128) {                       /* the blaster goes on discharging for five frames */
         g->blaster = (g->blaster + 1) & 255;
+        play_sound(g, 38);
         g->expTimer = 0xCE;
         p->tdataOff = 0x0A;
         update_explosion(p);
@@ -2552,6 +2558,7 @@ static void update_pistol_bullet(struct P *p)
     int y = damaged_by_projectiles(p);
     if (!(y & 128)) {
         damage_slot(p, y, 0x0A);
+        play_sound(p->g, 28);
         turn_into_fireball(p, 2);
         explode_with_duration(p, 2);
         return;
@@ -2604,7 +2611,8 @@ static void add_mushroom_timer(struct P *p, int blue, int c)
 static void mushroom_effect(struct P *p, int blue, int isPlayer)
 {
     if (isPlayer) add_mushroom_timer(p, blue, 0);
-    particle_from_object(p, 1, 0x88, 0x47, 0x4D);      /* play_sound leaves the carry set */
+    play_sound(p->g, 15);                             /* &3ff9, and it leaves the carry set */
+    particle_from_object(p, 1, 0x88, 0x47, 0x4D);
 }
 
 /* update_mushroom_ball (&4698) */
@@ -2712,12 +2720,13 @@ static void update_fluffy(struct P *p)
             }
         }
     }
-    if (path == 1) p->timer = 0x80 | (p->timer >> 1);     /* the squeal leaves the carry set: active */
+    if (path == 1) { play_sound(g, 19); p->timer = 0x80 | (p->timer >> 1); }   /* the squeal leaves the carry set: active */
     else if (path == 2) {
         a = p->state;
         if (!(a & 128)) a = neg8(a);
         c = a >= read_rnd_byte(g, 0x42CE, 1);
-        p->timer = (c << 7) | (p->timer >> 1);            /* active more when happy or unhappy; purrs if so */
+        p->timer = (c << 7) | (p->timer >> 1);            /* active more when happy or unhappy */
+        if (c) play_sound(g, 20);                         /* and then it purrs */
     }
     /* consider_animating_fluffy: while active, flip one way or the other at random, then wander */
     x = read_rnd_byte(g, 0x42DB, 1) & 2;
@@ -2833,6 +2842,7 @@ static int consider_burrowing(struct P *p)
     }
     if (!(g->tbColl & p->state & 128)) return 0;
 creep:
+    play_sound(g, 7);
     p->acc[2] = (p->acc[2] - 1) & 255;
     for (xi = 2; xi >= 0; xi -= 2) p->vel[xi] = (get_sign(p->pvel[xi]) << 1) & 255;
     set_position_from_previous(p);
@@ -2851,6 +2861,7 @@ static void update_worm_or_maggot(struct P *p, int ta, int ty, int dmg)
     if (consider_burrowing(p)) { c = p->cy; goto animate; }
     r = read_site(g, 0x4E6C) & 255;
     if (!(g->inWater & 128)) r = 0xFF;            /* under water they always want to dig */
+    if ((r & 15) == 0) play_sound(g, 45);
     c = r >= 0xF6;
     p->state = (c << 7) | (p->state & 0x7F);      /* the wish to burrow */
     if (p->touch == p->target) { p->timer = 0x0A; damage_slot(p, p->touch, dmg); }
@@ -2961,7 +2972,7 @@ static void update_red_drop(struct P *p)
         t = OT(O_TYPE, y);
         if (t == 0x09) return;                    /* its own slime */
         if (t == 0x0B) { OS(O_TYPE, y, 0x55); return; }   /* a yellow slime becomes a coronium boulder */
-        if (t != 0x10) damage_slot(p, y, 0x64);   /* piranhas are proof against it */
+        if (t != 0x10) { damage_slot(p, y, 0x64); play_sound(g, 31); }   /* piranhas are proof against it */
     } else if (!(g->tbColl & 128)) return;
     explode_with_duration(p, 0);
 }
@@ -2977,6 +2988,7 @@ static void update_piranha_or_wasp(struct P *p)
     p->yFlip = (c << 7) | (p->yFlip >> 1);
     if (!(p->yFlip & 128)) { p->acc[2] = 4; a = 4; }     /* piranhas sink, and call small hives home */
     p->acc[2] = (p->acc[2] - 1) & 255;
+    play_sound(g, 47);
     if (!(read_rnd_byte(g, 0x4F33, 2) & 0x40)) {
         if (p->state < read_rnd_byte(g, 0x4F39, 1)) a = 0;   /* the more aggressive, the more often the player */
         consider_finding_target(p, a, p->type);
@@ -3719,6 +3731,7 @@ static void update_engine_fire(struct P *p)
     if (p->state & 128) p->data = (a + 2) & 255; /* burnt out after 256 frames */
     r = read_rnd_byte(g, 0x4C21, 3);
     if (r < p->state) goto hide;                 /* the older the fire, the more often it hides */
+    play_sound(g, 41);
     r = (r << 1) & 255; p->xFlip = r;
     r = (r << 1) & 255; p->yFlip = r;
     if (!(y & 128)) OS(O_VX, y, (OT(O_VX, y) + 1) & 255);   /* it pushes what touches it */
@@ -3830,6 +3843,7 @@ static void update_hive(struct P *p)
     r &= read_rnd_byte(g, 0x4BCD, 0);
     r &= read_rnd_byte(g, 0x4BCF, 2) & 7;
     if (r < p->count) return;                    /* the more there are, the less likely another */
+    play_sound(g, 40);
     x = find_or_count(p, 0x0E, 0x86, 0, 0);
     if (!(x & 128)) return;                      /* not with a big fish or flying enemies about */
     p->angleB5 = p->xFlip & 0x80;                /* out to the left or the right, as the hive faces */
@@ -4161,7 +4175,7 @@ static void update_active_chatter(struct P *p)
             p->xFlip = a;
             if (!((a ^ p->flags) & 128)) {
                 a = sub8(p, p->angleB5 & 0x7F, 0x0A, p->cy);
-                if (a >= 0x6C) { p->timer = a; create_projectile(p, 0x28, 0, 0x32); }
+                if (a >= 0x6C) { p->timer = a; play_sound(g, 34); create_projectile(p, 0x28, 0, 0x32); }
             }
         }
     }
@@ -4234,7 +4248,7 @@ static void update_clawed_robot(struct P *p)
         if (p->state == 0) { g->clawAvail[x] = 0; teleport_away(p); return; }
     }
     teleport_near_player(p, 0x46);
-    read_site(g, 0x4852);                        /* 1 in 128: a sound */
+    if ((read_site(g, 0x4852) >> 1) == 0) play_sound(g, 33);   /* 1 in 128 */
     fire_and_move_hovering(p, 0x13, 2);
 }
 
@@ -4554,6 +4568,7 @@ static void update_object(struct G *g, int slot)
             int et = (g->tab[T_RTFLAGS + 0x14 + p->type] >> 6) & 3;
             if (et == 0) { if (slot == 0) consider_teleporting_damaged_player(p); }
             else if (et == 2) turn_into_fireball(p, 7);
+            else if (et == 3) { play_sound(g, 16); explode_with_squeal(p); }
             else explode_with_squeal(p);
         }
         a = read_site(g, SITE_VISIBILITY) & 255;
@@ -4672,7 +4687,10 @@ static void update_events(struct G *g, struct P *p)
         a = (g->quake << 1) & 255;
         c = a >= read_rnd_byte(g, 0x25E8, 2);
         a = ((a & 0x10) << 1) | c;
-        if (a != 0 && (frame_flag(g, 4) & 128) && a != 0x21) g->quake = (g->quake + 1) & 255;
+        if (a != 0 && (frame_flag(g, 4) & 128) && a != 0x21) {
+            g->quake = (g->quake + 1) & 255;
+            play_sound(g, 6);
+        }
         if ((a >> 1) == 0) read_site(g, 0x25FD);
     }
     /* the four waterlines breathe towards where they should be, two fractions a tick */
