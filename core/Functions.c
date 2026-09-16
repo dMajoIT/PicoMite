@@ -1632,10 +1632,19 @@ void fun_lcase(void)
 void fun_version(void)
 {
 	char *p;
+	/* Each step skips the separator that stopped the one before it - a '.', or
+	   the 'b' of a beta.  A release has no fourth field, so strtol stops on the
+	   terminating NUL and p + 1 would read PAST THE END of the string literal,
+	   parsing whatever the linker happened to put there as the beta number.  So
+	   check there is something to step over.  "6.03.02b8" is unchanged at
+	   6.030208; "6.03.02" is now reliably 6.0302. */
 	fret = strtol(VERSION, &p, 10);
-	fret += (MMFLOAT)strtol(p + 1, &p, 10) / 100;
-	fret += (MMFLOAT)strtol(p + 1, &p, 10) / 10000;
-	fret += (MMFLOAT)strtol(p + 1, &p, 10) / 1000000;
+	if (*p)
+		fret += (MMFLOAT)strtol(p + 1, &p, 10) / 100;
+	if (*p)
+		fret += (MMFLOAT)strtol(p + 1, &p, 10) / 10000;
+	if (*p)
+		fret += (MMFLOAT)strtol(p + 1, &p, 10) / 1000000;
 	targ = T_NBR;
 }
 
