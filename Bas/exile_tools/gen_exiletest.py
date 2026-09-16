@@ -117,6 +117,7 @@ def game_init(mem):
     g['accpower'] = 0x28
     for i in range(5):
         g['gift%d' % i] = m[0x083A + i]
+    g['npart'] = 0xFF        # the index of the last particle: -1, meaning none
     g['feedmode'] = 1
     for i in range(8):
         g['wl%d' % i] = m[0x082E + i]
