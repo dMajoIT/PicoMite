@@ -816,8 +816,17 @@ void copyframetoscreen(uint8_t *s, int xstart, int xend, int ystart, int yend, i
         }
     }
 }
-// Batch size for scanline accumulation (tune based on available RAM)
-#define MERGE_BATCH_LINES 8
+/* Scanline accumulation buffer for merge()/blitmerge(), sized in BYTES rather
+   than in lines.  Both run on core 1 when the merge is done in the background
+   (FRAMEBUFFER MERGE ...,B) and core 1's entire stack is 2048 bytes -
+   core1stack[] in PicoMite.c.  A buffer of 8 * (HRes / 2) therefore grew with
+   the panel width and overflowed that stack on anything wider than about 448
+   pixels (480 x 320 needs 1920 bytes of the 2044 available, before the frames
+   of merge(), copyframetoscreen() and DefineRegionSPI()).  A fixed byte budget
+   makes the stack cost the same at every resolution: 1280 bytes keeps the full
+   8-line batch on a 320-wide screen, gives 5 lines at 480 and 3 at 800, and
+   still holds a whole scanline up to HRes 2560 - far beyond any panel. */
+#define MERGE_BATCH_BYTES 1280
 
 // Core merge logic - optimized with reduced branching
 static inline void merge_scanline(uint8_t *dst, const uint8_t *src, int width, uint8_t colour)
@@ -849,8 +858,11 @@ void merge(uint8_t colour)
     uint8_t *d = FrameBuf;
     int bytes_per_line = HRes / 2;
 
-    // Allocate batch buffer for multiple scanlines
-    uint8_t BatchBuf[MERGE_BATCH_LINES * (HRes / 2)];
+    // Batch buffer for multiple scanlines - as many as the fixed budget holds
+    uint8_t BatchBuf[MERGE_BATCH_BYTES];
+    int batch_lines = MERGE_BATCH_BYTES / bytes_per_line;
+    if (batch_lines < 1)
+        batch_lines = 1;
 
 #if defined(PICOMITE) || defined(PICOMITEMIN)
     mutex_enter_blocking(&frameBufferMutex);
@@ -866,9 +878,9 @@ void merge(uint8_t colour)
     }
 
     // Process in batches
-    for (int y = 0; y < VRes; y += MERGE_BATCH_LINES)
+    for (int y = 0; y < VRes; y += batch_lines)
     {
-        int batch_size = (y + MERGE_BATCH_LINES > VRes) ? (VRes - y) : MERGE_BATCH_LINES;
+        int batch_size = (y + batch_lines > VRes) ? (VRes - y) : batch_lines;
 
         // Process batch of scanlines
         for (int i = 0; i < batch_size; i++)
@@ -913,8 +925,11 @@ void blitmerge(int x0, int y0, int w, int h, uint8_t colour)
     int x0_bytes = x0 / 2;
     int w_bytes = w / 2;
 
-    // Allocate batch buffer for multiple scanlines
-    uint8_t BatchBuf[MERGE_BATCH_LINES * (HRes / 2)];
+    // Batch buffer for multiple scanlines - as many as the fixed budget holds
+    uint8_t BatchBuf[MERGE_BATCH_BYTES];
+    int batch_lines = MERGE_BATCH_BYTES / bytes_per_line;
+    if (batch_lines < 1)
+        batch_lines = 1;
 
 #ifdef PICOMITE
     mutex_enter_blocking(&frameBufferMutex);
@@ -932,9 +947,9 @@ void blitmerge(int x0, int y0, int w, int h, uint8_t colour)
     int y_end = (y0 + h > VRes) ? VRes : (y0 + h);
 
     // Process in batches
-    for (int y = y0; y < y_end; y += MERGE_BATCH_LINES)
+    for (int y = y0; y < y_end; y += batch_lines)
     {
-        int batch_size = (y + MERGE_BATCH_LINES > y_end) ? (y_end - y) : MERGE_BATCH_LINES;
+        int batch_size = (y + batch_lines > y_end) ? (y_end - y) : batch_lines;
 
         // Process batch of scanlines
         for (int i = 0; i < batch_size; i++)
