@@ -43,6 +43,7 @@ Dim wlx(4)
 Dim pcol(7)                            ' the eight colours a particle can be
 Dim glowPal, glowShown                 ' the palette the reserved slots are wearing
 Dim kdown(38), kprev(38)               ' what is down now, and what was down last tick
+Dim wantSave, wantLoad                 ' F11 and F12, which are this port's own
 Dim kRepeat(38)                        ' 1 if the action repeats while held (&121d)
 Dim sAct(3), sWhat(3), sNext           ' which of the four channels are sounding, and with what
 Dim sEv(7), sDur(7), sSoff(7), sSdur(7), sLoop(7), sLoff(7)
@@ -76,6 +77,8 @@ Sub Main
     ReadKeys
     If quitting Then quit = 1
     game(G_KMASK) = KeyMask()
+    If wantSave Then SaveGame : wantSave = 0
+    If wantLoad Then LoadGame : wantLoad = 0
     t1 = Timer
     ExileTick obj(), game(), world(), tbl(), feed(), part()
     tickAcc = tickAcc + (Timer - t1)
@@ -148,6 +151,42 @@ Sub LoadAll
   Print "the player starts at &"; Hex$(obj(O_X * NSLOT), 2); " &"; Hex$(obj(O_Y * NSLOT), 2)
 End Sub
 
+' ---------------------------------------------------------------- saved games
+' The whole of a game is three arrays: the sixteen object slots, the game array
+' - which carries the world's tertiary data, the player's pockets, the weapons,
+' the waterlines and the screen - and the particles.  Everything else is either
+' constant (the tiles, the tables, the sprite sheet) or derived.  So a saved
+' game is those three written out, and restoring is reading them back.
+'
+' The game has a save of its own, on f9, which writes to tape through the
+' loader; that is not something this port can use, so F11 and F12 are ours.
+Sub SaveGame
+  Save DATA homeDir$ + "exile_obj.sav", Peek(VARADDR obj()), 288 * 8
+  Save DATA homeDir$ + "exile_game.sav", Peek(VARADDR game()), NGAME * 8
+  Save DATA homeDir$ + "exile_part.sav", Peek(VARADDR part()), 256 * 8
+  Option CONSOLE BOTH
+  Print "saved at &"; Hex$(obj(O_X * NSLOT), 2); " &"; Hex$(obj(O_Y * NSLOT), 2)
+  Option CONSOLE SERIAL
+End Sub
+
+Sub LoadGame
+  Local f$
+  f$ = homeDir$ + "exile_obj.sav"
+  If Dir$(f$, FILE) = "" Then
+    Option CONSOLE BOTH
+    Print "no saved game"
+    Option CONSOLE SERIAL
+    Exit Sub
+  EndIf
+  Load DATA f$, Peek(VARADDR obj())
+  Load DATA homeDir$ + "exile_game.sav", Peek(VARADDR game())
+  Load DATA homeDir$ + "exile_part.sav", Peek(VARADDR part())
+  ' the view has to be told to catch up with wherever the player now is
+  Option CONSOLE BOTH
+  Print "restored at &"; Hex$(obj(O_X * NSLOT), 2); " &"; Hex$(obj(O_Y * NSLOT), 2)
+  Option CONSOLE SERIAL
+End Sub
+
 ' ---------------------------------------------------------------- the keys
 ' KEYDOWN(0) is how many keys are held and KEYDOWN(1..6) their characters, so
 ' the whole set is read once a tick.  Every KEYDOWN call empties the console
@@ -170,7 +209,10 @@ Sub ReadKeys
       Select Case k
         Case 113 : kdown(K_Q) = 1            ' left
         Case 119 : kdown(K_W) = 1            ' right
-        Case 112 : kdown(K_P) = 1            ' up
+        Case 112 : kdown(K_P) = 1 : kdown(K_JUMP) = 1   ' the game has P twice: thrust
+        '                                     up while it is held, and a jump on
+        '                                     the press, which is what carries
+        '                                     the player when the jetpack is flat
         Case 108 : kdown(K_L) = 1            ' down
         Case 32  : kdown(K_SPACE) = 1        ' fire
         Case 128 : kdown(K_UP) = 1           ' the arrows move the view alone
@@ -188,11 +230,20 @@ Sub ReadKeys
         Case 107 : kdown(K_K) = 1            ' aim
         Case 111 : kdown(K_O) = 1
         Case 46  : kdown(K_GT) = 1           ' throw
+        Case 44, 60 : kdown(K_LT) = 1        ' pick up - comma, and shifted
+        Case 105 : kdown(K_I) = 1            ' centre the aim
+        Case 64  : kdown(K_AT) = 1           ' the booster
+        Case 118 : kdown(K_V) = 1            ' sound on and off
+        Case 155 : wantSave = 1              ' F11 and F12 are ours, not the game's
+        Case 156 : wantLoad = 1
         Case 27  : quitting = 1              ' quit, which is not the game's
       End Select
     EndIf
   Next i
   If sh Then kdown(K_SHIFT) = 1
+  ' Ctrl is a modifier, not a character: KEYDOWN(7) carries it in bit 1
+  ' (input/Keyboard.c), and the game uses it to lie down and crawl.
+  If (KEYDOWN(7) And 2) Then kdown(K_CTRL) = 1
   ' The game's table at &121d says which actions repeat while the key is held
   ' and which fire once.  One that repeats just wants the state.  One that fires
   ' once wants the press, and KEYDOWN goes on reporting a key for as long as it
