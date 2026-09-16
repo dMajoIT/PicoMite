@@ -135,8 +135,9 @@ DIM INTEGER henBase(7)
 DIM FLOAT px, py, pvy
 DIM INTEGER pvx, pState, pFace, pAnim, pGround, pLift, pKilled
 ' pAir counts frames off the ground and is the BBC's harry_fall_scaled_vy;
-' pJump says whether he left it on purpose; pMoved is its harry_dx OR dy.
-DIM INTEGER pAir, pJump, pMoved
+' pJump says whether he left it on purpose; pMoved is its harry_dx OR dy,
+' which is a measurement and not a flag - see HarryNoise.
+DIM INTEGER pAir, pJump, pMoved, pLastX, pLastY
 DIM INTEGER startX, startY
 
 DIM FLOAT dkX, dkY
@@ -290,6 +291,12 @@ END SUB
 '  two bends through the air; an egg at pitch 6 and grain at 5; and the
 '  bonus ticking once every fifty points, which is what .bonus_1 being 0
 '  or 5 comes to.
+'
+'  What that audit did not catch, because it was checking our code against
+'  the 6502 rather than against itself, was that our harry_dx ORA harry_dy
+'  was a flag half the update set for reasons of its own.  Harry standing
+'  on a girder walked on the spot for as long as you left him there.  It
+'  is measured now.
 ' ======================================================================
 SUB SndInit
   PLAY BBC ENVELOPE 1, 1, 0, 0, 0, 0, 0, 0, 126, -50, 0, 0, 100, 0
@@ -316,6 +323,14 @@ END SUB
 ' ----------------------------------------------------------------------
 SUB HarryNoise
   LOCAL INTEGER p
+  ' harry_dx ORA harry_dy: the question is whether he MOVED, not whether
+  ' any branch of the update thought about moving him.  Standing on a
+  ' girder, gravity still runs and the landing scan still re-snaps him to
+  ' the top of it every frame, so anything set in there says "moved" when
+  ' nothing has.  Measure it instead.  Walking and climbing are both two
+  ' pixels a frame, so whole pixels are enough to see it.
+  pMoved = ((INT(px) <> pLastX) OR (INT(py) <> pLastY))
+  pLastX = INT(px) : pLastY = INT(py)
   IF pState = ST_CLIMB OR pLift <> 0 OR pGround <> 0 THEN
     pAir = 0 : pJump = 0
   ELSE
@@ -690,25 +705,22 @@ SUB UpdatePlayer
   LOCAL FLOAT ny
 
   cx = INT(px) + HW \ 2
-  pMoved = 0
 
   ' ---------------------------------------------------------- on a ladder
   IF pState = ST_CLIMB THEN
     IF kJump <> 0 THEN
       pState = ST_WALK : pvy = JUMPV : pGround = 0
-      pJump = 1 : pAir = 0 : pMoved = 1
+      pJump = 1 : pAir = 0
     ELSE
       IF kUp <> 0 THEN
         IF (CellFlag(cx, INT(py) + HH - 1) AND C_LADDER) <> 0 THEN
           py = py - CLIMBSPD
           pAnim = pAnim + 1
-          pMoved = 1
         ENDIF
       ELSEIF kDown <> 0 THEN
         IF (CellFlag(cx, INT(py) + HH + 1) AND C_LADDER) <> 0 THEN
           py = py + CLIMBSPD
           pAnim = pAnim + 1
-          pMoved = 1
         ENDIF
       ENDIF
       IF kLeft <> 0 OR kRight <> 0 THEN
@@ -764,12 +776,11 @@ SUB UpdatePlayer
     IF px < 0 THEN px = 0
     IF px > SCRW - HW THEN px = SCRW - HW
     pAnim = pAnim + 1
-    pMoved = 1
   ENDIF
 
   IF kJump <> 0 AND pGround <> 0 THEN
     pvy = JUMPV : pGround = 0 : pLift = 0
-    pJump = 1 : pAir = 0 : pMoved = 1
+    pJump = 1 : pAir = 0
   ENDIF
 
   ' ----------------------------------------------------- riding the lift
@@ -778,7 +789,7 @@ SUB UpdatePlayer
     IF (INT(px) + HW - 2 <= lfX) OR (INT(px) + 2 >= lfX + LW) THEN
       pLift = 0
     ELSE
-      py = lfY(i) - HH : pvy = 0 : pGround = 1 : pMoved = 1
+      py = lfY(i) - HH : pvy = 0 : pGround = 1
       IF py < PLAYTOP THEN py = PLAYTOP
       EXIT SUB
     ENDIF
@@ -811,7 +822,7 @@ SUB UpdatePlayer
         IF ytop >= fy0 AND ytop <= fy1 THEN
           IF RowSolid(r, INT(px), HW) <> 0 THEN
             py = ytop - HH : pvy = 0 : landed = 1
-            pGround = 1 : pLift = 0 : pMoved = 1
+            pGround = 1 : pLift = 0
             EXIT DO
           ENDIF
         ENDIF
@@ -819,7 +830,7 @@ SUB UpdatePlayer
       LOOP
     ENDIF
     IF landed = 0 THEN
-      py = ny : pGround = 0 : pLift = 0 : pMoved = 1
+      py = ny : pGround = 0 : pLift = 0
     ENDIF
   ELSE
     fy0 = INT(py)
@@ -1005,6 +1016,7 @@ FUNCTION RunLevel() AS INTEGER
   DrawWorld
 
   px = startX : py = startY
+  pLastX = INT(px) : pLastY = INT(py)
   pvx = 0 : pvy = 0 : pState = ST_WALK : pFace = 0 : pAnim = 0
   pGround = 1 : pLift = 0 : pKilled = 0 : clockStop = 0
 
