@@ -2853,6 +2853,22 @@ void MIPS16 cmd_save(void)
             255, 128, 255, 0,
             255, 255, 0, 0,
             255, 255, 255, 0};
+        /* The palette a saved picture carries has to be the colours the screen
+           is actually showing.  These sixteen are only the ones the mode starts
+           with: MAP can change any of them, the display applies that at
+           scanout, and a BMP written with the starting colours then does not
+           look like the screen it came from.  The pixel indices below are
+           recovered through the same default map, so only the palette needs
+           correcting. */
+        if (MapRGBValid)
+            for (int m = 0; m < 16; m++)
+            {
+                bmpcolourpallette[m * 4 + 0] = (unsigned char)(MapRGB[m] >> 16);
+                bmpcolourpallette[m * 4 + 1] = (unsigned char)(MapRGB[m] >> 8);
+                bmpcolourpallette[m * 4 + 2] = (unsigned char)(MapRGB[m]);
+                bmpcolourpallette[m * 4 + 3] = 0;
+            }
+
 
         //        unsigned char bmppad[3] = {0, 0, 0};
         getcsargs(&p, 9);
@@ -2996,6 +3012,22 @@ void MIPS16 cmd_save(void)
                 255, 128, 255, 0,
                 255, 255, 0, 0,
                 255, 255, 255, 0};
+            /* The palette a saved picture carries has to be the colours the screen
+               is actually showing.  These sixteen are only the ones the mode starts
+               with: MAP can change any of them, the display applies that at
+               scanout, and a BMP written with the starting colours then does not
+               look like the screen it came from.  The pixel indices below are
+               recovered through the same default map, so only the palette needs
+               correcting. */
+            if (MapRGBValid)
+                for (int m = 0; m < 16; m++)
+                {
+                    bmpcolourpallette[m * 4 + 0] = (unsigned char)(MapRGB[m] >> 16);
+                    bmpcolourpallette[m * 4 + 1] = (unsigned char)(MapRGB[m] >> 8);
+                    bmpcolourpallette[m * 4 + 2] = (unsigned char)(MapRGB[m]);
+                    bmpcolourpallette[m * 4 + 3] = 0;
+                }
+
 
             unsigned char bmppad[3] = {0, 0, 0};
             getcsargs(&p, 9);

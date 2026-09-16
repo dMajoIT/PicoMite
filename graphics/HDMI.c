@@ -1450,6 +1450,7 @@
             map16pairs[i] = remap555[i] = (RGB555(MAP16DEF[i]) | (RGB555(MAP16DEF[i]) << 16));
             map16quads[i] = remap332[i] = ((RGB332(MAP16DEF[i]) << 24) | (RGB332(MAP16DEF[i]) << 16) | (RGB332(MAP16DEF[i]) << 8) | RGB332(MAP16DEF[i]));
         }
+        ResetMapRGB(MAP16DEF);
     }
     void HDMICore(void)
     {

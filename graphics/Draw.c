@@ -135,6 +135,36 @@ short lastx, lasty;
 uint8_t OptionVResreserved;
 const int CMM1map[16] = {BLACK, BLUE, GREEN, CYAN, RED, MAGENTA, YELLOW, WHITE, MYRTLE, COBALT, MIDGREEN, CERULEAN, RUST, FUCHSIA, BROWN, LILAC};
 int RGB121map[16];
+/* The sixteen colours the screen is showing, and the sixteen staged by MAP but
+   not yet committed, as full 24-bit RGB.  The display keeps its own copies in
+   whatever packing the mode scans out - RGB555, RGB332, RGB121 - and none of
+   those can be turned back into the colour that was asked for without losing
+   bits.  SAVE IMAGE has to write the colours into the BMP palette, so it needs
+   them at full width: without this it wrote the palette the mode started with
+   and a picture saved after MAP had changed a slot did not look like the
+   screen it came from. */
+uint32_t MapRGB[16] = {0}, RemapRGB[16] = {0};
+bool MapRGBValid = false;
+
+void SetMapRGB(int slot, uint32_t colour)   /* MAP n = colour: staged only */
+{
+    if (slot >= 0 && slot < 16)
+        RemapRGB[slot] = colour;
+}
+
+void CommitMapRGB(void)                     /* MAP SET */
+{
+    for (int i = 0; i < 16; i++)
+        MapRGB[i] = RemapRGB[i];
+    MapRGBValid = true;
+}
+
+void ResetMapRGB(const uint32_t *src)       /* MAP RESET, MAXIMITE, and mode set-up */
+{
+    for (int i = 0; i < 16; i++)
+        MapRGB[i] = RemapRGB[i] = src[i];
+    MapRGBValid = true;
+}
 // pointers to the drawing primitives
 
 /* Sprite/cursor palette tables. Used by the legacy SPRITE LOAD command
@@ -3985,6 +4015,7 @@ void cmd_map(void)
             remap[i] = RGB121map[i];
         for (int i = 0; i < 16; i++)
             map16[i] = RGB121(remap[i]);
+        ResetMapRGB((const uint32_t *)RGB121map);
     }
     else if ((p = checkstring(cmdline, (unsigned char *)"MAXIMITE")))
     {
@@ -3995,6 +4026,7 @@ void cmd_map(void)
             remap[i] = CMM1map[i];
         for (int i = 0; i < 16; i++)
             map16[i] = RGB121(remap[i]);
+        ResetMapRGB((const uint32_t *)CMM1map);
     }
     else if ((p = checkstring(cmdline, (unsigned char *)"SET")))
     {
@@ -4003,6 +4035,7 @@ void cmd_map(void)
         }
         for (int i = 0; i < 16; i++)
             map16[i] = RGB121(remap[i]);
+        CommitMapRGB();
     }
     else
     {
@@ -4020,9 +4053,11 @@ void cmd_map(void)
         {
             for (int i = 0; i < 16; i++)
                 remap[i] = RGB121map[i];
+            ResetMapRGB((const uint32_t *)RGB121map);
             first = false;
         }
         remap[cl] = col;
+        SetMapRGB(cl, col);
     }
 }
 
@@ -4826,6 +4861,7 @@ void cmd_map(void)
             map16quads[i] = remap332[i] = RGB332(CMM1map[i]) | (RGB332(CMM1map[i]) << 8) | (RGB332(CMM1map[i]) << 16) | (RGB332(CMM1map[i]) << 24);
             map16pairs[i] = remap555[i] = RGB555(CMM1map[i]) | (RGB555(CMM1map[i]) << 8);
         }
+        ResetMapRGB((const uint32_t *)CMM1map);
     }
     else if ((p = checkstring(cmdline, (unsigned char *)"SET")))
     {
@@ -4839,6 +4875,7 @@ void cmd_map(void)
             map16pairs[i] = remap555[i];
             map16quads[i] = remap332[i];
         }
+        CommitMapRGB();
     }
     else
     {
@@ -4854,6 +4891,7 @@ void cmd_map(void)
             SyntaxError();
         int col = getColour((char *)cmdline, 0);
         remap256[cl] = RGB555(col);
+        SetMapRGB(cl, col);
         remap555[cl] = RGB555(col) | (RGB555(col) << 16);
         remap332[cl] = RGB332(col) | (RGB332(col) << 8) | (RGB332(col) << 16) | (RGB332(col) << 24);
     }

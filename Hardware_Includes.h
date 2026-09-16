@@ -596,6 +596,15 @@ extern const uint32_t MAP16DEF[16];
 extern void stepper_poll_events(void);
 #endif
 
+/* The live colour map at full 24-bit width, for anything that has to write the
+   colours down rather than scan them out - SAVE IMAGE.  Not inside the display
+   conditionals: the file code needs it whichever display is built. */
+extern uint32_t MapRGB[16], RemapRGB[16];   /* the live colour map at full width */
+extern bool MapRGBValid;
+void SetMapRGB(int slot, uint32_t colour);
+void CommitMapRGB(void);
+void ResetMapRGB(const uint32_t *src);
+
 /* ============================================================================
  * External variables - VGA/HDMI display modes
  * ============================================================================ */
