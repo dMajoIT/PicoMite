@@ -69,6 +69,7 @@ class CPU:
         self.a = self.x = self.y = 0
         self.sp = 0xFF
         self.pc = 0
+        self.cover = None          # set to a bytearray(65536) to record what was executed
         self.c = self.z = self.n = self.v = 0
         self.i = self.d = 0
         self.steps = 0
@@ -211,6 +212,8 @@ class CPU:
             steps += 1
             if ring is not None:
                 ring.append(self.pc)
+            if self.cover is not None:
+                self.cover[self.pc] = 1
             if steps > max_steps:
                 raise Halt("runaway at &%04x" % self.pc)
             op = m[self.pc]
