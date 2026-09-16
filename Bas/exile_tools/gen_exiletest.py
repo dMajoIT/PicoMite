@@ -146,8 +146,14 @@ TABLES = [('OBPAT', 'ObstructionPatterns', 168), ('OBOFF', 'ObstructionPatternOf
     ('SCROFFYF', 0x3590, 2), ('SCROFFY', 0x3592, 2)]
 
 
-def game_init(mem):
-    """The game array as the game starts, from the listing's image and the start-up code."""
+def game_init(mem, pokes=None):
+    """The game array as the game starts, from the listing's image and the start-up
+       code, with anything the scene set up beforehand already applied."""
+    if pokes:
+        m = bytearray(mem)
+        for a, v in pokes.items():
+            m[int(a)] = v
+        mem = m
     m = mem
     g = {n: 0 for n in GAME}
     g['angle'] = 0xC0
@@ -306,7 +312,7 @@ def main():
             spawn_into(slots, mem, slot, typ, x, y)
             for k, v in (spec[4] if len(spec) > 4 else {}).items():
                 slots[FIELDS.index(k) * NSLOT + slot] = v
-        g = game_init(mem)
+        g = game_init(mem, t.get('pokes'))
         g['eventson'] = 1 if t.get('events') else 0
         g['promoteon'] = 1 if t.get('promote') else 0
         for n, v in t.get('screen0', {}).items():

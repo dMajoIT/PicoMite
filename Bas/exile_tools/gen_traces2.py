@@ -45,8 +45,10 @@ MAGENTA_ROBOT = 0x1C
 # an object's optional dict sets slot fields (exilegame.FIELDS names) after the spawn;
 # lonely True wipes slots 1-15 before every tick, 'clear' wipes them once at the start
 # (the image's slot 1 holds a teleporting Triax), False leaves the image's slots alone;
-# an optional fifth element switches update_events on for the scene, and a
-# sixth brings back objects that were put aside when they went offscreen
+# an optional fifth element switches update_events on for the scene, a
+# sixth brings back objects that were put aside when they went offscreen,
+# and a seventh pokes the game's own memory before the first tick, which is
+# how a scene starts with a weapon collected or a pocket already full
 # lonely scenes wipe slots 1-15 before every tick, as the first-generation traces did
 SCENARIOS = {
     # the player alone, as before
@@ -170,6 +172,27 @@ SCENARIOS = {
     # where a new game starts, walking east off the ledge: the square to the
     # player's right is open for three squares down, so it should fall
     'ship_gap': ((0x9B, 0x3B), [], [((), 20), (('W',), 80)], 'clear'),
+    # The player's weapons, which nothing had ever checked: a new game has none
+    # collected and the jetpack selected, so the firing key does nothing and the
+    # whole of handle_firing goes unrun.  These start with one in hand.
+    # &0806 + 8 + n is "weapon n collected", &084d is the one in use.
+    'fire_pistol': ((0x88, 0x4D), [], [((), 10), (('SPACE',), 10), ((), 20), (('SPACE',), 10), ((), 30)],
+                    'clear', False, False, {0x080F: 0x80, 0x084D: 1}),
+    'fire_icer': ((0x88, 0x4D), [], [((), 10), (('SPACE',), 10), ((), 20), (('SPACE',), 10), ((), 30)],
+                  'clear', False, False, {0x0810: 0x80, 0x084D: 2}),
+    'fire_plasma': ((0x88, 0x4D), [], [((), 10), (('SPACE',), 10), ((), 40)],
+                    'clear', False, False, {0x0812: 0x80, 0x084D: 4}),
+    # picking a weapon up with a function key, and pouring energy into it with shift
+    'change_weapon': ((0x88, 0x4D), [], [((), 5), (('f1',), 5), ((), 5), (('f2',), 5), ((), 5),
+                                         (('f1', 'SHIFT'), 10), ((), 10), (('SPACE',), 10), ((), 20)],
+                      'clear', False, False, {0x080F: 0x80, 0x0810: 0x80}),
+    # the aim, which moves the firing angle up and down
+    'aim': ((0x88, 0x4D), [], [((), 5), (('K',), 15), ((), 5), (('O',), 15), ((), 5),
+                               (('I',), 10), ((), 10), (('SPACE',), 10), ((), 20)],
+            'clear', False, False, {0x080F: 0x80, 0x084D: 1}),
+    # both whistles, which need the things that let you blow them
+    'whistles': ((0x88, 0x4D), [], [((), 5), (('Y',), 10), ((), 20), (('U',), 10), ((), 40)],
+                 'clear', False, False, {0x0816: 0x80, 0x0817: 0x80}),
     # two boulders and a piano in a heap
     'heap': ((0x88, 0x4D), [(1, BOULDER, 0x8B, 0x4A), (2, BOULDER, 0x8B, 0x47), (3, PIANO, 0x8C, 0x44)], [((), 120)], False),
 }
@@ -179,12 +202,15 @@ def run_scenario(mem, name, spec):
     start, objects, phases, lonely = spec[:4]
     events = spec[4] if len(spec) > 4 else False
     promote = spec[5] if len(spec) > 5 else False
+    pokes = spec[6] if len(spec) > 6 else {}
     g = Game(mem, promote=promote, events=events)
     clear = lonely == 'clear'
     if clear:
         lonely = False
         for s in range(1, 16):
             g.mem[OBJ['y'] + s] = 0
+    for addr, val in pokes.items():          # the seventh element sets the game up:
+        g.mem[addr] = val                    # a weapon collected, a pocket filled
     if start:
         g.teleport(start[0], start[1])
     for spec in objects:
@@ -193,7 +219,7 @@ def run_scenario(mem, name, spec):
         for k, v in (spec[4] if len(spec) > 4 else {}).items():
             g.mem[OBJ[k] + slot] = v
     trace = {'name': name, 'start': start, 'objects': objects, 'lonely': lonely, 'clear': clear,
-             'events': events, 'promote': promote, 'fields': FIELDS,
+             'events': events, 'promote': promote, 'pokes': pokes, 'fields': FIELDS,
              # everything the screen keeps, as it stands before the first tick: the
              # kernel works the viewport out from here rather than being told it
              'screen0': {n: g.mem[a] for n, a in SCREEN_STATE.items()},
