@@ -60,6 +60,7 @@ typedef unsigned char u8;
 struct G {
     long long *obj, *game, *feed, *part;
     int nPart;                    /* &1e58: the last particle's index, -1 for none */
+    int jetFlags;                 /* &0217: the one table byte the game rewrites as it runs */
     const u8 *world, *tab;
     int frm, angle, facing, immob, tImmob, rotVel, lying, aim, aimVel, aimFlip;
     int jetOk, inWater, tbColl, surr, wedged, signs, windSign, relTX, relTY, walkSpd, maxAcc0;
@@ -303,38 +304,206 @@ static void weighted_accel(struct P *p, int desired, int yy, int xi, int maxacc)
 static int angle_from_vec(struct P *p);
 static int read_rnd_byte(struct G *g, int site, int n);
 
-/* add_particles (&218e): n particles of a type whose base square is (px, py);
-   the particles belong to the particle system, but each one made draws random
-   numbers, and the last one's colour is left in the sign register */
-static void add_particles(struct P *p, int n, int px, int py, int cf, int cfr)
+static void vec_from_mag_angle(struct P *p, int mag, int ang);   /* &2357, defined below */
+static void get_waterline(struct P *p, int x);
+
+/* ---- the particle system (&218e add_particles, &207e update_particles) ---------------------
+
+   Thirty-two particles in their own array, eight words each, laid out as the
+   game lays them out: the two velocities, the two position fractions, the two
+   squares, the time to live, and the colour with its flags.  A particle type
+   is an offset into an eleven-byte record, so the type numbers below are the
+   game's own.  The base position is &87-&8e, which this object's centre also
+   uses, so it is already in the struct. */
+#define PT(f, i)      ((int)g->part[(i) * 8 + (f)])
+#define PTS(f, i, v)  (g->part[(i) * 8 + (f)] = (v))
+enum { P_VX, P_VY, P_XF, P_YF, P_X, P_Y, P_TTL, P_CF };
+enum { PT_TTLR, PT_TTL, PT_SPDR, PT_SPD, PT_CF, PT_CFR, PT_FLAGS, PT_XR, PT_YR, PT_VXR, PT_VYR };
+
+/* update_particle (&20e6): carry a particle along by its velocity.  The game
+   does this once as the particle is made and again on every tick after. */
+static void move_particle(struct P *p, int i)
 {
     struct G *g = p->g;
-    int a;
+    int j, a, c, vel;
+    for (j = 0; j < 2; j++) {
+        vel = PT(j ? P_VY : P_VX, i);
+        a = add8(p, vel, PT(j ? P_YF : P_XF, i), 0);
+        PTS(j ? P_YF : P_XF, i, a);
+        c = p->cy;
+        a = PT(j ? P_Y : P_X, i);
+        if (c) a = (a + 1) & 255;
+        if (vel & 128) a = (a - 1) & 255;
+        PTS(j ? P_Y : P_X, i, a);
+    }
+}
+
+/* find_free_particle_slot (&215d): the next one, or a random one to replace
+   once all thirty-two are in use */
+static int free_particle(struct G *g)
+{
+    /* The two draws a particle can make on its own account - which one to
+       replace when all thirty-two are in use, and the colour the water turns
+       one - are taken from the generator directly rather than from the feed.
+       A particle's life depends on what the game's plotting found under it,
+       pixel by pixel, which the kernel cannot see; so particle lifetimes are
+       close but not exact, and this keeps that from moving any draw the
+       physics depends on. */
+    if (g->nPart >= 0x1F) return (g->rnd[1] & 0xF8) >> 3;
+    g->nPart++;
+    return g->nPart;
+}
+
+/* add_particles (&218e): n particles of type ty.  cf and cfr are the colour and
+   its mask as the caller has them, which for two of the types the game rewrites
+   as it runs; the rest of the record is constant and comes from the table. */
+static void add_particles_t(struct P *p, int n, int px, int py, int cf, int cfr, int ty)
+{
+    struct G *g = p->g;
+    const u8 *T = g->tab + T_PARTTYPE + ty;
+    int a, c, fl, i, xi, r, vel, frac, sq, sgn, who;
+    fl = (ty == 0x0B) ? g->jetFlags : T[PT_FLAGS];   /* the jetpack's are chosen per call */
+    if (fl & 0x20) {                             /* the base is this object's own corner */
+        p->cenf[0] = p->pf[0]; p->cen[0] = p->ps[0];
+        p->cenf[2] = p->pf[2]; p->cen[2] = p->ps[2];
+    }
     a = (g->scr[0] - px - 2) & 255;
-    if (a < 0xF6) return;                        /* off the left or right of the screen */
+    if (a < 0xF6) return;                        /* off the left or the right of the screen */
     a = (py - g->scr[1] + 1) & 255;
-    if (a >= 6) return;                          /* off the top or bottom */
-    read_site(g, 0x21D7);                        /* the batch's speed */
+    if (a >= 6) return;                          /* off the top or the bottom */
+    if (fl & 0x80) {                             /* they move against this object */
+        p->vec[0] = (fl & 0x40) ? p->acc[0] : p->vel[0];
+        p->vec[2] = (fl & 0x40) ? p->acc[2] : p->vel[2];
+        p->angleB5 = angle_from_vec(p) ^ 0x80;
+    }
+    r = read_site(g, 0x21D7);                    /* one speed for the whole batch */
+    vec_from_mag_angle(p, add8(p, r & T[PT_SPDR], T[PT_SPD], 0), p->angleB5);
+    a = (fl << 3) & 255;                         /* the placing bits, three along */
+    for (xi = 2; xi >= 0; xi -= 2) {
+        int off = 0, flip = xi ? p->yFlip : p->xFlip;
+        c = (a >> 7) & 1; a = (a << 1) & 255;
+        if (c && (flip & 128)) off = p->siz[xi];
+        c = (a >> 7) & 1; a = (a << 1) & 255;
+        if (c) off = p->siz[xi] >> 1;
+        p->cenf[xi] = add8(p, off, p->cenf[xi], 0);
+        p->cen[xi] = add8(p, p->cen[xi], 0, p->cy);
+    }
     while (n-- > 0) {
-        a = read_rnd_byte(g, 0x220D, 1);         /* colour and flags */
-        g->signs = ((a & cfr) ^ cf) & 7;
-        read_site(g, 0x2220);                    /* time to live */
-        read_site(g, 0x2232); read_rnd_byte(g, 0x2243, 1);   /* x velocity and position */
-        read_site(g, 0x2232); read_rnd_byte(g, 0x2243, 1);   /* y velocity and position */
+        r = read_rnd_byte(g, 0x220D, 1);
+        g->signs = ((r & cfr) ^ cf) & 7;         /* the colour, left in the sign register */
+        who = free_particle(g);
+        PTS(P_CF, who, (r & cfr) ^ cf);
+        r = read_site(g, 0x2220);
+        PTS(P_TTL, who, add8(p, r & T[PT_TTLR], T[PT_TTL], 0));
+        for (i = 0; i < 2; i++) {                /* x then y, as the loop runs */
+            int vr = T[i ? PT_VYR : PT_VXR], pr = T[i ? PT_YR : PT_XR], ax = i ? 2 : 0;
+            r = read_site(g, 0x2232);
+            sgn = r & 1;
+            c = (r >> 1) & 255;
+            c &= vr;
+            if (sgn) c ^= 255;
+            a = add8(p, c, p->vec[ax], sgn);
+            vel = prevent_overflow(p, a);
+            c = p->cy;
+            r = read_rnd_byte(g, 0x2243, 1);
+            frac = add8(p, r & pr, p->cenf[ax], c);
+            sq = add8(p, p->cen[ax], 0, p->cy);
+            PTS(i ? P_VY : P_VX, who, vel);
+            PTS(i ? P_YF : P_XF, who, frac);
+            PTS(i ? P_Y : P_X, who, sq);
+        }
+        if (fl & 1) {                            /* and carry this object's own motion */
+            for (i = 0; i < 2; i++) {
+                a = add8(p, PT(i ? P_VY : P_VX, who), p->vel[i ? 2 : 0], 0);
+                PTS(i ? P_VY : P_VX, who, prevent_overflow(p, a));
+            }
+        }
+        move_particle(p, who);                   /* &2267: a new one is carried along at once */
+    }
+}
+
+/* The game asks the screen whether a particle landed on something solid, by
+   reading back the pixel it just plotted.  The screen belongs to the drawing
+   here, so this asks the world instead: the tile's obstruction profile gives
+   the height of solid ground in each of its eight columns. */
+static int particle_in_solid(struct P *p, int x, int xf, int y, int yf)
+{
+    struct G *g = p->g;
+    int v = g->world[(y << 8) + x], t = v & 0x3F, flp = v & 0xC0;
+    int yo, h, q, a, addr, prof;
+    yo = g->tab[T_YOFF + t];
+    if (flp & 0x40) yo = (yo << 4) & 255;
+    yo &= 0xF0;
+    if (yo) yo |= 0x0F;
+    h = flp >> 7; q = (flp << 1) & 255;
+    a = ((g->tab[T_PAT + t] << 1) | h) & 255;
+    a = ((a << 1) | (q >> 7)) & 0x3F;
+    addr = g->tab[T_OBOFF + a];
+    prof = g->tab[T_OBPAT + addr + (xf >> 5)];
+    if (prof == 0) return 0;
+    prof = (prof + yo) & 255;
+    return yf >= prof;
+}
+
+/* update_particles (&207e): every particle a tick.  The game plots and unplots
+   as it goes, and reads back the screen to learn what a particle struck; here
+   the screen belongs to the drawing, so a particle ends when it leaves the
+   view or its time runs out. */
+static void update_particles(struct P *p)
+{
+    struct G *g = p->g;
+    int i, j, a, c, cf, alive, vel;
+    if (g->nPart < 0) return;
+    get_waterline(p, g->scr[0]);
+    for (i = g->nPart; i >= 0; i--) {
+        cf = PT(P_CF, i);
+        alive = 1;
+        if (cf & 0x10) {                         /* it falls, or floats up in water */
+            int add = 1;
+            if (PT(P_Y, i) > p->wlRow ||
+                (PT(P_Y, i) == p->wlRow && PT(P_YF, i) >= p->wlFrac)) {
+                add = 0xFD;
+                g->signs = (g->rnd[1] & 7) | 6;   /* and turns cyan or white */
+            }
+            a = add8(p, add, PT(P_VY, i), 0);
+            if (!p->ov) PTS(P_VY, i, a);
+        }
+        if (cf & 8) {                            /* its colour cycles */
+            a = ((cf & 0xF7) + 1) & 7;
+            PTS(P_CF, i, (cf & 0xF8) | a);
+        }
+        a = (PT(P_TTL, i) - 1) & 255;
+        PTS(P_TTL, i, a);
+        if (a == 0) alive = 0;
+        if (alive) {
+            move_particle(p, i);
+            a = (g->scr[0] - PT(P_X, i) - 2) & 255;
+            if (a < 0xF6) alive = 0;
+            else if (((PT(P_Y, i) - g->scr[1] + 1) & 255) >= 6) alive = 0;
+            else if (!(cf & 0x20) &&              /* one that does not survive solid ground */
+                     particle_in_solid(p, PT(P_X, i), PT(P_XF, i), PT(P_Y, i), PT(P_YF, i)))
+                alive = 0;
+        }
+        if (!alive) {                            /* close the gap, as the game does */
+            for (j = 0; j < 8; j++)
+                g->part[i * 8 + j] = g->part[g->nPart * 8 + j];
+            g->nPart--;
+            if (g->nPart < 0) return;
+        }
     }
 }
 
 /* set_new_particles_position_from_this_object (&3f7f) then add_particle: one
    particle a quarter of a tile up and left of the object, y worked out first
    with the carry the caller arrives with */
-static void particle_from_object(struct P *p, int c, int cf, int cfr)
+static void particle_from_object(struct P *p, int c, int cf, int cfr, int ty)
 {
     int px, py, b;
     b = (p->pf[2] - 0x40 - (1 - c)) < 0;
     py = (p->ps[2] - b) & 255;                   /* y is never 0 here, so this leaves the carry set */
     b = p->pf[0] < 0x40;
     px = (p->ps[0] - b) & 255;
-    add_particles(p, 1, px, py, cf, cfr);
+    add_particles_t(p, 1, px, py, cf, cfr, ty);
 }
 
 /* add_wind_particle_using_velocities (&3f73): the particle itself belongs to
@@ -353,7 +522,7 @@ static void wind_particle(struct P *p)
     fflush(stdout);
 #endif
     if (a >= p->mag) return;                     /* more particles the stronger the wind */
-    particle_from_object(p, 0, 0x97, 0x41);
+    particle_from_object(p, 0, 0x97, 0x41, 0x6E);
 }
 
 /* apply_wind_velocities_from_vector (&3f4f), less the debris an event would make */
@@ -1684,6 +1853,10 @@ static void angle_facing_sprite(struct P *p)
         } else drain = 0;
     }
     if (drain && (g->jetOk & 128) && (p->acc[0] | p->acc[2]) != 0) {
+        /* add_jetpack_thrust_particles (&1f3d): where the flame leaves the suit
+           depends on how the suit is lying, and the drain follows it */
+        g->jetFlags = (p->spr >= 2) ? 0xED : 0xEB;
+        add_particles_t(p, 1, p->ps[0], p->ps[2], 0x86, 0x01, 0x0B);
         if (!(g->frm & 1) && ((g->frm & 7) == 0 || (g->kh[0x15] & 128))) drain_jetpack(p);
     }
     if (g->immob) rotating_player(p); else angle_and_facing(p);
@@ -2295,7 +2468,7 @@ static void update_explosion(struct P *p)
     for (i = -1; i <= 1; i++)
         for (j = -1; j <= 1; j++) look_at_tile(p, (p->ps[0] + i) & 255, (p->ps[2] + j) & 255);
     p->pal = read_rnd_byte(g, 0x4FBD, 1) & 0x13;
-    add_particles(p, 10, p->ps[0], p->ps[2], 0x91, 0x46);
+    add_particles_t(p, 10, p->ps[0], p->ps[2], 0x91, 0x46, 0x16);
     d = p->tdataOff;
     if (d == 0) { p->flags |= 0x20; return; }
     d = (d - 1) & 255; p->tdataOff = d;
@@ -2374,7 +2547,7 @@ static void update_bullet_trail(struct P *p, int dur, int dmg)
         return;
     }
     move_bullet(p);
-    add_particles(p, 1, p->ps[0], p->ps[2], 0x20, 0x01);
+    add_particles_t(p, 1, p->ps[0], p->ps[2], 0x20, 0x01, 0x2C);
 }
 
 /* consider_moving_towards_player (&467a): homing, no gravity, damped out of water */
@@ -2406,7 +2579,7 @@ static void add_mushroom_timer(struct P *p, int blue, int c)
 static void mushroom_effect(struct P *p, int blue, int isPlayer)
 {
     if (isPlayer) add_mushroom_timer(p, blue, 0);
-    particle_from_object(p, 1, 0x88, 0x47);      /* play_sound leaves the carry set */
+    particle_from_object(p, 1, 0x88, 0x47, 0x4D);      /* play_sound leaves the carry set */
 }
 
 /* update_mushroom_ball (&4698) */
@@ -2423,7 +2596,7 @@ static void update_mushroom_ball(struct P *p)
     }
     if (read_rnd_byte(g, 0x46AB, 2) & 128) return;                     /* 1 in 2: burst */
     mushroom_effect(p, p->pal & 1, p->touch == 0);
-    add_particles(p, 32, p->ps[0], p->ps[2], 0x88, 0x47);
+    add_particles_t(p, 32, p->ps[0], p->ps[2], 0x88, 0x47, 0x4D);
     p->flags |= 0x20;
 }
 
@@ -2845,7 +3018,7 @@ static void apply_acceleration(struct P *p);
 static void jetpack_particles(struct P *p)
 {
     if ((p->acc[0] | p->acc[2]) == 0) return;
-    add_particles(p, 1, p->ps[0], p->ps[2], 0x86, 0x01);
+    add_particles_t(p, 1, p->ps[0], p->ps[2], 0x86, 0x01, 0x0B);
 }
 
 /* consider_hovering_over_ground (&3a1e): every four frames, lift off the ground below */
@@ -2908,7 +3081,7 @@ static void update_hovering_ball(struct P *p, int invisible)
 /* remove_plasma_ball_or_fireball (&4ac8): a burst of plasma particles, then gone */
 static void remove_plasma_or_fireball(struct P *p)
 {
-    add_particles(p, 0x1E, p->ps[0], p->ps[2], 0x91, 0x02);
+    add_particles_t(p, 0x1E, p->ps[0], p->ps[2], 0x91, 0x02, 0x00);
     p->flags |= 0x20;
 }
 
@@ -2929,7 +3102,7 @@ static void fireball_damage_and_animate(struct P *p, int dmg)
     p->xFlip = r; p->yFlip = (r << 1) & 255;
     p->pal = g->tab[T_FIREPAL + (p->timer & 7)];
     p->angleB5 = 0xC0;
-    add_particles(p, 1, p->ps[0], p->ps[2], 0x81, 0x02);
+    add_particles_t(p, 1, p->ps[0], p->ps[2], 0x81, 0x02, 0x21);
 }
 
 static void set_position_from_previous_except_yf(struct P *p)
@@ -3501,7 +3674,7 @@ static void update_engine_fire(struct P *p)
     if (!(y & 128)) OS(O_VX, y, (OT(O_VX, y) + 1) & 255);   /* it pushes what touches it */
     read_rnd_byte(g, 0x4C38, 2);                 /* the particle's place in the tile */
     p->angleB5 = 0;
-    add_particles(p, 1, p->ps[0], p->ps[2], 0x81, 0x42);
+    add_particles_t(p, 1, p->ps[0], p->ps[2], 0x81, 0x42, 0x37);
     a = (g->frm + p->ps[2]) & 255; c = (g->frm + p->ps[2]) >> 8;
     if ((a & 3) == 0) {                          /* 1 in 4: it blows things away */
         g->accDmg = 0x80 | (g->accDmg >> 1);
@@ -3692,7 +3865,7 @@ static void update_blue_death_ball(struct P *p)
     p->vec[0] = p->vel[0]; p->vec[2] = p->vel[2];
     a = angle_from_vec(p);
     p->angleB5 = a ^ 0x80;                       /* the trail leaves the rear */
-    add_particles(p, 1, p->ps[0], p->ps[2], 0x08, 0x01);
+    add_particles_t(p, 1, p->ps[0], p->ps[2], 0x08, 0x01, 0x2C);
 }
 
 static void update_cannonball(struct P *p)
@@ -3747,7 +3920,7 @@ static void update_full_flask(struct P *p)
     if (p->timer == 0) return;
     if (!(y & 128) && OT(O_TYPE, y) == 0x37) OS(O_FLAGS, y, OT(O_FLAGS, y) | 0x20);   /* and puts out a fireball */
     p->angleB5 = 0xC0;
-    add_particles(p, 8, p->ps[0], p->ps[2], 0x97, 0x41);
+    add_particles_t(p, 8, p->ps[0], p->ps[2], 0x97, 0x41, 0x58);
     p->timer--;
     if (p->timer == 0) change_type(p, 0x4C);
 }
@@ -3823,7 +3996,7 @@ static void update_plasma_ball(struct P *p)
     if (p->energy) p->energy--;
     if (p->energy == 0) { p->flags |= 0x20; return; }
     n = (p->energy >= 3) ? 3 : 0x1E;
-    add_particles(p, n, p->ps[0], p->ps[2], 0x91, 0x02);
+    add_particles_t(p, n, p->ps[0], p->ps[2], 0x91, 0x02, 0x00);
 }
 
 static void update_inactive_grenade(struct P *p)
@@ -4374,6 +4547,7 @@ static void update_object(struct G *g, int slot)
         update_screen_variables(p);           /* the game does these two regardless */
         prepare_screen(p);
         g->mode = 0x20;
+        update_particles(p);                      /* &1e08, before promotion as the game has it */
         if (g->promoteOn) consider_promoting(p);
         if (g->feedMode)
             for (i = 0; i < 10; i++)
@@ -4486,7 +4660,7 @@ static void update_events(struct G *g, struct P *p)
         }
     }
     if (p->tileY < 0x4E && !((g->demat | FROM_MAP(g, p->tileX, p->tileY)) & 128))
-        add_particles(p, 1, p->tileX, p->tileY, 0x88, 0x47);      /* a star in the sky */
+        add_particles_t(p, 1, p->tileX, p->tileY, 0x88, 0x47, 0x4D);      /* a star in the sky */
     /* Triax and the clawed robots let themselves back in */
     a = (g->quake - 1) & 255;
     c = a >= 0xC8;
@@ -4529,7 +4703,8 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     IN(signs, G_SIGNS); IN(windSign, G_WINDSIGN); IN(relTX, G_RELTX); IN(relTY, G_RELTY); IN(walkSpd, G_WALKSPD);
     IN(maxAcc0, G_MAXACC0); IN(fireCool, G_FIRECOOL); IN(waterTile, G_WATERTILE);
     IN(weapon, G_WEAPON); IN(fired, G_FIRED); IN(blaster, G_BLASTER); IN(pockUsed, G_POCKUSED);
-    IN(eventsOn, G_EVENTSON); IN(promoteOn, G_PROMOTEON); IN(nPart, G_NPART);
+    IN(eventsOn, G_EVENTSON); IN(promoteOn, G_PROMOTEON);
+    g->nPart = (int)(signed char)game[G_NPART];
     IN(orgF[0], G_ORGXF); IN(orgF[2], G_ORGYF); IN(frac[0], G_FRACX); IN(sgn[0], G_SGNX);
     IN(frac[2], G_FRACY); IN(sgn[2], G_SGNY); IN(secs[0], G_SECSX); IN(secs[2], G_SECSY);
     IN(sVel[0], G_SVELX); IN(sVel[2], G_SVELY); IN(newTiles, G_NEWTILES);
@@ -4569,7 +4744,10 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
             int pos = g->feedPos, n;
             lo = f[pos]; hi = f[pos + 1]; pos += 2;
             for (i = 0; i < 8; i++) { int v = f[pos++]; if (!g->eventsOn) g->wl[i] = v; }
-            for (i = 0; i < 10; i++) { g->fedScr[i] = f[pos++]; g->scr[i] = g->fedScr[i]; }
+            /* the screen the game had at the end of this tick, kept only to check
+               the kernel's own against: the kernel works it out itself now, and
+               during an object's update the origin is still the previous tick's */
+            for (i = 0; i < 10; i++) g->fedScr[i] = f[pos++];
             g->relTY = f[pos++];
             n = f[pos++];
             g->feedPos = pos;
@@ -4620,7 +4798,7 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     OUT(frac[2], G_FRACY); OUT(sgn[2], G_SGNY); OUT(secs[0], G_SECSX); OUT(secs[2], G_SECSY);
     OUT(sVel[0], G_SVELX); OUT(sVel[2], G_SVELY); OUT(newTiles, G_NEWTILES);
     OUT(secMode, G_SECMODE); OUT(secNext, G_SECNEXT); OUT(secShuf, G_SECSHUF); OUT(secDist, G_SECDIST);
-    OUT(nPart, G_NPART);
+    game[G_NPART] = g->nPart & 255;
     for (i = 0; i < 4; i++) game[G_WLDES0 + i] = g->wlDes[i];
     OUT(telRem, G_TELREM); OUT(telNext, G_TELNEXT); OUT(scrollX, G_SCROLLX); OUT(scrollY, G_SCROLLY); OUT(retrieve, G_RETRIEVE);
     for (i = 0; i < 6; i++) { game[G_WLO0 + i] = g->wLo[i]; game[G_WHI0 + i] = g->wHi[i]; }
