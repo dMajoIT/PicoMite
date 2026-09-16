@@ -24,6 +24,12 @@ CHECK_RELIABILITY = 0x2D92
 REDUCE_WEAPON_ENERGY = 0x2D79
 CHECK_COPY_PROTECTION = 0x394E
 CONSIDER_PROMOTING = 0x0BE8
+# add_particle (&218c, one) and add_particles (&218e, A of them).  Making both
+# return at once is the whole of "no particles": with none ever made,
+# number_of_particles stays at -1 and update_particles (&207e) leaves on its
+# first instruction, so nothing else has to be touched.
+ADD_PARTICLE = 0x218C
+ADD_PARTICLES = 0x218E
 UPDATE_EVENTS = 0x259A
 RND_READ_STOPS = frozenset([MAIN_GAME_LOOP, DAMAGE_OBJECT, CHECK_RELIABILITY, REDUCE_WEAPON_ENERGY])
 
@@ -97,10 +103,14 @@ def s8(v):
 
 
 class Game:
-    def __init__(self, mem, promote=True, events=True):
+    def __init__(self, mem, promote=True, events=True, particles=True):
         """promote=False stops secondary objects becoming primary ones, events=False
         stops update_events (nests, water, earthquakes...): the scene then holds
-        exactly the objects put in it."""
+        exactly the objects put in it.  particles=False makes add_particle and
+        add_particles return at once, so the game runs with no particle system
+        at all: the kernel cannot reproduce a particle exactly (a particle's
+        life turns on the pixel the game plotted it over), so a run with them
+        off is the one that can be exact everywhere."""
         from exile6502 import CPU
         self.mem = bytearray(mem)
         self.cpu = CPU(self.mem)
@@ -112,6 +122,9 @@ class Game:
             self.mem[CONSIDER_PROMOTING] = 0x60
         if not events:
             self.mem[UPDATE_EVENTS] = 0x60
+        if not particles:
+            self.mem[ADD_PARTICLE] = 0x60
+            self.mem[ADD_PARTICLES] = 0x60
         # what relocate_binary_and_saved_position (&78ed) does to the
         # variables before the first frame: zero page &01-&df wiped,
         # acceleration_power 5 tiles, player upright, no object held

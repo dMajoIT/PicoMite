@@ -11,7 +11,7 @@ CSUB itself goes to out/scene/exile_lib.bas, which the program loads with
 LIBRARY LOAD: pasted into the program its hex text would not fit.
 run_exiletest.py puts it all on the PC3 and checks every slot of every tick.
 
-    python gen_exiletest.py exile-disassembly.txt
+    python gen_exiletest.py exile-disassembly.txt [--nopart]
 """
 import json
 import os
@@ -50,7 +50,8 @@ GAME = (['frame', 'angle', 'facing', 'immob', 'timmob', 'rotvel', 'lying', 'aim'
         + ['kh%d' % i for i in range(39)] + ['coll%d' % i for i in range(19)]
         + ['secx%d' % i for i in range(32)] + ['secy%d' % i for i in range(32)]
         + ['sect%d' % i for i in range(32)] + ['sece%d' % i for i in range(32)]
-        + ['tert%d' % i for i in range(235)])
+        + ['tert%d' % i for i in range(235)]
+        + ['partsoff'])   # 1 = run with no particle system, matching Game(particles=False)
 GAME_SIZE = 640
 
 # the packed tables: (C name, tables.bas label or memory address, size)
@@ -151,6 +152,74 @@ TABLES = [('OBPAT', 'ObstructionPatterns', 168), ('OBOFF', 'ObstructionPatternOf
     ('SCROFFYF', 0x3590, 2), ('SCROFFY', 0x3592, 2)]
 
 
+# The game array's mirror of the original's memory.  Every name here holds, at
+# the end of a tick, the byte the 6502 holds at that address; gen_traces2.py
+# records them and host_test.py checks them, so a value the kernel forgets to
+# keep up to date is caught where it drifts rather than wherever it eventually
+# shows.  Names not listed are the kernel's own bookkeeping (the feed, the
+# fault, the key mask) or are fed to it each tick (the water levels, the
+# screen).  game_init() below is checked against this table, so the two
+# cannot drift apart.
+MIRROR = {
+    'jetok': 0x358A, 'weapon': 0x084D, 'fired': 0x29D7, 'blaster': 0x36,
+    'pockused': 0x0847, 'telrem': 0x0822, 'telnext': 0x0821,
+    'scrollx': 0x14C8, 'scrolly': 0x14CA,
+    'boostercol': 0x080E, 'suitcol': 0x0813, 'firecool': 0x29D6, 'bells': 0x25,
+    'maxacc0': 0x3969, 'npcw0': 0x3970, 'heldcoll': 0x19B3, 'demat': 0x19B5,
+    'redmush': 0x081A, 'retrieve': 0x316A, 'viewpoint': 0x14CB,
+    'tgtx': 0x08A1, 'tgtxf': 0x0890, 'tgty': 0x08C4, 'tgtyf': 0x08B3,
+    'x17': 0x08A2, 'y17': 0x08C5,
+    'wlblock': 0x3598, 'doorsup': 0x3599, 'routebest': 0x3CE4,
+    'exptimer': 0x081D, 'flood': 0x081E, 'bluemush': 0x081B, 'immunity': 0x0815,
+    'fireimm': 0x0814, 'doortimer': 0x0819,
+    'quake': 0x081F, 'shipmoving': 0x19AB, 'radimm': 0x0818,
+    'whistle2': 0x29D8, 'chatterres': 0x081C, 'eastof76': 0x19AA,
+}
+for _i in range(4):
+    MIRROR['clawavail%d' % _i] = 0x083F + _i
+    MIRROR['clawtel%d' % _i] = 0x0843 + _i
+    MIRROR['wldes%d' % _i] = 0x0836 + _i
+for _i in range(5):
+    MIRROR['gift%d' % _i] = 0x083A + _i
+    MIRROR['pocket%d' % _i] = 0x0848 + _i
+    MIRROR['telx%d' % _i] = 0x0823 + _i
+    MIRROR['tely%d' % _i] = 0x0828 + _i
+for _i in range(6):
+    MIRROR['wlo%d' % _i] = 0x084E + _i
+    MIRROR['whi%d' % _i] = 0x0854 + _i
+for _i in range(19):
+    MIRROR['coll%d' % _i] = 0x0806 + _i
+for _i in range(32):
+    MIRROR['secx%d' % _i] = 0x0AF2 + _i
+    MIRROR['secy%d' % _i] = 0x0B12 + _i
+    MIRROR['sect%d' % _i] = 0x0B32 + _i
+    MIRROR['sece%d' % _i] = 0x0B53 + _i
+for _i in range(39):
+    MIRROR['kh%d' % _i] = 0x126B + _i
+for _i in range(235):
+    MIRROR['tert%d' % _i] = 0x0986 + _i
+# The screen's own state is fed to the kernel each tick rather than computed
+# from scratch, so these are a one-tick check of its scrolling model: the kernel
+# starts each tick from the game's values and must end it on them too.
+from exilegame import SCREEN_STATE as _SCR, FRAME_COUNTER as _FRM
+for _n, _a in _SCR.items():
+    MIRROR[_n] = _a
+MIRROR['frame'] = _FRM               # &c0, the frame counter every animation reads
+MIRROR['held'] = 0xDD                # &dd, the slot the player is carrying
+MIRROR['whistle1'] = 0x27            # &27, whistle one sounding
+# Names whose start-up value does not come from the address above (the screen is
+# set from the scene, the rest from the start-up code), so they are not asserted.
+MIRROR_START = {n: a for n, a in MIRROR.items() if n not in _SCR and n not in ('frame', 'held', 'whistle1')}
+MIRROR_INDEX = None      # filled in on first use: [(game index, address), ...]
+
+
+def mirror_index():
+    global MIRROR_INDEX
+    if MIRROR_INDEX is None:
+        MIRROR_INDEX = sorted((GAME.index(n), a) for n, a in MIRROR.items())
+    return MIRROR_INDEX
+
+
 def game_init(mem, pokes=None):
     """The game array as the game starts, from the listing's image and the start-up
        code, with anything the scene set up beforehand already applied."""
@@ -207,6 +276,8 @@ def game_init(mem, pokes=None):
         g['sect%d' % i] = m[0x0B32 + i]; g['sece%d' % i] = m[0x0B53 + i]
     for i in range(235):
         g['tert%d' % i] = m[0x0986 + i]
+    for n, a in MIRROR_START.items():    # the table and the start-up code agree
+        assert g[n] == m[a], (n, hex(a), g[n], m[a])
     return g
 
 
@@ -285,7 +356,7 @@ def main():
         hexwords, hexwords * 4, os.path.getsize(lib), os.path.basename(lib)))
 
     # the scenes
-    tdir = os.path.join(out, 'traces2')
+    tdir = os.path.join(out, 'traces2np' if '--nopart' in sys.argv else 'traces2')
     names = sorted(f[:-5] for f in os.listdir(tdir) if f.endswith('.json'))
     listing = []
     for name in names:
@@ -321,6 +392,7 @@ def main():
         g = game_init(mem, t.get('pokes'))
         g['eventson'] = 1 if t.get('events') else 0
         g['promoteon'] = 1 if t.get('promote') else 0
+        g['partsoff'] = 0 if t.get('particles', True) else 1
         for n, v in t.get('screen0', {}).items():
             g[n] = v
         lines = [str(len(t['ticks'])), str(len(feed)), "1" if t.get('lonely') else "0"] + [str(v) for v in slots] + [str(g[n]) for n in GAME]

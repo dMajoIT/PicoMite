@@ -133,7 +133,7 @@ def fmt_slot(s):
 
 def compare(runs):
     failed = 0
-    tdir = os.path.join(out, 'traces2')
+    tdir = os.path.join(out, 'traces2np' if '--nopart' in sys.argv else 'traces2')
     yi = FIELDS.index('y')
     fi = FIELDS.index('flags')
     for name in sorted(runs):

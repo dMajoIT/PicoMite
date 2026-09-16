@@ -93,6 +93,7 @@ struct G {
     int collected[19];
     int tert[235];
     int npcW0;
+    int partsOff;                 /* 1 = no particle system, as Game(particles=False) */
 };
 
 struct P {
@@ -404,6 +405,7 @@ static int free_particle(struct G *g)
 static void add_particles_t(struct P *p, int n, int px, int py, int cf, int cfr, int ty)
 {
     struct G *g = p->g;
+    if (g->partsOff) return;                     /* &218c/&218e patched to RTS */
     const u8 *T = g->tab + T_PARTTYPE + ty;
     int a, c, fl, i, xi, r, vel, frac, sq, sgn, who;
     fl = (ty == 0x0B) ? g->jetFlags : T[PT_FLAGS];   /* the jetpack's are chosen per call */
@@ -421,6 +423,8 @@ static void add_particles_t(struct P *p, int n, int px, int py, int cf, int cfr,
         p->angleB5 = angle_from_vec(p) ^ 0x80;
     }
     r = read_site(g, 0x21D7);                    /* one speed for the whole batch */
+    /* &21dd is an explicit CLC, so this ADC starts from nothing -- unlike the
+       one at &2226, which takes the carry rnd left behind */
     vec_from_mag_angle(p, add8(p, r & T[PT_SPDR], T[PT_SPD], 0), p->angleB5);
     a = (fl << 3) & 255;                         /* the placing bits, three along */
     for (xi = 2; xi >= 0; xi -= 2) {
@@ -438,10 +442,12 @@ static void add_particles_t(struct P *p, int n, int px, int py, int cf, int cfr,
         who = free_particle(g);
         PTS(P_CF, who, (r & cfr) ^ cf);
         r = read_site(g, 0x2220);
-        PTS(P_TTL, who, add8(p, r & T[PT_TTLR], T[PT_TTL], 0));
+        PTS(P_TTL, who, add8(p, r & T[PT_TTLR], T[PT_TTL], r >> 8));   /* &2226 ADC */
         for (i = 0; i < 2; i++) {                /* x then y, as the loop runs */
             int vr = T[i ? PT_VYR : PT_VXR], pr = T[i ? PT_YR : PT_XR], ax = i ? 2 : 0;
-            r = read_site(g, 0x2232);
+            /* &2235 LSR A, so the shift is of the byte alone: the feed's carry
+               bit must come off first or it shifts down into bit 7 */
+            r = read_site(g, 0x2232) & 255;
             sgn = r & 1;
             c = (r >> 1) & 255;
             c &= vr;
@@ -1241,6 +1247,9 @@ static int obstruction_along_vector(struct P *p, int d2c)
         d2c = (d2c - 1) & 255;
         if (d2c == 0) break;
     }
+    /* the clear exit resets them too: &3678 CLC falls through the BIT &38 that
+       skips the SEC and into the LDA #&ff / STA &3599 / STA &3598 at &367b */
+    leave_obstructed(g);
     return 0;
 }
 
@@ -1679,7 +1688,8 @@ static void do_action(struct P *p, int i)
     else if (i == 26) handle_teleporting(p);
     else if (i == 27) remember_position(p);
     else if (i >= 15 && i <= 18) scroll_viewpoint(p, i);
-    else if (i == 24) { if (g->collected[17] & 128) { g->whistle2 = p->slot; play_sound(p, 1); play_sound(p, 9); } }
+    else if (i == 24) { if (g->collected[17] & 128) {           /* &2c99, and on into &2cb4 */
+        play_sound(p, 1); play_sound(p, 9); g->whistle2 = p->slot; play_sound(p, 10); } }
     else if (i == 25) { if (g->collected[16] & 128) { g->whistle1 = 0x80 | (g->whistle1 >> 1); play_sound(p, 1); play_sound(p, 10); } }
     else if (i == 0 || i == 11 || i == 32 || i == 38) ;       /* pause, save, sound, shift: nothing here */
     else fault(g, 4, i);
@@ -2036,7 +2046,16 @@ static void update_bird(struct P *p, int kind)
 {
     struct G *g = p->g;
     int a, c, x = p->type - 0x2E;
-    if (kind == 1) read_rnd_byte(g, 0x4621, 1);            /* 1 in 256: whistle two, a sound */
+    if (kind == 1) {
+        /* &4621: 1 in 256, a red/magenta bird whistles whistle two.  It goes in
+           at &2c9e, past the check that the player has collected it, so the bird
+           can whistle whatever the player is carrying -- and Chatter answers. */
+        if (read_rnd_byte(g, 0x4621, 1) == 0) {
+            play_sound(p, 9);
+            g->whistle2 = p->slot;
+            play_sound(p, 10);
+        }
+    }
     else {
         if (kind == 2 && p->state == 0) p->visibility >>= 1;
         if ((read_site(g, 0x4631) & 0x3F) == 0) play_sound(p, 30);   /* 1 in 64: the bird calls */
@@ -4522,6 +4541,11 @@ static void update_object(struct G *g, int slot)
     fflush(stdout);
 #endif
     get_waterline(p, p->ps[0]);
+    /* &1aa4: the object that played whistle two forgets it when its own turn
+       comes round again -- CPY leaves carry set on the match, so the ROR puts
+       the top bit in and shifts the slot down.  Without this Chatter goes on
+       answering a whistle that stopped, for the rest of the game. */
+    if (slot == g->whistle2) g->whistle2 = 0x80 | (g->whistle2 >> 1);
     p->typeFlags = g->tab[T_OBJFLAGS + p->type];
     p->palDefault = g->tab[T_OBJPAL + p->type] & 0x7F;
     p->weight = p->typeFlags & 7;
@@ -4899,6 +4923,7 @@ EXPORT long long exile_tick(long long *obj, long long *game, long long *world, l
     IN(expTimer, G_EXPTIMER); IN(flood, G_FLOOD); IN(blueMush, G_BLUEMUSH); IN(immunity, G_IMMUNITY);
     IN(accPower, G_ACCPOWER); IN(accSign, G_ACCSIGN); IN(accDmg, G_ACCDMG); IN(lastTile, G_LASTTILE);
     IN(lastPlotW, G_PLOTW); IN(fireImm, G_FIREIMM); IN(doorTimer, G_DOORTIMER);
+    IN(partsOff, G_PARTSOFF);
     IN(quake, G_QUAKE); IN(shipMoving, G_SHIPMOVING); IN(radImm, G_RADIMM); IN(whistle1, G_WHISTLE1); IN(whistle2, G_WHISTLE2);
     IN(chatterRes, G_CHATTERRES); IN(eastOf76, G_EASTOF76);
     for (i = 0; i < 4; i++) { g->clawAvail[i] = (int)game[G_CLAWAVAIL0 + i]; g->clawTel[i] = (int)game[G_CLAWTEL0 + i]; }

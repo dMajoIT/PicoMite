@@ -6,7 +6,11 @@ DLL), then replays every scene in out/traces2/ through it exactly as
 exiletest.bas does on the board, comparing every slot of every tick.  The
 board run (run_exiletest.py) stays the final word; this is for iterating.
 
-    python host_test.py exile-disassembly.txt [names...] [-v]
+    python host_test.py exile-disassembly.txt [names...] [-v] [--nopart]
+
+--nopart replays out/traces2np, the traces taken with the game's particle
+system patched out, and switches the kernel's off to match: that run has no
+approximation left in it anywhere.
 """
 import ctypes
 import json
@@ -17,7 +21,7 @@ import sys
 
 from exile6502 import load_listing
 from exilegame import OBJ, FIELDS
-from gen_exiletest import GAME, GAME_SIZE, NSLOT, game_init, spawn_into, TABLES, read_tables_bas
+from gen_exiletest import GAME, GAME_SIZE, NSLOT, game_init, spawn_into, TABLES, read_tables_bas, MIRROR, mirror_index
 from gen_phystest import key_mask
 from run_exiletest import fmt_slot
 
@@ -28,6 +32,26 @@ out = os.path.join(here, 'out')
 # and reported, but they do not count as failures: a defect that is understood
 # and written down is more use than a deleted test.
 KNOWN = {}
+
+# Game-array names the kernel does not model, so their mirror is not checked.
+# Each one is a decision, not an oversight: add a name here only with the reason.
+UNMODELLED = set()
+
+# Names checked on some of their bits only, with why the rest are dead.
+MASKED = {
+    # &1cd2 indexes objects_type with the whole of this_object_touching, whose
+    # top bit means "touching nothing", so the read runs past the sixteen slots
+    # and the flags it ORs in are junk.  It cannot matter: every consumer
+    # (&1cdc BPL, &2b03 BIT/BMI) looks at bit 7 alone, and when touching has its
+    # top bit set that bit comes from tbcoll after the EOR #&80, whatever the
+    # junk was.  So bit 7 is checked and the rest is left to the original.
+    'heldcoll': 0x80,
+}
+# The mirror check can be turned into a report rather than a failure while a
+# scene's drift is being triaged: EXILE_GAME=report.
+GAME_CHECK = os.environ.get('EXILE_GAME', 'fail')
+# the eight bytes the game keeps for each particle, at &28d6
+PART_FIELDS = ('vx', 'vy', 'xf', 'yf', 'x', 'y', 'ttl', 'colour')
 scratch = os.environ.get('EXILE_SCRATCH', os.path.join(out, 'host'))
 VCVARS = r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
 
@@ -85,6 +109,7 @@ def scene_arrays(mem, t):
     g = game_init(mem, t.get('pokes'))
     g['eventson'] = 1 if t.get('events') else 0
     g['promoteon'] = 1 if t.get('promote') else 0
+    g['partsoff'] = 0 if t.get('particles', True) else 1
     for n, v in t.get('screen0', {}).items():
         g[n] = v
     game = [g[n] for n in GAME] + [0] * (GAME_SIZE - len(GAME))
@@ -98,7 +123,7 @@ def scene_arrays(mem, t):
     return slots, game, feed
 
 
-def run_scene(lib, mem, world, tables, t, verbose=False):
+def run_scene(lib, mem, world, tables, t, parts, verbose=False):
     slots, game, feed = scene_arrays(mem, t)
     obj_a = (ctypes.c_longlong * len(slots))(*slots)
     game_a = (ctypes.c_longlong * len(game))(*game)
@@ -109,7 +134,20 @@ def run_scene(lib, mem, world, tables, t, verbose=False):
     yi, fi = FIELDS.index('y'), FIELDS.index('flags')
     nslots = 1 if t.get('lonely') else NSLOT
     gf, ga = GAME.index('fault'), GAME.index('faultarg')
+    gnp = GAME.index('npart')
+    # the game array's mirror of the original's memory, as a run of (game index,
+    # trace position, name) for the names this kernel claims to keep
+    mirror = [(gi, pos, GAME[gi], MASKED.get(GAME[gi], 0xFF))
+              for pos, (gi, _a) in enumerate(mirror_index()) if GAME[gi] not in UNMODELLED]
+    want_game = list(t.get('game0') or [])
+    drift = set()
     notes = []
+    if want_game:
+        bad = [(n, want_game[pos], game[gi]) for gi, pos, n, k in mirror
+               if (game[gi] ^ want_game[pos]) & k]
+        if bad and GAME_CHECK == 'fail':
+            return 0, "before the first tick the game array differs: " + ", ".join(
+                "%s game &%02x kernel &%02x" % b for b in bad[:6]), notes
     for n, tk in enumerate(t['ticks']):
         if t.get('lonely'):
             for s in range(1, NSLOT):
@@ -122,6 +160,34 @@ def run_scene(lib, mem, world, tables, t, verbose=False):
                 game_a[gf] = 0
             else:
                 return n, "tick %d: fault %d arg &%x" % (n + 1, code, arg), notes
+        # The particle system is counted, not required to match.  A particle
+        # lives or dies by what the game read back from the pixel it had just
+        # plotted, and the kernel has no screen to read; &2267 also leaves the
+        # velocity add pointing wherever update_particle left X.  So particles
+        # drift, and the count below is the measure of how far: it is reported,
+        # and a change that makes it worse is meant to be seen.
+        if 'npart' in tk:
+            want_n = tk['npart']
+            got_n = (game_a[gnp] + 1) & 255
+            if want_n or got_n:
+                parts[1] += 1
+                if want_n == got_n and all(part_a[i] == tk['part'][i] for i in range(want_n * 8)):
+                    parts[0] += 1
+        for i, v in tk.get('gd', ()):
+            if i < len(want_game):
+                want_game[i] = v
+        if want_game:
+            bad = [(n, want_game[pos], game_a[gi]) for gi, pos, n, k in mirror
+                   if ((game_a[gi] ^ want_game[pos]) & k) and n not in drift]
+            if bad:
+                if GAME_CHECK == 'fail':
+                    keys = "+".join(t['keys'][n]) or "-"
+                    return n, "tick %d keys %s: the game array differs\n%s" % (
+                        n + 1, keys, "\n".join(
+                            "  %-12s game &%02x  kernel &%02x" % b for b in bad[:8])), notes
+                for b in bad:
+                    drift.add(b[0])
+                    notes.append("tick %d: %s game &%02x kernel &%02x" % (n + 1, b[0], b[1], b[2]))
         for s in range(nslots):
             want = list(tk['slots'][s])
             got = [obj_a[f * NSLOT + s] for f in range(len(FIELDS))]
@@ -161,14 +227,15 @@ def main():
     lib = ctypes.CDLL(dll)
     lib.exile_tick.restype = ctypes.c_longlong
     lib.exile_tick.argtypes = [ctypes.c_void_p] * 6
-    tdir = os.path.join(out, 'traces2')
+    tdir = os.path.join(out, 'traces2np' if '--nopart' in sys.argv else 'traces2')
     names = args[1:] or sorted(f[:-5] for f in os.listdir(tdir) if f.endswith('.json'))
     failed = 0
     known = []
     total_ticks = 0
+    parts = [0, 0]              # ticks where the particles matched, ticks with any
     for name in names:
         t = json.load(open(os.path.join(tdir, name + '.json')))
-        n, problem, notes = run_scene(lib, mem, world, tables, t, verbose)
+        n, problem, notes = run_scene(lib, mem, world, tables, t, parts, verbose)
         total = len(t['ticks'])
         total_ticks += n
         if problem is None:
@@ -186,7 +253,12 @@ def main():
         for nm in known:
             print("known and not counted: %s" % nm)
             print("   %s" % KNOWN[nm])
-    print("%d scenes, %d failed, %d known, %d ticks" % (len(names), failed, len(known), total_ticks))
+    print("%d scenes, %d failed, %d known, %d ticks%s" % (
+        len(names), failed, len(known), total_ticks,
+        ", particles excluded on both sides" if '--nopart' in sys.argv else ""))
+    if parts[1]:
+        print("particles: %d of %d ticks match exactly (%.0f%%); they are counted, not required"
+              % (parts[0], parts[1], 100.0 * parts[0] / parts[1]))
     return 1 if failed else 0
 
 

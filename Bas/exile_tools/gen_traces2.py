@@ -9,7 +9,11 @@ it models and skip the rest.  Promotion of secondary objects and the events
 are switched off in the oracle, so a scene holds only what was put in it.
 The traces go to out/traces2/<name>.json.
 
-    python gen_traces2.py exile-disassembly.txt [names...]
+    python gen_traces2.py exile-disassembly.txt [names...] [--no-particles]
+
+--no-particles runs the game with add_particle and add_particles patched out
+and writes to out/traces2np instead.  The kernel cannot reproduce a particle
+exactly, so that is the run which can be exact in every other respect.
 """
 import json
 import os
@@ -17,6 +21,7 @@ import sys
 
 from exile6502 import load_listing, Halt
 from exilegame import Game, OBJ, FIELDS, SCREEN_STATE
+from gen_exiletest import mirror_index
 
 # object types
 BOULDER = 0x45
@@ -415,12 +420,12 @@ PROVES = {
 }
 
 
-def run_scenario(mem, name, spec):
+def run_scenario(mem, name, spec, particles=True):
     start, objects, phases, lonely = spec[:4]
     events = spec[4] if len(spec) > 4 else False
     promote = spec[5] if len(spec) > 5 else False
     pokes = spec[6] if len(spec) > 6 else {}
-    g = Game(mem, promote=promote, events=events)
+    g = Game(mem, promote=promote, events=events, particles=particles)
     clear = lonely == 'clear'
     if clear:
         lonely = False
@@ -436,11 +441,19 @@ def run_scenario(mem, name, spec):
         for k, v in (spec[4] if len(spec) > 4 else {}).items():
             g.mem[OBJ[k] + slot] = v
     trace = {'name': name, 'start': start, 'objects': objects, 'lonely': lonely, 'clear': clear,
-             'events': events, 'promote': promote, 'pokes': pokes, 'fields': FIELDS,
+             'events': events, 'promote': promote, 'particles': particles,
+             'pokes': pokes, 'fields': FIELDS,
              # everything the screen keeps, as it stands before the first tick: the
              # kernel works the viewport out from here rather than being told it
              'screen0': {n: g.mem[a] for n, a in SCREEN_STATE.items()},
+             # the 506 bytes of the game's own memory that the kernel's game array
+             # shadows, as they stand before the first tick and then as a list of
+             # (position, value) changes after each one: the slots are not the only
+             # state, and a kernel that forgets to keep one of these up to date used
+             # to go unnoticed until the drift reached an object
+             'game0': [g.mem[a] for _, a in mirror_index()],
              'keys': [], 'ticks': []}
+    prev_game = list(trace['game0'])
     try:
         for keys, n in phases:
             for _ in range(n):
@@ -455,8 +468,11 @@ def run_scenario(mem, name, spec):
                 # eight bytes a particle are velocity x and y, the two position
                 # fractions, x, y, the time to live and the colour with its flags
                 npart = (m[0x1E58] + 1) & 0xFF
+                now = [m[a] for _, a in mirror_index()]
+                gd = [[i, v] for i, v in enumerate(now) if v != prev_game[i]]
+                prev_game = now
                 trace['ticks'].append({'slots': g.slots(), 'feed': g.feed, 'wl': list(m[0x082E:0x0836]),
-                                       'scr': g.screen, 'd4': m[0xD4],
+                                       'scr': g.screen, 'd4': m[0xD4], 'gd': gd,
                                        'npart': npart, 'part': list(m[0x28D6:0x28D6 + npart * 8])})
     except Halt as e:
         trace['halt'] = "%s at tick %d" % (e, g.ticks)
@@ -469,15 +485,17 @@ def main():
     if not args:
         print(__doc__)
         return 2
+    particles = '--no-particles' not in args
+    args = [a for a in args if not a.startswith('-')]
     here = os.path.dirname(os.path.abspath(__file__))
-    out_dir = os.path.join(here, 'out', 'traces2')
+    out_dir = os.path.join(here, 'out', 'traces2' if particles else 'traces2np')
     os.makedirs(out_dir, exist_ok=True)
     mem = load_listing(args[0])
     wanted = [a for a in args[1:] if a in SCENARIOS]
     for name, spec in SCENARIOS.items():
         if wanted and name not in wanted:
             continue
-        trace = run_scenario(mem, name, spec)
+        trace = run_scenario(mem, name, spec, particles)
         with open(os.path.join(out_dir, name + '.json'), 'w') as f:
             json.dump(trace, f)
         t = trace['ticks']
