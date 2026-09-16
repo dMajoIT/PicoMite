@@ -52,7 +52,7 @@ at `&13fa`.
 | `bisect_cache.py` | nothing; opts subs into `OPTION TRACECACHE` a group at a time to find one the cache gets wrong | found `CollTiles`; the cache is also slower than none on this kernel |
 | `gen_traces2.py` | `out/traces2/<scene>.json`: whole scenes from the game, every slot every tick, with the water level, the screen position, every random number the code drew keyed by the address that drew it, two zero-page scratch bytes the physics reads after the plotting code has used them (`SCRATCH_SITES`: the sign register at &22fe, the sprite width at &39b2), and every tile routine the plotting called (`TILE_SITE` &1787: the tile and the mode), which the kernel now checks itself against rather than replays, and the screen's own state as the scene starts, so the kernel works the viewport out for itself | each is the real game's answer; events and promotion are off unless the scene asks for them, so a scene holds what was put in it; a scene is `lonely` (slots 1-15 wiped every tick), `'clear'` (wiped once: the image's slot 1 is Triax) or neither |
 | `probe2.py` | nothing; `probe.py` for the whole-scene scenes: stops the game at chosen addresses in one tick and prints registers, the slot being updated and any memory bytes asked for | for chasing a divergence |
-| `csub/exile.c` | the whole-scene kernel: update_objects for all sixteen slots (the collision pass between objects, held objects, removal and demotion, the teleport countdown, the per-type dispatch), every object type's behaviour, the player's actions (thrust, jump, aim, pick up and drop, the weapons and firing, pocketing and retrieving, throwing, the whistles, teleporting and remembering, and being teleported away when its energy runs out), the viewport (how far to scroll or whether to redraw, and bringing back the objects that were put aside when they went offscreen), the tile routines that make objects and the winds, and `update_events` (the waterlines, Triax's lab, the earthquake, the creatures that emerge, the stars, the summonings) | `gen_exiletest.py` |
+| `csub/exile.c` | the whole-scene kernel: update_objects for all sixteen slots (the collision pass between objects, held objects, removal and demotion, the teleport countdown, the per-type dispatch), every object type's behaviour, the player's actions (thrust, jump, aim, pick up and drop, the weapons and firing, pocketing and retrieving, throwing, the whistles, teleporting and remembering, and being teleported away when its energy runs out), the viewport (how far to scroll or whether to redraw, and bringing back the objects that were put aside when they went offscreen), the particle system, the tile routines that make objects and the winds, and `update_events` (the waterlines, Triax's lab, the earthquake, the creatures that emerge, the stars, the summonings) | `gen_exiletest.py` |
 | `host_test.py` | `out/host/exile.dll`, the same kernel built with the Visual Studio compiler; replays every scene through it in seconds (`EXILE_DEBUG=1` for the kernel's debug prints) | the board run is the final word; this is for iterating |
 | `gen_exiletest.py` | `csub/exilestate2.h`, `csub/exile_tick.txt` (the `CSUB ExileTick` block), `out/scene/tables2.bin`, per scene a binary feed and an init file, and `Bas/exile/exiletest.bas` from `Bas/exile/exiletest_harness.bas` | `run_exiletest.py` |
 | `run_exiletest.py` | nothing; puts the scenes the board does not already have on the PC3, runs `exiletest.bas` and checks every slot of every tick against the traces | 79 scenes, 9,880 ticks, all match; 0.27 ms a tick on average, 0.48 at worst |
@@ -165,6 +165,27 @@ Two things to know if you read the digests back. XMODEM pads its last block
 with `&h1a`, so a file comes back longer than it went, and the list is written
 only after the files it describes, so a transfer that fails part way is simply
 put again next time.
+
+## What is still missing
+
+Sound, and nothing else. Every object type, every tile routine, every one of
+the player's actions and every fault the kernel could raise for an unmodelled
+path is closed; the remaining faults are unreachable. The game plays forty-
+eight sounds from forty-eight places, each with four bytes of parameters
+following the call, and forty of those places are inner labels rather than
+whole routines, so each needs putting in the transcription by hand. On top of
+that the envelopes cannot be expressed with `PLAY BBC ENVELOPE` and have to be
+stepped from the game's own tables, which `Testfiles/ExileTeleportSound.bas`
+already shows how to do.
+
+Particles are the one part that is close rather than exact. About half the
+ticks are identical to the game's and the rest differ by a few fractions of a
+square, because how long a particle lives depends on what the game's plotting
+found underneath it pixel by pixel. The kernel asks the tile's obstruction
+profile instead. The two random draws a particle makes on its own account are
+taken from the generator rather than the recording, so that approximation
+cannot move any draw the physics depends on, which is why the scenes still
+pass.
 
 ## The game
 

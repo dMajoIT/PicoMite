@@ -954,6 +954,7 @@ next:   ;
 /* ---- damage and the surface wind ---------------------------------------------- */
 
 static void reduce_weapon_energy(struct P *p, int x);   /* &2d79, defined below */
+static int check_reliability(struct P *p, int xi);      /* &2d92, defined below */
 
 static int damage_slot(struct P *p, int y, int dmg)
 {
