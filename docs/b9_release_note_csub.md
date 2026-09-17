@@ -11,8 +11,9 @@ python mmb2csub.py myprogram.bas PlotJulia
 
 That rewrites your program: the original routine is commented out, the CSUB is
 appended, and **your call sites do not change** — MMBasic calls a CSUB exactly
-as it calls a SUB. The Julia set demo included with the tool goes from 119
-seconds to 6.4, and draws a byte-identical image.
+as it calls a SUB. The Julia set demo included with the tool renders in 5.9
+seconds instead of 119 on an RP2040, and 2.5 instead of 86 on an RP2350 - 20x
+and 35x - and draws a byte-identical image either way.
 
 **The heavy lifting is not ours.** The MMBasic-to-C translation is done by
 `mmb2c.py`, Alan Cox's MMBasic translator from the Fuzix project — a far more

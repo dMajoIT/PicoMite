@@ -26,9 +26,15 @@ What you can expect:
 
 | what the routine does | speedup |
 |---|---|
-| loops, array work, integer and float arithmetic | 10–20x |
+| loops, array work, integer and float arithmetic | 10–35x |
 | transcendental maths (SIN, LOG), string formatting | 3–4x |
 | mostly calling the firmware already (graphics, files) | very little |
+
+The Julia set demo in `examples/` is the top row: 119 seconds interpreted on
+an RP2040 and 5.9 converted, 86 seconds and 2.5 on an RP2350 - 20x and 35x,
+from the same file, drawing a byte-identical image on both. The RP2350 gains
+more because its processor runs compiled code much faster than it runs the
+interpreter.
 
 The second row is not a disappointment, it is the arithmetic: `SIN` and `STR$`
 run *the same firmware code* whether your BASIC calls them or the CSUB does, so
