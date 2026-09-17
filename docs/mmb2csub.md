@@ -131,9 +131,32 @@ Nothing is lost: the `.bak` has the original and the C regenerates.
 
 `--no-c` and `--no-original` do one each if you want to keep the other.
 
-If it still does not fit, put the CSUB in the **library** — `LIBRARY SAVE`
-stores the binary alone, without the hex text, which is the difference between
-about 107 KB and 32 KB for a large blob.
+If it still does not fit, put the CSUB in the **library**, which is what
+`--library` is for:
+
+```
+python mmb2csub.py myprogram.bas DrawFrame --library mylib.bas --lean
+```
+
+The CSUBs and their wrappers go to `mylib.bas` instead of into your program,
+and your program keeps only the originals, commented out. Then, on the board:
+
+```
+LOAD "mylib.bas"
+LIBRARY SAVE
+LOAD "myprogram.bas"
+RUN
+```
+
+The library holds the binary alone, without the hex text, so the program is
+left with almost all of program memory to itself. `--lean` applies to the
+library file — there is nothing in your program to make lean. Several
+routines named in one command all go into the same library file.
+
+**Read A.8 before converting anything large this way.** `LIBRARY SAVE` takes
+the CSUB out of *program* memory, so the library file has to load first, and
+that costs the hex text and the binary together. The tool prints the figure to
+check against `MEMORY`.
 
 ### Step 6 — prove it gives the same answer
 
@@ -213,7 +236,8 @@ A.2 has the detail.
 |---|---|
 | `--list` | report what can be converted and what it costs; change nothing |
 | `--dry-run` | build and report, leave the source alone |
-| `--lean` | keep nothing but the CSUB |
+| `--library FILE` | write the CSUBs and wrappers to FILE, for `LIBRARY SAVE` |
+| `--lean` | keep nothing but the CSUB (with `--library`, applies to FILE) |
 | `--no-c` | do not keep the generated C as comments |
 | `--no-original` | delete the original routine rather than commenting it out |
 | `--keep-c` | also leave the generated `.c` on disk |
@@ -279,20 +303,26 @@ covers 15 of the 20 profiled routines and 99.8% of the calls.
 
 `sefunc` reaches **twenty globals**, which used to put it out of reach on
 argument count alone. It no longer does — they travel as one array, so the CSUB
-takes three arguments: `x!`, `fx!` and the table. What rules it out now is size.
-Its blob is 37 KB, which is about 89 KB of program text, and `minima`, `brent`
-and `broot` — the three roots above it — are larger still.
+takes three arguments: `x!`, `fx!` and the table. It converts, and the blob is
+correct. What stops it is size, in a way worth following through because it is
+the case `--library` was added for.
 
-So the choice is between two routes:
+Its blob is 37 KB. In the program that is about 89 KB of text, which does not
+fit. So it goes to a library instead — and it does not fit there either, for
+the reason in A.8: loading the 86 KB library file costs its hex text and its
+binary together, about 124 KB, on a board with 100 KB of program memory. The
+load stops quietly, `LIBRARY SAVE` writes 752 bytes — the wrapper and the
+declaration — and calling it gives `Internal fault 5`.
 
-- **`LIBRARY SAVE`**, which stores the 37 KB binary without the hex text. If you
-  have a spare flash slot, one conversion covers 15 of the 20 profiled routines
-  and 99.8% of the calls.
-- **Several smaller conversions** from the second listing, if you do not.
-  `tdb2utc` at 9 KB carries `jbrent`, `jdfunc`, `utc2tdb` and `findleap` —
-  between them nearly 5,000 calls; `gast2` at 6 KB carries `nut2000_lp`;
-  `eci2topo` at 5 KB carries six more. Choose them so their closures do not
-  overlap.
+So the answer for this program is **several smaller conversions** from the
+second listing, which is where it was heading anyway. `tdb2utc` has a 3.5 KB
+blob and carries `jbrent`, `jdfunc`, `utc2tdb` and `findleap` — between them
+nearly 5,000 calls; `gast2` carries `nut2000_lp`; `eci2topo` carries six more.
+Choose them so their closures do not overlap, put them all in one library file
+with a single command, and `LIBRARY SAVE` that.
+
+`solar_eclipse` also needs `Dim decl, rasc, rb, rlsun, rmm` adding at program
+level first — see A.7 for why.
 
 Two things to take from that. The listing, not the profile, tells you what to
 convert. And when a routine is out of reach it is now nearly always about size
@@ -459,19 +489,67 @@ always gives those 256 bytes — so nothing is lost in translation there.
 
 ---
 
-### A.7 Program memory
+### A.7 Globals the program never declares
+
+A wrapper reaches a global with `PEEK(VARADDR x)`, which needs the variable to
+**already exist**. Without `OPTION EXPLICIT`, MMBasic creates a global the
+first time something assigns to it — so a global that only ever came into
+being inside the routine you are converting will no longer be created by
+anything, and the wrapper stops with:
+
+```
+Error : Cannot find DECL
+```
+
+The fix is one line at program level, naming the variables the message
+complains about:
+
+```basic
+Dim decl, rasc, rb, rlsun, rmm
+```
+
+This is worth checking before you convert rather than after. `solar_eclipse`
+has five such globals out of the twenty `sefunc` reaches: they are assigned
+inside `sun` and never declared anywhere, so they exist only because `sun`
+has run. Programs written with `OPTION EXPLICIT` cannot have the problem.
+
+---
+
+### A.8 Program memory
 
 A CSUB is stored as hex text as well as binary, so it costs about **2.4x the
 blob size** in program memory. The `text` column of `--list` is the number
 that has to fit.
 
 In order of what to try: `--lean`, then crunching the rest of the program
-(`XMODEM C`, `AUTOSAVE C`, `LOAD ,C`), then `LIBRARY SAVE`, which stores the
-binary alone and drops the hex text entirely.
+(`XMODEM C`, `AUTOSAVE C`, `LOAD ,C`), then `--library` and `LIBRARY SAVE`,
+which stores the binary alone and drops the hex text entirely.
+
+**The library has its own ceiling, and it is not the library's size.**
+`LIBRARY SAVE` copies the CSUB out of *program* memory, so the library file
+has to load into program memory first — and loading it costs the hex text
+**and** the binary built from it, at the same time. Roughly 3.4x the blob.
+
+On a 100 KB board that puts the largest single CSUB you can get into the
+library at about **29 KB of blob**, whatever the library area has free.
+
+Past that the failure is quiet, and worth recognising:
+
+- the load stops early — the tell is a missing `Saved nnn bytes`
+- `LIBRARY SAVE` reports a byte count far smaller than the blob
+- `LIBRARY LIST` shows the CSUB, because its *declaration* did fit
+- calling it gives `Error : Internal fault 5(sorry)`
+
+A 3.5 KB blob saves as 3660 bytes and works. A 36.9 KB blob on the same board
+reports 752 bytes — the wrapper and the declaration, with no code behind them.
+The tool prints what the load will need; compare it with `MEMORY` first.
+
+If a routine is over the line, convert something further down its call graph
+instead, as in section 8.
 
 ---
 
-### A.8 What is not translated at all
+### A.9 What is not translated at all
 
 As of 6.03.02b8, 132 of the 166 routines in the test corpus convert. What the
 remaining 34 are waiting on, largest group first:
@@ -491,7 +569,7 @@ a surprise.
 
 ---
 
-### A.9 What is *not* a limitation
+### A.10 What is *not* a limitation
 
 Worth stating, because it saves chasing imagined problems:
 

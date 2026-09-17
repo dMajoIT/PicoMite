@@ -393,7 +393,7 @@ struct s_vartbl
 		long long int *ia; // pointer to the allocated memory if it is an array of integers
 		char *s;		   // pointer to the allocated memory if it is a string
 	} __attribute__((aligned(8))) val;
-} __attribute__((aligned(8))) val;
+} __attribute__((aligned(8)));
 
 //  Useful macros
 
