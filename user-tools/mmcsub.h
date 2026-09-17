@@ -24,7 +24,10 @@
  *    CallTable vector, which the compiler cannot fold back into the operator it
  *    came from. (Writing `return a + b;` here WOULD recurse - don't.)
  *
- * Requires firmware 6.03.02b8 or later for the L* and mem* slots.
+ * Requires firmware 6.03.02b9 or later: the L* and mem* slots arrived in
+ * b8, the MMBasic string cores in b9. A blob is built without knowing what
+ * it will run on, so on older firmware the call lands on a CallTable entry
+ * that does not exist yet rather than failing to build.
  */
 #ifndef MMCSUB_H
 #define MMCSUB_H

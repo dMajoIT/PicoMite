@@ -669,7 +669,7 @@ still `double`, so convert at the boundary: `DtoS` the incoming `pf()` values to
 
 ### MMBasic strings
 
-Added in 6.03.02b8. An MMBasic string is a **length byte followed by the
+Added in 6.03.02b9. An MMBasic string is a **length byte followed by the
 data**: `s[0]` is the length and `s+1` the first character, so it is not a C
 string and `strlen`/`strcpy` do not apply to it.
 

@@ -2,7 +2,7 @@
 
 *Turning an MMBasic SUB or FUNCTION into a CSUB, without writing any C.*
 
-For PicoMite firmware 6.03.02b8 and later.
+**Requires PicoMite firmware 6.03.02b9 or later.**
 
 ---
 
@@ -52,9 +52,25 @@ from wherever you unpacked the firmware source.
 | **pyelftools** | a Python package; `armcfgen.py` reads the linked ELF with it |
 | **The PicoMite firmware source** | for `PicoCFunctions.h` and `mmcsub.h` |
 | **`mmb2c.py`** | the MMBasic-to-C transpiler, from the Fuzix distribution |
+| **Firmware 6.03.02b9 or later** | on the board itself — see below |
 
 Two things you do **not** need: the Pico SDK, and any ability to build the
 firmware. `mmb2csub` compiles a small freestanding blob, not a firmware image.
+
+**The firmware version matters, and nothing on your PC can check it.** A CSUB
+reaches the interpreter's own string and maths routines through the CallTable,
+and the entries it needs were added in **6.03.02b9**. On the board:
+
+```
+? MM.VER
+ 6.030209
+```
+
+6.030209 is b9; anything lower is too old. An older firmware does not refuse
+the CSUB — the blob is built on your PC and cannot know what it will run on,
+so the call goes to a table entry that does not exist yet and the board
+crashes or resets with no message. If a CSUB that built cleanly misbehaves
+from the very first call, **check this first**.
 
 `pyserial` is needed only if you use `xsend.py` to send programs to the board
 (section 7).
@@ -455,6 +471,11 @@ it.
 that cannot be converted. The message names the real culprit, which is often not
 the routine you asked for.
 
+**It built, but the board crashes or resets on the first call** — check the
+firmware version before anything else: `? MM.VER` must be 6.030209 (b9) or
+higher. See section 2.1. Nothing on your PC can detect this, because the blob
+is built without knowing what it will run on.
+
 **It compiled but the answer is wrong** — go back to step 6 and find the
 smallest input that differs. The `.bak` has the interpreted original, so you can
 run both. Please report it: the generated C is meant to be a faithful
@@ -543,7 +564,7 @@ a C `static` inside the routine, and the 256 bytes of `CFuncRam` that a CSUB
 does own are already spoken for by the string scratch stack and the globals
 table.
 
-You will not hit this by accident. Since 6.03.02b8 the linker checks it:
+You will not hit this by accident. Since 6.03.02b9 the linker checks it:
 
 ```
 this CSUB has writable static data (.bss); a CSUB has no data segment
@@ -737,7 +758,7 @@ instead, as in section 9.
 
 ### A.9 What is not translated at all
 
-As of 6.03.02b8, 132 of the 166 routines in the test corpus convert. What the
+As of 6.03.02b9, 132 of the 166 routines in the test corpus convert. What the
 remaining 34 are waiting on, largest group first:
 
 | | |
