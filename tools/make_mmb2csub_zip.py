@@ -120,16 +120,18 @@ def stage(root, mmb2c):
         "user-tools/xsend.py":    os.path.join(TOOLS, "xsend.py"),
         "user-tools/mmb2c.py":    mmb2c,
         "docs/mmb2csub.md":       os.path.join(FW, "docs", "mmb2csub.md"),
-        "docs/mmb2csub.pdf":      os.path.join(FW, "docs", "mmb2csub.pdf"),
+        "docs/mmb2csub.pdf":      os.path.join(FW, "PDF", "mmb2csub.pdf"),
         "docs/armcfgen.md":       os.path.join(FW, "docs", "armcfgen.md"),
+        "docs/armcfgen.pdf":      os.path.join(FW, "PDF", "armcfgen.pdf"),
         "examples/julia.bas":     os.path.join(FW, "Bas", "julia.bas"),
         "examples/strtest.bas":   os.path.join(FW, "Bas", "strtest.bas"),
     }
     for rel, src in sorted(files.items()):
         if not os.path.exists(src):
             if rel.endswith(".pdf"):
-                print("  note: %s not built - run docs/generate_mmb2csub_pdf.py"
-                      % os.path.basename(src))
+                print("  note: %s not built - run docs/generate_%s_pdf.py"
+                      % (os.path.basename(src),
+                         os.path.basename(src)[:-4]))
                 continue
             sys.exit("missing: " + src)
         dst = os.path.join(root, rel)

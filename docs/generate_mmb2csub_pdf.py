@@ -19,7 +19,8 @@ from fpdf import FPDF
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, 'mmb2csub.md')
-OUT = os.path.join(HERE, 'mmb2csub.pdf')
+# the manuals all live in PDF/, beside armcfgen.pdf
+OUT = os.path.normpath(os.path.join(HERE, '..', 'PDF', 'mmb2csub.pdf'))
 
 PAGE_WIDTH = 190  # usable width with default 10mm margins
 

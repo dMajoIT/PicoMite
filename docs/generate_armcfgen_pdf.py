@@ -12,8 +12,9 @@ import re
 from fpdf import FPDF
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, '..', 'Bas', 'armcfgen.md')
-OUT = os.path.join(HERE, '..', 'Bas', 'armcfgen.pdf')
+# armcfgen.md moved from Bas/ to docs/; the PDF belongs in PDF/ with the rest
+SRC = os.path.join(HERE, 'armcfgen.md')
+OUT = os.path.normpath(os.path.join(HERE, '..', 'PDF', 'armcfgen.pdf'))
 
 PAGE_WIDTH = 190  # usable width with default 10mm margins
 
