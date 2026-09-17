@@ -35,12 +35,143 @@
 typedef long long MMINTEGER;
 /* MMFLOAT is already double, from PicoCFunctions.h */
 
+/* An MMBasic string is a LENGTH BYTE followed by the data: s[0] is the length,
+   s+1 the first character. MAXSTRLEN, STRINGSIZE, MAXDIM and
+   STR_AUTO_PRECISION all come from PicoCFunctions.h, which publishes the
+   firmware's own values - so they track the build rather than being guessed
+   here, and a hand-written CSUB gets them too.
+
+   These are mmb2c's names for the same things. It uses them in the struct it
+   declares for a routine's LOCAL arrays and strings, which the blob carries,
+   so they have to exist under these spellings. */
+#define MM_STRSZ (MAXSTRLEN + 2)      /* length byte, data, trailing NUL */
+#define MM_MAXDIM MAXDIM              /* bounds table is [count, d0..dn] */
+#define MM_AUTO_PRECISION STR_AUTO_PRECISION
+
 /* ------------------------------------------------------------------ *
- *  Fuzix runtime hooks that a CSUB has no use for
+ *  The scratch stack
+ *
+ *  String expressions do not write into a destination - they build
+ *  temporaries. `a$ + b$` allocates one, MID$ allocates one, STR$
+ *  allocates one, and the generated code brackets a statement with
+ *  mm_mark() / mm_release() to throw them all away again.
+ *
+ *  Leaning on the interpreter's own temp pool does not work: it holds
+ *  MAXTEMPSTRINGS (64) entries and is only swept after the CSUB returns,
+ *  so a loop doing string work exhausts it part way through. A CSUB needs
+ *  its own arena, and an arena needs somewhere to keep its bookkeeping -
+ *  which a CSUB cannot have, having no writable static data.
+ *
+ *  CFuncRam is exactly that somewhere: 256 bytes of static RAM the
+ *  firmware provides for CSUBs (CallTable 0x7c). Two words of it hold the
+ *  arena and the high-water mark, so mm_mark() is the offset and
+ *  mm_release() winds it back. The arena itself comes from GetTempMemory,
+ *  which the interpreter reclaims when the CSUB returns - so nothing
+ *  leaks even if the CSUB never releases.
  * ------------------------------------------------------------------ */
-/* temp-memory marking: a CSUB's temporaries are on the stack */
-#define mm_mark() 0u
-#define mm_release(m) ((void)(m))
+#ifndef MMCSUB_ARENA
+#define MMCSUB_ARENA 4096 /* bytes of string scratch; 16 full-length strings */
+#endif
+
+struct mmcsub_scratch
+{
+    unsigned char *base;
+    unsigned top;
+    unsigned tick;
+};
+/* the first two words of CFuncRam, by convention for generated CSUBs */
+#define mmcsub_sc ((struct mmcsub_scratch *)(void *)CFuncRam)
+
+static unsigned char *mm_alloc(unsigned n)
+{
+    n = (n + 3u) & ~3u; /* keep every temporary word aligned */
+    if (mmcsub_sc->base == 0)
+    {
+        mmcsub_sc->base = (unsigned char *)GetTempMemory(MMCSUB_ARENA);
+        mmcsub_sc->top = 0;
+    }
+    if (mmcsub_sc->top + n > MMCSUB_ARENA)
+        mmcsub_sc->top = 0; /* wrap rather than overrun: a single statement
+                               cannot outlive its own mark, and the generated
+                               code releases at every statement end */
+    {
+        unsigned char *p = mmcsub_sc->base + mmcsub_sc->top;
+        mmcsub_sc->top += n;
+        return p;
+    }
+}
+
+static unsigned mm_mark(void)
+{
+    if (mmcsub_sc->base == 0)
+        (void)mm_alloc(0);
+    return mmcsub_sc->top;
+}
+#define mm_release(m) (mmcsub_sc->top = (m))
+
+/* Every entry shim starts with this.
+ *
+ * CFuncRam persists between CSUB calls, but the arena inside it does NOT: it
+ * comes from GetTempMemory, and the interpreter sweeps temporary memory once
+ * the CSUB returns. Carrying the old pointer into the next call would be a
+ * write through a dangling pointer - which is the kind of thing that appears
+ * to work until the freed block gets reused. Forget it and allocate again. */
+#define mm_scratch_reset() (mmcsub_sc->base = 0, mmcsub_sc->top = 0)
+
+/* Let the user break out of a converted routine.
+ *
+ * The interpreter tests the break key between statements; a CSUB is one
+ * statement, so a converted loop that runs for thirty seconds cannot be
+ * interrupted at all unless it asks. The generator puts this at the top of
+ * every loop body. The counter lives in CFuncRam because a CSUB has no
+ * writable statics, and 1023 iterations between checks keeps it far below the
+ * cost of the loop it is in while staying responsive. */
+#define mm_poll() do { if ((++mmcsub_sc->tick & 0x3FF) == 0) CheckAbort(); } while (0)
+
+/* a temporary big enough for any MMBasic string */
+#define mm_tmpstr() mm_alloc(STRINGSIZE)
+
+/* LOCAL arrays and strings: one block per invocation, which mmb2c declares as
+   struct mm_l_<routine>. It must arrive ZEROED, because the generated code
+   relies on an untouched LOCAL reading as zero.
+
+   It comes off the C STACK, not the scratch arena. That matters: mmb2c
+   brackets each statement with mm_mark()/mm_release(), and the first
+   mm_release() in a routine winds the arena back past its own frame - so an
+   arena-allocated frame would be handed to the next allocation while the
+   routine was still using it, and a recursive call would land its frame on
+   its parent's. The frame's lifetime is exactly the C function's, which is
+   what alloca gives, and mm_lfree then has nothing to do.
+
+   A macro rather than a function: alloca in a callee would be freed on the
+   return from that callee. */
+#define mm_lheap(n) mm_zeroed(__builtin_alloca((unsigned long)(n)),                               (unsigned long)(n))
+#define mm_lfree(p) ((void)(p))
+
+static void *mm_zeroed(void *p, unsigned long n)
+{
+    unsigned char *q = (unsigned char *)p;
+    unsigned long k;
+    for (k = 0; k < n; k++)
+        q[k] = 0;
+    return p;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Globals, for a blob holding more than one routine
+ *
+ *  A converted routine reaches the interpreter's variables through
+ *  pointers the entry shim is handed. Passing them as parameters works
+ *  only while the blob holds one function: mmb2c fixes each routine's
+ *  signature, so a routine CALLED by the entry cannot be given them.
+ *
+ *  They go in CFuncRam instead, past the scratch header, where every
+ *  function in the blob can see them. 256 bytes is 64 words, two spent
+ *  on the scratch stack, so 62 globals - far more than the 16-argument
+ *  ceiling on getting them in.
+ * ------------------------------------------------------------------ */
+#define MMCSUB_G ((void **)((char *)CFuncRam + sizeof(struct mmcsub_scratch)))
+#define MMCSUB_G_MAX ((256 - (int)sizeof(struct mmcsub_scratch)) / 4)
 
 /* ------------------------------------------------------------------ *
  *  Arithmetic the generator calls by name
@@ -69,6 +200,233 @@ typedef long long MMINTEGER;
 #define mm_cos(a) Cosine(a)
 #define mm_sqr(a) Sqrt(a)
 #define mm_atan2(a, b) Atan2((a), (b))
+#define mm_rnd() RndVal()
+#define mm_timer() TimerVal()
+
+/* The generator emits these by their C library names, not as mm_ helpers. */
+#define sin(a) Sine(a)
+#define cos(a) Cosine(a)
+#define sqrt(a) Sqrt(a)
+#define pow(a, b) Power((a), (b))
+#define atan2(a, b) Atan2((a), (b))
+#define log(a) Log(a)
+#define tan(a) Tan(a)
+
+long long __aeabi_d2lz(double a); /* defined below, used by mm_int */
+
+/* INT(): MMBasic floors (fun_int is floor(), not a truncation), so a negative
+   value goes DOWN. FloatToInt rounds and __aeabi_d2lz truncates toward zero,
+   so neither is it on its own - step down when truncation went the wrong way. */
+static MMFLOAT mm_int(MMFLOAT v)
+{
+    long long t = __aeabi_d2lz(v);
+    if (v < 0.0 && IntToFloat(t) != v)
+        t -= 1;
+    return IntToFloat(t);
+}
+
+/* fabs and atan arrive by their C library names. Neither needs a slot: fabs is
+   a sign test, and atan(x) is exactly atan2(x, 1). Wrapped in named functions
+   rather than macros so the argument is evaluated once. */
+static MMFLOAT mmcsub_fabs(MMFLOAT v) { return v < 0.0 ? -v : v; }
+static MMFLOAT mmcsub_atan(MMFLOAT v) { return Atan2(v, 1.0); }
+/* asin and acos likewise need no slot of their own: both are exact in terms of
+   atan2 and sqrt, which have one. */
+static MMFLOAT mmcsub_asin(MMFLOAT v) { return Atan2(v, Sqrt(1.0 - v * v)); }
+static MMFLOAT mmcsub_acos(MMFLOAT v) { return Atan2(Sqrt(1.0 - v * v), v); }
+#define fabs(a) mmcsub_fabs(a)
+#define atan(a) mmcsub_atan(a)
+#define asin(a) mmcsub_asin(a)
+#define acos(a) mmcsub_acos(a)
+
+/* END inside a converted routine.
+ *
+ * The interpreter's END stops the program silently; a CSUB cannot do that,
+ * because ending would mean unwinding the interpreter from inside a function
+ * it called. error() is the nearest thing that exists - it stops and returns
+ * to the prompt - and it is the better answer anyway, because in practice END
+ * inside a SUB is a fatal path: solar_eclipse's minima reaches it only after
+ * printing "more than 50 iterations". Stopping loudly beats carrying on with
+ * a result the program has just declared meaningless.
+ */
+#define mm_end() error((char *)"END in a CSUB")
+
+/* SGN(): -1, 0 or +1 */
+static MMINTEGER mm_sgn(MMFLOAT v) { return (v > 0.0) - (v < 0.0); }
+
+/* FIX(): truncate TOWARD ZERO, which is what a C cast does and what
+   __aeabi_d2lz already is. INT() above floors instead - the two differ only
+   for a negative value, which is exactly where getting it wrong hides. */
+static MMFLOAT mm_fix(MMFLOAT v) { return IntToFloat(__aeabi_d2lz(v)); }
+
+/* ------------------------------------------------------------------ *
+ *  PRINT
+ *
+ *  MMPrintString, IntToStr and FloatToStr are all CallTable vectors, so
+ *  this is mapping rather than implementing. The buffered *_se/_ie/_fe
+ *  forms exist in the Fuzix runtime to batch console writes; here every
+ *  write already goes through one call, so they are the same thing.
+ * ------------------------------------------------------------------ */
+/* The buffer comes off the scratch stack, NOT from a static: a CSUB has no
+   writable static data, so a `static char buf[]` here would land in .bss at
+   an address the blob does not own - and every PRINT would read and write
+   somebody else's memory. Each helper takes its own mark and gives the space
+   straight back, so a PRINT with many items still costs one buffer. */
+static void mm_pr_s(const char *s)
+{
+    /* an MMBasic string, length byte first - copy it and NUL-terminate */
+    unsigned m = mm_mark();
+    char *b = (char *)mm_tmpstr();
+    Mstrcpy((unsigned char *)b, (unsigned char *)s);
+    MtoC((unsigned char *)b);
+    MMPrintString(b);
+    mm_release(m);
+}
+/* MMBasic's PRINT leaves a column where the sign would be, so `PRINT 5` gives
+   " 5" and `PRINT -5` gives "-5". Built into the buffer rather than printed
+   separately, so a number still costs one console write. (STR$ does NOT do
+   this, which is why mm_str_i does not.) */
+static void mm_pr_i(MMINTEGER v)
+{
+    unsigned m = mm_mark();
+    char *b = (char *)mm_tmpstr();
+    b[0] = ' ';
+    IntToStr(b + 1, v, 10);
+    MMPrintString(v < 0 ? b + 1 : b);
+    mm_release(m);
+}
+static void mm_pr_f(MMFLOAT v)
+{
+    unsigned m = mm_mark();
+    char *b = (char *)mm_tmpstr();
+    b[0] = ' ';
+    FloatToStr(b + 1, v, 0, MM_AUTO_PRECISION, ' ');
+    MMPrintString(b[1] == '-' ? b + 1 : b);
+    mm_release(m);
+}
+#define mm_pr_nl() MMPrintString("\r\n")
+#define mm_pr_tab() MMPrintString("\t")
+#define mm_pr_se(s) mm_pr_s(s)
+#define mm_pr_ie(v) mm_pr_i(v)
+#define mm_pr_fe(v) mm_pr_f(v)
+#define mm_pr_tabe() mm_pr_tab()
+#define mm_pr_commit() ((void)0)
+
+/* ------------------------------------------------------------------ *
+ *  Strings
+ *
+ *  Every one of these is the firmware's own routine behind a CallTable
+ *  slot, so a CSUB and the interpreter cannot disagree about what MID$
+ *  means. The ones that return a value put it in a scratch temporary.
+ * ------------------------------------------------------------------ */
+#define mm_slen(s) ((int)((const unsigned char *)(s))[0])
+#define mm_scmp(a, b) Mstrcmp((const unsigned char *)(a), (const unsigned char *)(b))
+#define mm_sset(d, s) Mstrcpy((unsigned char *)(d), (unsigned char *)(s))
+#define mm_ssetm(d, cap, s) Mstrcpy((unsigned char *)(d), (unsigned char *)(s))
+
+/* A destination for a string FUNCTION's result, and a by-value copy of a
+   string argument. Both are scratch temporaries, so they live until the
+   statement's mm_release() - which is the lifetime MMBasic gives them. */
+static char *mm_tmp(void)
+{
+    char *t = (char *)mm_tmpstr();
+    t[0] = 0;
+    return t;
+}
+
+static char *mm_scopy(const char *s)
+{
+    unsigned char *t = mm_tmpstr();
+    Mstrcpy(t, (unsigned char *)s);
+    return (char *)t;
+}
+
+static char *mm_scat(const char *a, const char *b)
+{
+    unsigned char *t = mm_tmpstr();
+    Mstrcpy(t, (unsigned char *)a);
+    Mstrcat(t, (const unsigned char *)b);
+    return (char *)t;
+}
+
+static char *mm_left(const char *s, MMINTEGER n)
+{
+    return (char *)StrLeft(mm_tmpstr(), (const unsigned char *)s, (int)n);
+}
+
+static char *mm_right(const char *s, MMINTEGER n)
+{
+    return (char *)StrRight(mm_tmpstr(), (const unsigned char *)s, (int)n);
+}
+
+static char *mm_mid(const char *s, MMINTEGER pos, MMINTEGER n)
+{
+    return (char *)StrMid(mm_tmpstr(), (const unsigned char *)s, (int)pos, (int)n);
+}
+
+static char *mm_ucase(const char *s)
+{
+    return (char *)StrCase(mm_tmpstr(), (const unsigned char *)s, 1);
+}
+
+static char *mm_lcase(const char *s)
+{
+    return (char *)StrCase(mm_tmpstr(), (const unsigned char *)s, 0);
+}
+
+static char *mm_chr(MMINTEGER c)
+{
+    return (char *)StrChar(mm_tmpstr(), (int)c);
+}
+
+static char *mm_space(MMINTEGER n)
+{
+    return (char *)StrFill(mm_tmpstr(), ' ', (int)n);
+}
+
+static char *mm_strrep(MMINTEGER n, MMINTEGER c)
+{
+    return (char *)StrFill(mm_tmpstr(), (int)c, (int)n);
+}
+
+/* VAL(). The core wants a C string, and MtoC converts IN PLACE, so it has to
+   work on a copy - the argument may be the caller's own variable. MMBasic's
+   VAL yields a number whichever branch it took, so the integer result is
+   widened here exactly as the interpreter widens it. */
+static MMFLOAT mm_val(const char *s)
+{
+    unsigned char *t = mm_tmpstr();
+    MMFLOAT f;
+    long long i;
+    Mstrcpy(t, (unsigned char *)s);
+    MtoC(t);
+    return StrVal(t, &f, &i) ? f : IntToFloat(i);
+}
+#define mm_atof(s) mm_val(s)
+
+/* TIMER = n */
+#define mm_timer_set(ms) TimerSet(FloatToInt(ms))
+
+/* INSTR's start is 1-based in MMBasic and 0-based in the core */
+static MMINTEGER mm_instr(MMINTEGER start, const char *hay, const char *needle)
+{
+    return StrInstr((const unsigned char *)hay, (const unsigned char *)needle,
+                    (int)start - 1);
+}
+
+/* STR$ of a float and of an integer. The pad argument arrives as an MMBasic
+   string, so its character is at [1]. */
+static char *mm_str_f(MMFLOAT v, MMINTEGER m, MMINTEGER n, const char *pad)
+{
+    return (char *)StrFormat(mm_tmpstr(), v, 0, 0, (int)m, (int)n,
+                             pad && pad[0] ? (unsigned char)pad[1] : ' ');
+}
+
+static char *mm_str_i(MMINTEGER v, MMINTEGER m, MMINTEGER n, const char *pad)
+{
+    return (char *)StrFormat(mm_tmpstr(), 0.0, v, 1, (int)m, (int)n,
+                             pad && pad[0] ? (unsigned char)pad[1] : ' ');
+}
 
 /* ------------------------------------------------------------------ *
  *  Compiler-emitted helpers, routed to the firmware's routines.

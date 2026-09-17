@@ -525,9 +525,24 @@ void cmd_timer(void)
     timeroffset = mytime - (uint64_t)getint(++cmdline, 0, mytime / 1000) * 1000;
 }
 // this is invoked as a function
+// TIMER = n.  cmd_timer below is deliberately NOT routed through this: it
+// timestamps BEFORE it parses the expression, so the interpreter's TIMER is
+// measured from the start of the statement rather than from after evaluating
+// the right hand side, and it reuses that timestamp for the range check. A
+// CSUB has nothing to parse, so reading the clock here is the same thing.
+void TimerSet(long long int ms)
+{
+    timeroffset = time_us_64() - (uint64_t)ms * 1000;
+}
+
+MMFLOAT __not_in_flash_func(TimerVal)(void)
+{
+    return (MMFLOAT)(time_us_64() - timeroffset) / 1000.0;
+}
+
 void __not_in_flash_func(fun_timer)(void)
 {
-    fret = (MMFLOAT)(time_us_64() - timeroffset) / 1000.0;
+    fret = TimerVal();
     targ = T_NBR;
 }
 uint64_t gettimefromepoch(int *year, int *month, int *day, int *hour, int *minute, int *second)

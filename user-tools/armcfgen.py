@@ -43,6 +43,10 @@ CFLAGS = ["-c", "-mcpu=cortex-m0plus", "-mthumb", "-ffreestanding", "-fno-except
           # (SUBALIGN below) -> any function is valid as a merge entry. -falign-
           # functions is ignored at -Os, so this is the reliable route.
           "-ffunction-sections",
+          # so --gc-sections can drop data nothing references - without it the
+          # unused tentative definitions in PicoCFunctions.h would trip the
+          # .bss assert in LINK_SCRIPT
+          "-fdata-sections",
           # a switch (or an if-chain the optimiser turns into one) would become a
           # jump table through libgcc's __gnu_thumb1_case_* helpers, which are
           # not in the blob; compare-and-branch instead.
@@ -51,6 +55,16 @@ CFLAGS = ["-c", "-mcpu=cortex-m0plus", "-mthumb", "-ffreestanding", "-fno-except
 # Linker script: one resolved .text at 0 holding code AND rodata contiguously, so
 # intra-blob bl's are fixed up, .text.startup/.text.* merge in, and the PC-
 # relative rodata offsets stay correct and are captured by objcopy -j .text.
+# A CSUB is code and constants, nothing else. The firmware loads the blob at
+# an address of its choosing and gives it no data segment, so a variable in
+# .bss or .data would sit at an address the blob does not own - and the code
+# would read and write it perfectly happily, corrupting whatever is there.
+#
+# Naming those sections and asserting they are empty turns that into a link
+# error naming the symbol, which is the only point at which it CAN be caught:
+# the C is valid, the compile is clean, and the blob runs. Unreferenced
+# tentative definitions in the headers are dropped by --gc-sections before
+# the assert sees them, so only data the CSUB actually uses fails.
 LINK_SCRIPT = """SECTIONS
 {
   . = 0;
@@ -58,6 +72,12 @@ LINK_SCRIPT = """SECTIONS
     *(.text.startup) *(.text*) *(.glue_7) *(.glue_7t)
     *(.rodata*)
   }
+  .data : { *(.data*) }
+  .bss (NOLOAD) : { *(.bss*) *(COMMON) }
+  ASSERT(SIZEOF(.data) == 0,
+    "this CSUB has initialised writable data (.data); a CSUB has no data segment")
+  ASSERT(SIZEOF(.bss) == 0,
+    "this CSUB has writable static data (.bss); a CSUB has no data segment")
   /DISCARD/ : { *(.ARM.attributes) *(.comment) *(.note*) }
 }
 """
@@ -201,6 +221,7 @@ def link(objs, entry):
     try:
         subprocess.run([GCC, "-nostartfiles", "-nostdlib",
                         "-Wl,-T," + ld.name, "-Wl,-e," + entry, "-Wl,--no-warn-rwx-segments",
+                        "-Wl,--gc-sections",
                         "-o", elf, *objs], check=True)
     finally:
         os.unlink(ld.name)
