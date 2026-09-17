@@ -185,7 +185,11 @@ extern "C"
    /* +16 KB (2026-09-14): PLAY BBC SOUND / PLAY BBC ENVELOPE (AudioBBC.c)
       overran the 800 KB limit by ~0.5 KB.
       -16 KB (2026-09-16): reverted - compiling misc/FileIO.c at -Os freed
-      ~4.5 KB, so 800 KB fits again and the 16 KB goes back to the A: drive. */
+      ~4.5 KB, so 800 KB fits again and the 16 KB goes back to the A: drive.
+      That -Os boot-looped the RP2040 until the littlefs buffer alignment fix
+      in FileIO.c (see the note by OPTIMIZED_SOURCES in CMakeLists.txt); the
+      offset itself was never the fault. Margin here is thin, +1084 bytes, so
+      the next across-the-board addition needs another 16 KB step. */
 #define FLASH_TARGET_OFFSET (800 * 1024)
 #define HEAP_MEMORY_SIZE (100 * 1024)
 #define MagicKey 0x3193CA54

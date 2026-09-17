@@ -95,9 +95,18 @@ uint8_t *gHuffVal2;
 uint8_t *gHuffVal3;
 uint8_t *gInBuf;
 #define BLOCK_SIZE 4096
-char FlashReadBuffer[256];
-char FlashProgBuffer[256];
-char FlashLookBuffer[256];
+// littlefs takes these three as its static read / prog / lookahead buffers, and
+// lfs_mount() asserts the lookahead one is 32-bit aligned - lfs->free.buffer is a
+// uint32_t* and the allocator does buffer[off/32] on it. That assert is compiled
+// out by NDEBUG, so nothing catches a misaligned buffer at runtime.
+// The alignment is NOT automatic: GCC's arm DATA_ALIGNMENT macro raises a plain
+// char array to word alignment only when !optimize_size, so at -Os these land on
+// whatever byte the linker picks. The RP2350's M33 does unaligned loads in
+// hardware and shrugs; the RP2040's M0+ HardFaults, which is a reset loop at boot
+// as soon as anything allocates an lfs block. Align them explicitly.
+char __attribute__((aligned(4))) FlashReadBuffer[256];
+char __attribute__((aligned(4))) FlashProgBuffer[256];
+char __attribute__((aligned(4))) FlashLookBuffer[256];
 int fs_flash_read(const struct lfs_config *cfg, lfs_block_t block,
                   lfs_off_t off, void *buffer, lfs_size_t size);
 int fs_flash_prog(const struct lfs_config *cfg, lfs_block_t block,

@@ -141,6 +141,13 @@ set(OPTIMIZED_SOURCES
 	io/AudioBBC.c
 	misc/FileIO.c
 )
+# misc/FileIO.c is here for ~3.7 KB of flash, which is what lets VGA's
+# FLASH_TARGET_OFFSET sit at 800 KB rather than 816 KB.
+# It boot-looped every RP2040 image until 2026-09-16: -Os turns off GCC's arm
+# DATA_ALIGNMENT, so FileIO.c's plain char arrays dropped to byte alignment and
+# littlefs's lookahead buffer - which its allocator indexes as uint32_t - landed
+# on an odd address. Harmless on the M33, a HardFault on the M0+. The buffers now
+# carry an explicit aligned(4); anything else added here needs the same care.
 
 set(FULL_RP2040_VARIANTS
 	PICO
