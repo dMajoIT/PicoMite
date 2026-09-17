@@ -14,6 +14,15 @@ by hand against configuration.h and CMakeLists.txt:
      -- arrays and MEMORY PACK/COPY/POKE INTEGER rely on it. If the linker
      places the symbol off a 256-byte boundary, every allocation inherits
      the offset and VARADDR returns non-8-aligned addresses.
+  4. littlefs's lookahead buffer (FlashLookBuffer) is 32-bit aligned.
+     lfs->free.buffer is a uint32_t* the allocator indexes as
+     buffer[off / 32], so a misaligned buffer HardFaults the RP2040's M0+
+     on the first block allocation -- a reset loop at boot, because startup
+     mounts A: and formats it if the mount fails. littlefs has its own
+     LFS_ASSERT for this, but NDEBUG compiles it out. The alignment is not
+     automatic: GCC's arm DATA_ALIGNMENT macro raises a plain char array to
+     word alignment only when !optimize_size, and FileIO.c is built -Os, so
+     it rests on an explicit aligned(4) that this check guards.
 
 Inputs:
   hexfile  -- PicoMite.hex (required, positional)
@@ -78,10 +87,19 @@ _HEAP_BASE_RE = re.compile(
     r"^\s+(0x[0-9a-fA-F]+)\s+(AllMemory|Heap)\s*$"
 )
 
+# littlefs's static lookahead buffer, defined in misc/FileIO.c and handed to
+# lfs_mount via pico_lfs_cfg.lookahead_buffer.
+_LFS_LOOKAHEAD_RE = re.compile(
+    r"^\s+(0x[0-9a-fA-F]+)\s+FlashLookBuffer\s*$"
+)
+
 # Allocation granularity of the MMBasic heap (PAGESIZE in Memory.h). Every
 # GetMemory() block is a multiple of this from the heap base, so the base
 # itself must be aligned to it.
 HEAP_PAGE_SIZE = 256
+
+# lfs->free.buffer is a uint32_t*, so its backing store must be word aligned.
+LFS_LOOKAHEAD_ALIGN = 4
 
 
 def parse_map(mapfile):
@@ -93,6 +111,7 @@ def parse_map(mapfile):
         "flash_base": None,
         "heap_base": None,
         "heap_base_sym": None,
+        "lfs_lookahead": None,
     }
     with open(mapfile, "r") as f:
         for line in f:
@@ -109,6 +128,10 @@ def parse_map(mapfile):
             if m and out["heap_base"] is None:
                 out["heap_base"] = int(m.group(1), 16)
                 out["heap_base_sym"] = m.group(2)
+                continue
+            m = _LFS_LOOKAHEAD_RE.match(line)
+            if m and out["lfs_lookahead"] is None:
+                out["lfs_lookahead"] = int(m.group(1), 16)
                 continue
     return out
 
@@ -216,6 +239,31 @@ def check_heap_alignment(map_info):
     return status == "PASS"
 
 
+def check_lfs_lookahead_alignment(map_info):
+    """littlefs indexes its lookahead buffer as uint32_t. misc/FileIO.c is
+    compiled -Os, which turns off GCC's arm DATA_ALIGNMENT, so the buffer is
+    word aligned only because of an explicit aligned(4) on the declaration.
+    Drop that attribute and the RP2040 boot-loops on a HardFault while the
+    RP2350 -- whose M33 does unaligned loads in hardware -- runs fine, so this
+    check is the only thing standing between that edit and a dead board."""
+    addr = map_info["lfs_lookahead"]
+    if addr is None:
+        print("LFS:   SKIP -- FlashLookBuffer symbol not found in map.")
+        return None
+    offset = addr % LFS_LOOKAHEAD_ALIGN
+    status = "PASS" if offset == 0 else "FAIL"
+    print(f"LFS:   FlashLookBuffer 0x{addr:X} "
+          f"(must be {LFS_LOOKAHEAD_ALIGN}-byte aligned)")
+    if offset == 0:
+        print(f"       aligned: offset 0  [{status}]")
+    else:
+        print(f"       MISALIGNED: base % {LFS_LOOKAHEAD_ALIGN} = {offset} "
+              f"-- lfs->free.buffer is a uint32_t*, so the first block "
+              f"allocation HardFaults the M0+ (boot loop). Restore the "
+              f"aligned(4) on FlashLookBuffer in misc/FileIO.c  [{status}]")
+    return status == "PASS"
+
+
 def main(argv):
     if len(argv) < 2:
         print("Usage: python GetHighestHexAddress.py firmware.hex [PicoMite.elf.map]")
@@ -262,7 +310,9 @@ def main(argv):
     flash_ok = check_flash(highest, flash_base, flash_target_offset)
     ram_ok = check_ram(map_info, limits)
     heap_ok = check_heap_alignment(map_info)
-    if flash_ok is False or ram_ok is False or heap_ok is False:
+    lfs_ok = check_lfs_lookahead_alignment(map_info)
+    if (flash_ok is False or ram_ok is False or heap_ok is False
+            or lfs_ok is False):
         return 1
     return 0
 

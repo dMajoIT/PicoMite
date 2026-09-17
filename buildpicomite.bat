@@ -119,8 +119,10 @@ echo Build started at:   %start_time%
 :: Calculate elapsed time
 call :elapsed_time "%start_time%" "%end_time%"
 
-endlocal
-exit /b %exit_code%
+:: endlocal and exit must be ONE statement. As two lines, endlocal runs
+:: first and discards exit_code, so the next line expands to a bare
+:: "exit /b" and every failed build reported success to its caller.
+endlocal & exit /b %exit_code%
 
 :read_version
 :: Read the firmware version out of Version.h, which holds a single line of the
@@ -255,11 +257,16 @@ rem this script should ever build.
 cmake -G "%generator%" -DCOMPILE=%compile% -DCMAKE_BUILD_TYPE=Release .. || exit /b 1
 nmake || exit /b 1
 
+rem The flash / RAM / heap / lfs-alignment checks run BEFORE the .uf2 is
+rem published, so a variant that fails them leaves nothing in ..\uf2\ to be
+rem flashed by mistake - and leaves the previous good image in place rather
+rem than deleting it for a replacement that never arrives.
+python ../tools/GetHighestHexAddress.py "%hexfile%" "%mapfile%" || exit /b 1
+
 if not exist "..\uf2\" mkdir "..\uf2"
 if exist "%directory%%filename%%fixed_string%%extension%" del "%directory%%filename%%fixed_string%%extension%"
 copy "%artifact%" "%directory%%filename%%fixed_string%%extension%" >nul || exit /b 1
 echo "%directory%%filename%%fixed_string%%extension%"
-python ../tools/GetHighestHexAddress.py "%hexfile%" "%mapfile%" || exit /b 1
 echo.
 exit /b 0
 
