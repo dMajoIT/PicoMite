@@ -76,6 +76,7 @@ struct mmcsub_scratch
 {
     unsigned char *base;
     unsigned top;
+    unsigned tick;
 };
 /* the first two words of CFuncRam, by convention for generated CSUBs */
 #define mmcsub_sc ((struct mmcsub_scratch *)(void *)CFuncRam)
@@ -107,8 +108,57 @@ static unsigned mm_mark(void)
 }
 #define mm_release(m) (mmcsub_sc->top = (m))
 
+/* Every entry shim starts with this.
+ *
+ * CFuncRam persists between CSUB calls, but the arena inside it does NOT: it
+ * comes from GetTempMemory, and the interpreter sweeps temporary memory once
+ * the CSUB returns. Carrying the old pointer into the next call would be a
+ * write through a dangling pointer - which is the kind of thing that appears
+ * to work until the freed block gets reused. Forget it and allocate again. */
+#define mm_scratch_reset() (mmcsub_sc->base = 0, mmcsub_sc->top = 0)
+
+/* Let the user break out of a converted routine.
+ *
+ * The interpreter tests the break key between statements; a CSUB is one
+ * statement, so a converted loop that runs for thirty seconds cannot be
+ * interrupted at all unless it asks. The generator puts this at the top of
+ * every loop body. The counter lives in CFuncRam because a CSUB has no
+ * writable statics, and 1023 iterations between checks keeps it far below the
+ * cost of the loop it is in while staying responsive. */
+#define mm_poll() do { if ((++mmcsub_sc->tick & 0x3FF) == 0) CheckAbort(); } while (0)
+
 /* a temporary big enough for any MMBasic string */
 #define mm_tmpstr() mm_alloc(STRINGSIZE)
+
+/* LOCAL arrays and strings: one block per invocation, which mmb2c declares as
+   struct mm_l_<routine>. It must arrive ZEROED - the generated code relies on
+   an untouched LOCAL reading as zero - and it comes off the scratch stack, so
+   a recursive routine gets a fresh one per call and mm_lfree returns it. */
+static void *mm_lheap(unsigned long n)
+{
+    unsigned char *p = mm_alloc((unsigned)n);
+    unsigned long k;
+    for (k = 0; k < n; k++)
+        p[k] = 0;
+    return p;
+}
+#define mm_lfree(p) ((void)(p))
+
+/* ------------------------------------------------------------------ *
+ *  Globals, for a blob holding more than one routine
+ *
+ *  A converted routine reaches the interpreter's variables through
+ *  pointers the entry shim is handed. Passing them as parameters works
+ *  only while the blob holds one function: mmb2c fixes each routine's
+ *  signature, so a routine CALLED by the entry cannot be given them.
+ *
+ *  They go in CFuncRam instead, past the scratch header, where every
+ *  function in the blob can see them. 256 bytes is 64 words, two spent
+ *  on the scratch stack, so 62 globals - far more than the 16-argument
+ *  ceiling on getting them in.
+ * ------------------------------------------------------------------ */
+#define MMCSUB_G ((void **)((char *)CFuncRam + sizeof(struct mmcsub_scratch)))
+#define MMCSUB_G_MAX ((256 - (int)sizeof(struct mmcsub_scratch)) / 4)
 
 /* ------------------------------------------------------------------ *
  *  Arithmetic the generator calls by name
@@ -161,6 +211,75 @@ static MMFLOAT mm_int(MMFLOAT v)
         t -= 1;
     return IntToFloat(t);
 }
+
+/* fabs and atan arrive by their C library names. Neither needs a slot: fabs is
+   a sign test, and atan(x) is exactly atan2(x, 1). Wrapped in named functions
+   rather than macros so the argument is evaluated once. */
+static MMFLOAT mmcsub_fabs(MMFLOAT v) { return v < 0.0 ? -v : v; }
+static MMFLOAT mmcsub_atan(MMFLOAT v) { return Atan2(v, 1.0); }
+/* asin and acos likewise need no slot of their own: both are exact in terms of
+   atan2 and sqrt, which have one. */
+static MMFLOAT mmcsub_asin(MMFLOAT v) { return Atan2(v, Sqrt(1.0 - v * v)); }
+static MMFLOAT mmcsub_acos(MMFLOAT v) { return Atan2(Sqrt(1.0 - v * v), v); }
+#define fabs(a) mmcsub_fabs(a)
+#define atan(a) mmcsub_atan(a)
+#define asin(a) mmcsub_asin(a)
+#define acos(a) mmcsub_acos(a)
+
+/* END inside a converted routine.
+ *
+ * The interpreter's END stops the program silently; a CSUB cannot do that,
+ * because ending would mean unwinding the interpreter from inside a function
+ * it called. error() is the nearest thing that exists - it stops and returns
+ * to the prompt - and it is the better answer anyway, because in practice END
+ * inside a SUB is a fatal path: solar_eclipse's minima reaches it only after
+ * printing "more than 50 iterations". Stopping loudly beats carrying on with
+ * a result the program has just declared meaningless.
+ */
+#define mm_end() error((char *)"END in a CSUB")
+
+/* SGN(): -1, 0 or +1 */
+static MMINTEGER mm_sgn(MMFLOAT v) { return (v > 0.0) - (v < 0.0); }
+
+/* FIX(): truncate TOWARD ZERO, which is what a C cast does and what
+   __aeabi_d2lz already is. INT() above floors instead - the two differ only
+   for a negative value, which is exactly where getting it wrong hides. */
+static MMFLOAT mm_fix(MMFLOAT v) { return IntToFloat(__aeabi_d2lz(v)); }
+
+/* ------------------------------------------------------------------ *
+ *  PRINT
+ *
+ *  MMPrintString, IntToStr and FloatToStr are all CallTable vectors, so
+ *  this is mapping rather than implementing. The buffered *_se/_ie/_fe
+ *  forms exist in the Fuzix runtime to batch console writes; here every
+ *  write already goes through one call, so they are the same thing.
+ * ------------------------------------------------------------------ */
+static char mm_prbuf[STRINGSIZE];
+
+static void mm_pr_s(const char *s)
+{
+    /* an MMBasic string, length byte first - copy it and NUL-terminate */
+    Mstrcpy((unsigned char *)mm_prbuf, (unsigned char *)s);
+    MtoC((unsigned char *)mm_prbuf);
+    MMPrintString(mm_prbuf);
+}
+static void mm_pr_i(MMINTEGER v)
+{
+    IntToStr(mm_prbuf, v, 10);
+    MMPrintString(mm_prbuf);
+}
+static void mm_pr_f(MMFLOAT v)
+{
+    FloatToStr(mm_prbuf, v, 0, MM_AUTO_PRECISION, ' ');
+    MMPrintString(mm_prbuf);
+}
+#define mm_pr_nl() MMPrintString("\r\n")
+#define mm_pr_tab() MMPrintString("\t")
+#define mm_pr_se(s) mm_pr_s(s)
+#define mm_pr_ie(v) mm_pr_i(v)
+#define mm_pr_fe(v) mm_pr_f(v)
+#define mm_pr_tabe() mm_pr_tab()
+#define mm_pr_commit() ((void)0)
 
 /* ------------------------------------------------------------------ *
  *  Strings

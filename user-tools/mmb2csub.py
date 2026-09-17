@@ -150,6 +150,106 @@ def slice_function(conv, cname):
     return None
 
 
+def cname_of(nm):
+    """An MMBasic name as a C identifier: a dot is legal in BASIC, not in C."""
+    return nm.replace(".", "__")
+
+
+def called_routines(cbody, own_cname):
+    """The f_ names this body calls, other than itself."""
+    seen = re.findall(r"\bf_([A-Za-z_][A-Za-z_0-9]*)\s*\(", cbody)
+    return [m for m in seen if ("f_" + m) != own_cname]
+
+
+def closure(conv, routine):
+    """The routine and everything it calls, transitively, in emission order.
+
+    mmb2c emits an inter-routine call as f_other(...), so a blob holding only
+    the entry would leave that undefined.  armcfgen's merge mode already packs
+    several functions into one blob and resolves the calls between them, so the
+    work is picking WHICH functions: the call graph from the entry, with
+    recursion and mutual recursion handled by the visited set.
+    """
+    by_cname = {r.cname: r for r in conv.routines.values()}
+    order, seen = [], set()
+
+    def walk(r):
+        if r.cname in seen:
+            return
+        seen.add(r.cname)
+        body = slice_function(conv, r.cname)
+        if body is None:
+            return
+        for nm in called_routines(body, r.cname):
+            callee = by_cname.get("f_" + nm)
+            if callee is not None:
+                walk(callee)
+        order.append(r)
+
+    walk(routine)
+    return order          # callees first, entry last
+
+
+def local_structs_for(conv, routines):
+    """The `struct mm_l_<routine>` definitions the blob needs.
+
+    A routine with LOCAL arrays or strings keeps them in one block per
+    invocation, whose struct mmb2c declares at file scope - in a part of its
+    output that a slice does not carry.  Only the structs for routines in this
+    blob are taken, so an unrelated routine's locals cost nothing.
+    """
+    want = set("struct mm_l_%s {" % r.cname for r in routines)
+    out, keep = [], False
+    for ln in conv.local_structs():
+        if ln in want:
+            keep = True
+        if keep:
+            out.append(ln)
+        if keep and ln == "};":
+            keep = False
+    return out
+
+
+def consts_used(conv, mmb2c, text):
+    """The CONSTs the emitted text mentions, as (cname, value) pairs.
+
+    mmb2c emits a global CONST as a #define in a section of its output that a
+    slice does not carry, so a routine using one would not compile.  Only the
+    ones actually named are emitted; a CONST whose value needs the runtime is
+    skipped, being a hidden global rather than a #define.
+    """
+    out = []
+    for nm in sorted(conv.globals):
+        sym = conv.globals[nm]
+        if not sym.is_const or getattr(sym, "const_runtime", False):
+            continue
+        cn = mmb2c.cconst(nm)
+        if re.search(r"\b" + re.escape(cn) + r"\b", text):
+            out.append((cn, sym.acc))
+    return out
+
+
+def globals_touched(conv, routines):
+    """The globals the whole blob reaches, in a stable order.
+
+    mmb2c records these itself while scanning (Routine.gtouch, which is what
+    its report's "Globals reached from inside a SUB" section is built from),
+    so this is reading its answer rather than parsing the generated C.  The
+    union over the closure, because a callee's globals have to arrive too.
+    CONSTs are excluded - they become #defines and need nothing passed.
+    """
+    names = set()
+    for r in routines:
+        names |= set(r.gtouch)
+    out = []
+    for nm in sorted(names):
+        s = conv.globals.get(nm)
+        if s is None or s.is_const:
+            continue
+        out.append((nm, s))
+    return out
+
+
 # ---------------------------------------------------------------- checks
 
 def uses_on_error(conv, routine):
@@ -174,28 +274,31 @@ def uses_on_error(conv, routine):
     return False
 
 
-def check_scope(conv, routine, name):
-    """Refuse what phase 1 knowingly cannot do.  The compiler catches the rest."""
+def check_scope(conv, routine, name, routines=None):
+    """Refuse what this knowingly cannot do.  The compiler catches the rest.
+
+    Checked over the whole closure: a callee that cannot be converted stops the
+    entry just as surely, and saying so here names the real routine.
+    """
     bad = []
-    if uses_on_error(conv, routine):
-        bad.append("%s uses ON ERROR; a CSUB cannot reach the interpreter's "
-                   "error handling" % name)
-    if routine.is_func and routine.ty == "s":
-        bad.append("%s is a string FUNCTION; strings are phase 2" % name)
-    for p in routine.params:
-        if p.stype is not None:
-            bad.append("parameter '%s' is a user TYPE; not supported yet" % p.name)
-        elif getattr(p, "ty", None) == "s":
-            bad.append("parameter '%s' is a string; strings are phase 2" % p.name)
-        elif not p.is_array and not p.byref:
-            # mmb2c marks a by-value parameter; the interpreter always passes a
-            # pointer, so a by-value one would read the pointer as the value.
-            bad.append("parameter '%s' is passed by value; a CSUB receives a "
-                       "pointer for every argument" % p.name)
+    routines = routines or [routine]
+    for r in routines:
+        who = r.name if r is not routine else name
+        if uses_on_error(conv, r):
+            bad.append("%s uses ON ERROR; a CSUB cannot reach the "
+                       "interpreter's error handling" % who)
+        if r.is_func and r.ty == "s":
+            bad.append("%s is a string FUNCTION; strings are phase 2" % who)
+        for p in r.params:
+            if p.stype is not None:
+                bad.append("%s: parameter '%s' is a user TYPE" % (who, p.name))
+            elif getattr(p, "ty", None) == "s":
+                bad.append("%s: parameter '%s' is a string; strings are phase 2"
+                           % (who, p.name))
     n = len(routine.params) + sum(1 for p in routine.params if p.is_array)
     if n > 16:
-        bad.append("%d arguments needed (params plus array bounds); the limit is "
-                   "MAX_CSUB_ARGS (16 on RP2350, 10 on RP2040)" % n)
+        bad.append("%d arguments needed; the limit is MAX_CSUB_ARGS "
+                   "(16 on RP2350, 10 on RP2040)" % n)
     return bad
 
 
@@ -207,85 +310,123 @@ SFX = {"f": lambda nm, arr: nm + "!" + ("()" if arr else ""),
        "i": lambda nm, arr: nm + "%" + ("()" if arr else ""),
        "s": lambda nm, arr: nm + "$" + ("()" if arr else "")}
 
+CT = {"f": "MMFLOAT", "i": "MMINTEGER", "s": "char"}
 
-def globals_touched(conv, routine):
-    """The globals this routine reaches, in a stable order.
 
-    mmb2c records these itself while scanning (Routine.gtouch, which is what
-    its report's "Globals reached from inside a SUB" section is built from),
-    so this is reading its answer rather than parsing the generated C.
-    CONSTs are excluded - they become #defines and need nothing passed.
+def bind_globals(body, routine, flat, heap):
+    """Point this routine's global references at the pointers in CFuncRam.
+
+    Done by rewriting the body rather than with #define, because a macro has no
+    scope: a program with a global `i` and a local `i` in some other routine
+    gives both the C name v_i, and a file-scope #define would rewrite the
+    LOCAL's declaration into a syntax error.
+
+    Substituting per routine is sound precisely because that ambiguity cannot
+    arise inside one routine - mmb2c does not record a global as touched by a
+    routine that has a local of the same name (note_touch skips it), so within
+    a single body v_i means one thing or the other, never both.
+    """
+    decls = []
+    for k, (nm, s) in enumerate(flat):
+        if nm not in routine.gtouch:
+            continue
+        ptr = "__gp_" + cname_of(nm)
+        body = re.sub(r"\b" + re.escape(s.acc) + r"\b", "(*%s)" % ptr, body)
+        # Read the pointer ONCE into a local rather than substituting the
+        # CFuncRam expression at every use: the compiler then keeps it in a
+        # register. Inlining it cost about 6% on a globals-heavy inner loop.
+        decls.append("    %s *const %s = (%s *)MMCSUB_G[%d];"
+                     % (CT[s.ty], ptr, CT[s.ty], len(heap) + k))
+    if decls:
+        head, rest = body.split("\n", 1)
+        body = head + "\n" + "\n".join(decls) + "\n" + rest
+    return body
+
+
+def add_polls(body):
+    """Put mm_poll() at the top of every loop body.
+
+    The interpreter tests the break key between statements.  A CSUB is ONE
+    statement, so a converted loop that runs for thirty seconds cannot be
+    interrupted at all - the board simply stops answering, which is exactly
+    what the KnivD benchmark did the first time it was converted.  mm_poll()
+    calls CheckAbort once in every 1024 times round, far below the cost of any
+    loop worth converting.
     """
     out = []
-    for nm in sorted(routine.gtouch):
-        s = conv.globals.get(nm)
-        if s is None or s.is_const:
-            continue
-        out.append((nm, s))
-    return out
+    for ln in body.split("\n"):
+        out.append(ln)
+        st = ln.strip()
+        if ln.rstrip().endswith("{") and (st.startswith("for (")
+                                          or st.startswith("while (")
+                                          or st == "do {"):
+            out.append(" " * (len(ln) - len(ln.lstrip()) + 4) + "mm_poll();")
+    return "\n".join(out)
 
 
-def inject_params(cbody, extra):
-    """Add parameters to the generated function's signature.
+def heap_member(s):
+    """One member of our struct __gv, for a global mmb2c reaches as H->name.
 
-    The body is mmb2c's output untouched; only its first line changes. A
-    routine that takes nothing is emitted as `f_name(void)`, so the `void`
-    has to give way rather than be appended to.
+    mmb2c lays every global array out inside one block and indexes it with its
+    real shape, so a 2-D array is written H->v_x[i][j].  The interpreter
+    allocates each array separately, so the member here is a POINTER to the
+    caller's storage - and for more than one dimension that has to be a pointer
+    to an array, or the second subscript has nothing to apply to.  mmb2c
+    declares the dimensions reversed; the outermost one is what the pointer
+    replaces.
     """
-    if not extra:
-        return cbody
-    head, rest = cbody.split("\n", 1)
-    i = head.rindex(")")
-    inner = head[head.index("(") + 1:i].strip()
-    if inner == "void" or inner == "":
-        new = ", ".join(extra)
-    else:
-        new = inner + ", " + ", ".join(extra)
-    return head[:head.index("(") + 1] + new + head[i:] + "\n" + rest
+    ct = CT[s.ty]
+    nm = s.acc[3:]
+    dims = getattr(s, "dims", None) or []
+    if s.is_array and len(dims) > 1:
+        rest = "".join("[%s]" % d for d in reversed(dims[:-1]))
+        return "%s (*%s)%s;" % (ct, nm, rest)
+    if s.ty == "s" and s.is_array:
+        return "char (*%s)[%s];" % (nm, s.slen + 1 if s.slen else "STRINGSIZE")
+    return "%s *%s;" % (ct, nm)
 
 
-def bounds_used(cbody, p):
-    """Does the routine actually read this array parameter's bounds?
+def bounds_used(text, p):
+    """Does the blob actually read this array parameter's bounds?
 
     mmb2c always gives an array parameter a companion __b_ argument because
     BOUND() inside the routine would need it.  Most kernels never call BOUND(),
-    and every argument we do not pass is one more the caller can spend - which
+    and every argument not passed is one more the caller can spend - which
     matters, because MAX_CSUB_ARGS is 10 on the RP2040.  So pass NULL when the
     generated code never mentions it.
     """
-    # skip the first line: that is the signature, which always names it
-    body = cbody.split("\n", 1)[1] if "\n" in cbody else ""
-    return ("__b_" + p.name.replace(".", "__")) in body
+    # every function's FIRST line is its signature, which always names the
+    # __b_ argument - only a mention in a body counts
+    bodies_only = "\n".join(
+        ln for b in text.split("\n}\n") for ln in b.split("\n")[1:])
+    return ("__b_" + p.name.replace(".", "__")) in bodies_only
 
 
-def entry_shim(conv, routine, cname, entry, cbody):
-    """The CSUB entry: cast the interpreter's void* and call the real function.
+def entry_shim(conv, routine, entry, bodytext, gl):
+    """The CSUB entry: cast the interpreter's void*, publish the globals, call.
 
-    Argument order is the parameter order, with an array's bound argument
-    following it when the routine reads bounds, matching mmb2c's signature().
+    The routine's own parameters go straight through as arguments.  The globals
+    go into CFuncRam, where every function in the blob can reach them - a
+    callee's signature is fixed by mmb2c and cannot be given them.
     """
-    CT = {"f": "MMFLOAT", "i": "MMINTEGER", "s": "char"}
-    args, decl, slot = [], [], 0
+    args, decl, passed, slot = [], [], [], 0
     sfx = lambda nm, arr, ty: nm + {"f": "!", "i": "%", "s": "$"}[ty] + ("()" if arr else "")
-    passed = []          # what the BASIC caller must supply, in order
-    # A FUNCTION becomes a CSUB whose FIRST argument receives the result.
-    # MMBasic passes every argument by reference, so an out-parameter is the
-    # same mechanism a return value would have used - the generated C function
-    # is untouched, the shim just stores what it returned.
+
     retslot = None
     if routine.is_func:
+        # MMBasic passes every argument by reference, so a FUNCTION's result is
+        # just one more out-parameter and the generated C is used as emitted.
         retslot = CT[routine.ty]
         decl.append("void *a0")
         passed.append(sfx("__r", False, routine.ty))
         slot = 1
     for p in routine.params:
-        ct = CT[p.ty]
-        args.append("(%s *)a%d" % (ct, slot))
+        args.append("(%s *)a%d" % (CT[p.ty], slot))
         decl.append("void *a%d" % slot)
         passed.append(sfx(p.name, p.is_array, p.ty))
         slot += 1
         if p.is_array:
-            if bounds_used(cbody, p):
+            if bounds_used(bodytext, p):
                 args.append("(const MMINTEGER *)a%d" % slot)
                 decl.append("void *a%d" % slot)
                 passed.append("Bound(%s,1)" % sfx(p.name, True, p.ty))
@@ -293,49 +434,35 @@ def entry_shim(conv, routine, cname, entry, cbody):
             else:
                 args.append("0")      # never read
 
-    # Globals, by the same mechanism as everything else: MMBasic passes by
-    # reference, so a global becomes one more pointer argument and the CSUB
-    # writes straight back into the interpreter's own variable.
-    gl = globals_touched(conv, routine)
-    extra, members, ginit = [], [], []
-    for nm, s in gl:
-        ct = CT[s.ty]
-        if s.acc.startswith("H->"):
-            # an array global: mmb2c reaches it as H->v_name, so give the body
-            # an H of our own whose members are pointers to the real arrays
-            members.append("    %s *%s;" % (ct, s.acc[3:]))
-            ginit.append("(%s *)a%d" % (ct, slot))
-        else:
-            # a scalar global: v_name is redefined as *__gp_name (see the
-            # #defines emitted around the function), so it stays an lvalue
-            extra.append("%s *__gp_%s" % (ct, nm))
-            args.append("(%s *)a%d" % (ct, slot))
+    # globals: the heap-resident ones first, so they lie over struct __gv
+    heap = [(nm, s) for nm, s in gl if s.acc.startswith("H->")]
+    flat = [(nm, s) for nm, s in gl if not s.acc.startswith("H->")]
+    sets = []
+    for k, (nm, s) in enumerate(heap):
+        sets.append("    H->%s = (%s *)a%d;" % (s.acc[3:], CT[s.ty], slot))
         decl.append("void *a%d" % slot)
-        # mmb2c keeps arrays AND strings in one heap block reached as H->v_name,
-        # so where it chose to put a global says nothing about how the BASIC
-        # caller writes it. s.is_array is what decides name() versus name.
         passed.append(sfx(nm, s.is_array, s.ty))
         slot += 1
-    if members:
-        extra.append("struct __gv *__gh")
-        args.append("&__g")
+    for k, (nm, s) in enumerate(flat):
+        sets.append("    MMCSUB_G[%d] = a%d;" % (len(heap) + k, slot))
+        decl.append("void *a%d" % slot)
+        passed.append(sfx(nm, s.is_array, s.ty))
+        slot += 1
 
-    lines = []
-    lines.append("/* CSUB entry - the interpreter hands us one pointer per argument. */")
-    lines.append("long long %s(%s)" % (entry, ", ".join(decl) if decl else "void"))
-    lines.append("{")
-    if members:
-        lines.append("    struct __gv __g = { %s };" % ", ".join(ginit))
-    if retslot:
-        lines.append("    *(%s *)a0 = %s(%s);" % (retslot, cname, ", ".join(args)))
-    else:
-        lines.append("    %s(%s);" % (cname, ", ".join(args)))
+    lines = ["/* CSUB entry - the interpreter hands us one pointer per argument. */",
+             "long long %s(%s)" % (entry, ", ".join(decl) if decl else "void"),
+             "{",
+             "    mm_scratch_reset();"]
+    lines += sets
+    call = "%s(%s)" % (routine.cname, ", ".join(args))
+    lines.append("    *(%s *)a0 = %s;" % (retslot, call) if retslot
+                 else "    %s;" % call)
     lines.append("    return 0;")
     lines.append("}")
-    return "\n".join(lines), slot, passed, gl, extra, members
+    return "\n".join(lines), slot, passed
 
 
-def type_list(routine, cbody, gl):
+def type_list(routine, bodytext, gl):
     """The `CSUB name INTEGER, FLOAT, ...` type list, matching entry_shim.
 
     It has to cover the globals too: a routine with no parameters can still
@@ -348,68 +475,73 @@ def type_list(routine, cbody, gl):
         out.append(T[routine.ty])
     for p in routine.params:
         out.append(T[p.ty])
-        if p.is_array and bounds_used(cbody, p):
+        if p.is_array and bounds_used(bodytext, p):
             out.append("INTEGER")      # the bound
-    for nm, sym in gl:
+    for nm, sym in sorted(gl, key=lambda g: not g[1].acc.startswith("H->")):
         out.append(T[sym.ty])
     return ", ".join(out)
 
 
 def adapter_sub(name, routine, entry, passed):
-    """A thin MMBasic SUB with the ORIGINAL name, so call sites do not change.
+    """A thin MMBasic SUB or FUNCTION with the ORIGINAL name.
 
-    It exists to supply what the CSUB ABI cannot carry - here, each array's
-    BOUND(), which the interpreter does not pass.  With no arrays it is pure
-    overhead, so it is only emitted when it has something to do.
+    It supplies what the CSUB ABI cannot carry - a FUNCTION's result, an
+    array's BOUND(), the globals - so that call sites do not change.  When the
+    CSUB takes exactly the routine's own arguments there is nothing to add and
+    the CSUB carries the original name itself.
     """
     ps = [SFX[p.ty](p.name, p.is_array) for p in routine.params]
     if routine.is_func:
-        # A FUNCTION keeps its name and its call sites: the wrapper declares a
-        # local for the result, hands it to the CSUB by reference, and returns
-        # it.  MMBasic passes everything by reference anyway, so the CSUB's
-        # out-parameter is the same mechanism the return value would have used.
-        fn = SFX[routine.ty](name, False)      # the FUNCTION keeps its own type
-        rn = SFX[routine.ty]("__r", False)     # and so must the local it returns
+        fn = SFX[routine.ty](name, False)      # the FUNCTION keeps its type
+        rn = SFX[routine.ty]("__r", False)     # and so must the local
         return ("Function %s(%s)\n  Local %s\n  %s %s\n  %s = %s\nEnd Function\n"
                 % (fn, ", ".join(ps), rn, entry, ", ".join(passed), fn, rn))
     if list(ps) == list(passed):
-        return None            # the CSUB takes exactly the SUB's arguments,
-                               # so it can carry the original name itself
-    call = passed
-    return ("Sub %s %s\n  %s %s\nEnd Sub\n"
-            % (name, ", ".join(ps), entry, ", ".join(call)))
+        return None
+    return ("Sub %s%s\n  %s %s\nEnd Sub\n"
+            % (name, (" " + ", ".join(ps)) if ps else "",
+               entry, ", ".join(passed)))
 
 
-def write_c(cpath, source, subname, cbody, shim, gl, extra, members):
-    """Write the translation unit: globals plumbing, the body, then the shim.
+def write_c(cpath, source, subname, routines, bodies, shim, gl, consts,
+            lstructs=()):
+    """Write the translation unit: globals, every function in the blob, the shim.
 
-    The body between them is mmb2c's output character for character - only the
-    signature gains parameters, and the names it uses for globals are
-    redirected by #defines that are undone straight after.
+    The bodies are mmb2c's output character for character.  Only names are
+    redirected around them, by #defines that stay in force for the whole blob
+    because a callee needs them just as much as the entry does.
     """
+    heap = [(nm, s) for nm, s in gl if s.acc.startswith("H->")]
+    flat = [(nm, s) for nm, s in gl if not s.acc.startswith("H->")]
     with open(cpath, "w") as f:
         f.write("/* Generated by mmb2csub.py from %s, %s.\n"
                 " * Do not edit - regenerate instead. */\n" % (source, subname))
         f.write('#include "mmcsub.h"\n\n')
-        if gl:
-            f.write("/* Globals this routine reaches. A CSUB has no writable static\n"
-                    "   data, so each one arrives as a pointer and the names the\n"
-                    "   generated body uses are pointed at it. */\n")
-        if members:
-            f.write("struct __gv {\n" + "\n".join(members) + "\n};\n")
-            f.write("#define H __gh\n")
-        for nm, sym in gl:
-            if not sym.acc.startswith("H->"):
-                f.write("#define %s (*__gp_%s)\n" % (sym.acc, nm))
-        f.write("\n")
-        f.write("static " + inject_params(cbody, extra) + "\n\n")
-        for nm, sym in gl:
-            if not sym.acc.startswith("H->"):
-                f.write("#undef %s\n" % sym.acc)
-        if members:
-            f.write("#undef H\n")
-        if gl:
+        for cn, val in consts:
+            f.write("#define %s %s\n" % (cn, val))
+        if consts:
             f.write("\n")
+        if gl:
+            f.write("/* Globals the blob reaches. A CSUB has no writable static data,\n"
+                    "   so each one arrives as a pointer in CFuncRam and the names the\n"
+                    "   generated bodies use are pointed at it. */\n")
+        if heap:
+            f.write("struct __gv {\n")
+            for nm, s in heap:
+                f.write("    %s\n" % heap_member(s))
+            f.write("};\n#define H ((struct __gv *)MMCSUB_G)\n")
+        f.write("\n")
+        if lstructs:
+            f.write("\n".join(lstructs) + "\n\n")
+        if len(routines) > 1:
+            f.write("/* every function in the blob, so the calls between them resolve */\n")
+            for r in routines:
+                f.write("static %s;\n" % bodies[r.cname].split("\n", 1)[0].rstrip(" {"))
+            f.write("\n")
+        for r in routines:
+            f.write("static "
+                    + add_polls(bind_globals(bodies[r.cname], r, flat, heap))
+                    + "\n\n")
         f.write(shim + "\n")
 
 
@@ -521,24 +653,31 @@ def main():
         sys.exit("error: no SUB or FUNCTION named '%s' in %s\n  found: %s"
                  % (args.sub, args.source, ", ".join(sorted(conv.routines))))
 
-    problems = check_scope(conv, routine, args.sub)
+    # Everything the routine calls comes with it: mmb2c emits an inter-routine
+    # call as f_other(...), and armcfgen's merge mode packs them into one blob
+    # and resolves the calls between them.
+    routines = closure(conv, routine)
+    bodies = {}
+    for r in routines:
+        b = slice_function(conv, r.cname)
+        if b is None:
+            sys.exit("error: could not find '%s' in the generated C. %s may have "
+                     "failed to translate - run mmb2c.py on the file to see why."
+                     % (r.cname, r.name))
+        bodies[r.cname] = b
+    bodytext = "\n".join(bodies[r.cname] for r in routines)
+
+    problems = check_scope(conv, routine, args.sub, routines)
     if problems:
         print("error: %s cannot be a CSUB yet:" % args.sub)
         for p in problems:
             print("  - " + p)
         sys.exit(1)
 
-    cbody = slice_function(conv, routine.cname)
-    if cbody is None:
-        sys.exit("error: could not find '%s' in the generated C. The routine may "
-                 "have failed to translate - run mmb2c.py on the file to see why."
-                 % routine.cname)
-
-    others = calls_other_routines(routine, cbody)
-    if others:
-        sys.exit("error: %s calls %s. For now a converted routine has to be "
-                 "self-contained - only its own code goes into the blob."
-                 % (args.sub, ", ".join(others)))
+    gl = globals_touched(conv, routines)
+    if len(gl) > 62:
+        sys.exit("error: %s and what it calls reach %d globals; CFuncRam holds 62"
+                 % (args.sub, len(gl)))
 
     # Name it first, because the name depends on whether a wrapper is needed.
     # When the CSUB takes exactly the routine's own arguments there is nothing
@@ -546,16 +685,17 @@ def main():
     # sites go straight to it - MMBasic calls a CSUB exactly like a SUB. Only
     # when a wrapper has to sit in front (a FUNCTION's result, an array bound,
     # globals) does the CSUB need a name of its own for the wrapper to call.
-    _, _, probe, _, _, _ = entry_shim(conv, routine, routine.cname, "probe", cbody)
+    _, _, probe = entry_shim(conv, routine, "probe", bodytext, gl)
     needs_wrapper = adapter_sub(args.sub, routine, "probe", probe) is not None
     entry = args.name or ((args.sub + "K") if needs_wrapper else args.sub)
-    shim, nargs, passed, gl, extra, members = entry_shim(
-        conv, routine, routine.cname, entry, cbody)
+    shim, nargs, passed = entry_shim(conv, routine, entry, bodytext, gl)
 
     stem = os.path.splitext(os.path.basename(args.source))[0]
     srcdir = os.path.dirname(os.path.abspath(args.source))
     cpath = os.path.join(srcdir, "%s_%s.c" % (stem, args.sub.lower()))
-    write_c(cpath, args.source, args.sub, cbody, shim, gl, extra, members)
+    write_c(cpath, args.source, args.sub, routines, bodies, shim, gl,
+            consts_used(conv, mmb2c, bodytext),
+            local_structs_for(conv, routines))
 
     out = os.path.join(srcdir, "%s_%s.txt" % (stem, args.sub.lower()))
     cmd = [sys.executable, ARMCFGEN, cpath, "--compile",
@@ -572,7 +712,7 @@ def main():
 
     block = open(out).read()
     block = block.replace("CSUB " + entry.upper(),
-                          "CSUB %s %s" % (entry, type_list(routine, cbody, gl)), 1)
+                          "CSUB %s %s" % (entry, type_list(routine, bodytext, gl)), 1)
     open(out, "w").write(block)
     ctext = open(cpath).read()
 
@@ -588,6 +728,9 @@ def main():
     print("  %d argument%s: %s"
           % (nargs, "" if nargs == 1 else "s", ", ".join(passed)))
     print("  blob: %d bytes of code" % (nwords * 4))
+    if len(routines) > 1:
+        print("  also in the blob: "
+              + ", ".join(r.name for r in routines if r is not routine))
 
     if args.dry_run:
         print("\n(dry run - %s not modified)" % args.source)
