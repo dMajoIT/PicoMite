@@ -200,9 +200,9 @@ static void *mm_zeroed(void *p, unsigned long n)
 
    gui_fcolour and gui_bcolour are CallTable slots holding the ADDRESS of the
    interpreter's own variables, so this reads whatever COLOUR last set rather
-   than a value captured when the blob was built. Needs the firmware build
-   that added slots 0x1b0/0x1b4 - before that, a drawing statement must be
-   given its colour explicitly. */
+   than a value captured when the blob was built. Slots 0x1b0/0x1b4, firmware
+   6.03.02b9 - before that, a drawing statement must be given its colour
+   explicitly. */
 #define MM_CUR 0x7FFFFFFFLL
 #define mm_col(c) ((int)((c) == MM_CUR ? (MMINTEGER)gui_fcolour : (MMINTEGER)(c)))
 #define mm_fill(f) ((int)((f) == MM_CUR ? -1 : (MMINTEGER)(f)))
