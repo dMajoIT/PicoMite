@@ -417,7 +417,10 @@ python mmb2csub.py myprogram.bas DrawFrame --library mylib.bas --lean
 ```
 
 The CSUBs and their wrappers go to `mylib.bas` instead of into your program,
-and your program keeps only the originals, commented out. Then, on the board:
+and your program keeps only the originals, commented out. A bare filename like
+that one is written **beside your program**, not into whatever directory you
+happened to run the tool from; give a path if you want it somewhere else. The
+tool prints where it went. Then, on the board:
 
 ```
 LOAD "mylib.bas"
@@ -531,7 +534,7 @@ A.2 has the detail.
 |---|---|
 | `--list` | report what can be converted and what it costs; change nothing |
 | `--dry-run` | build and report, leave the source alone |
-| `--library FILE` | write the CSUBs and wrappers to FILE, for `LIBRARY SAVE` |
+| `--library FILE` | write the CSUBs and wrappers to FILE, for `LIBRARY SAVE`. A bare filename goes beside your program; give a path to put it elsewhere |
 | `--lean` | keep nothing but the CSUB (with `--library`, applies to FILE) |
 | `--no-c` | do not keep the generated C as comments |
 | `--no-original` | delete the original routine rather than commenting it out |

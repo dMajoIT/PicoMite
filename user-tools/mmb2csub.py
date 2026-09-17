@@ -1168,6 +1168,15 @@ def main():
                     help="build and report, but leave the source alone")
     args = ap.parse_args()
 
+    # A bare filename for --library goes beside the PROGRAM, not into whatever
+    # directory the tool happens to be run from - which is where mmb2csub.py
+    # lives, so `--library sefunc.bas` used to drop it in user-tools/. The
+    # generated .c and .txt already resolve against the source this way.
+    # A path given with any directory part at all is taken as meant.
+    if args.library and not os.path.dirname(args.library):
+        args.library = os.path.join(
+            os.path.dirname(os.path.abspath(args.source)), args.library)
+
     mmb2c = load_mmb2c(args.mmb2c)
     conv = convert_program(mmb2c, args.source)
 
@@ -1354,9 +1363,11 @@ def main():
     if include_c:
         kept.append("the generated C")
     if args.library:
+        # the PATH as resolved, not the basename: where it went is the thing
+        # worth reporting, and a bare --library name now means beside the
+        # program rather than the current directory
         print("  CSUB%s written to %s%s"
-              % (" and wrapper" if wrapper else "",
-                 os.path.basename(args.library),
+              % (" and wrapper" if wrapper else "", args.library,
                  " (--lean)" if args.lean else ""))
     else:
         print("  CSUB%s appended%s"
