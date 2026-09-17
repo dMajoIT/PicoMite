@@ -93,8 +93,13 @@ and the entries it needs were added in **6.03.02b9**. On the board:
  6.030209
 ```
 
-6.030209 is b9; anything lower is too old. An older firmware does not refuse
-the CSUB — the blob is built on your PC and cannot know what it will run on,
+6.030209 is b9; anything lower is too old. **6.03.02b10 or later is worth
+having** if you expect to put a large CSUB in the library: before b10 that
+route cost 3.4x the blob rather than the blob itself, which is the difference
+between a 37 KB routine fitting a 100 KB board and not (A.8). Everything else
+works on b9.
+
+An older firmware does not refuse the CSUB — the blob is built on your PC and cannot know what it will run on,
 so the call goes to a table entry that does not exist yet and the board
 crashes or resets with no message. If a CSUB that built cleanly misbehaves
 from the very first call, **check this first**.
@@ -423,21 +428,27 @@ happened to run the tool from; give a path if you want it somewhere else. The
 tool prints where it went. Then, on the board:
 
 ```
-LOAD "mylib.bas"
-LIBRARY SAVE
+LIBRARY LOAD "mylib.bas"
 LOAD "myprogram.bas"
 RUN
 ```
 
-The library holds the binary alone, without the hex text, so the program is
-left with almost all of program memory to itself. `--lean` applies to the
-library file — there is nothing in your program to make lean. Several
-routines named in one command all go into the same library file.
+The library holds the binary alone, so the program is left with almost all of
+program memory to itself. `--lean` applies to the library file — there is
+nothing in your program to make lean. Several routines named in one command
+all go into the same library file.
 
-**Read A.8 before converting anything large this way.** `LIBRARY SAVE` takes
-the CSUB out of *program* memory, so the library file has to load first, and
-that costs the hex text and the binary together. The tool prints the figure to
-check against `MEMORY`.
+`LIBRARY LOAD` reads the file straight into the library, converting the hex to
+binary as it goes, so what it costs is the blob and nothing more. A program can
+do it for itself, as its first statement:
+
+```basic
+LIBRARY LOAD "mylib.bas", O
+```
+
+It installs the library and restarts the program, and on every later run it
+sees the library is already the right one and does nothing — so this is a
+reasonable thing to leave in a program you give somebody.
 
 ### Step 7 — prove it gives the same answer
 
@@ -611,36 +622,40 @@ correct. What stops it is size, in a way worth following through because it is
 the case `--library` was added for.
 
 Its blob is 37 KB. In the program that is about 89 KB of text, which does not
-fit — so it goes to a library instead, and **whether that works depends on the
-board**.
+fit — so it goes to a library instead:
 
-Getting it into the library costs the 86 KB library file *plus* the 37 KB
-binary built from it, both in program memory at once: about 121 KB. An RP2040
-has 100 KB, so the load stops quietly, `LIBRARY SAVE` writes 752 bytes — the
-wrapper and the declaration — and calling it gives `Internal fault 5`. An
-RP2350 has 144 KB, and it simply works.
+```
+python mmb2csub.py solar_eclipse.bas sefunc --library sefunc.bas --lean
+```
 
-On an RP2350, then, the whole of `sefunc` goes into the library and the
-program runs in **2.5 seconds instead of 13** — 2.7 at 252 MHz and 2.48 at
-378. One conversion, covering 15 of the 20 profiled routines and 99.8% of the
-calls.
+and on the board, `LIBRARY LOAD "sefunc.bas"`. That makes a 37 KB library
+entry and leaves the whole of program memory for the program, on **either**
+board. The result:
+
+| | interpreted | with `sefunc` in the library |
+|---|---|---|
+| RP2350B at 252 MHz | 13 s | **2.7 s** |
+| RP2350B at 378 MHz | | **2.48 s** |
+| RP2040 (PicoMiteVGA) | | **5.7 s** |
+
+One conversion, covering 15 of the 20 profiled routines and 99.8% of the
+calls, and the answers are identical on both boards to the last digit.
 
 Note how little the clock speed matters once the routine is converted: half
 again as much CPU buys under 10%. Before the conversion the program was
 waiting on the interpreter, and that is what has gone.
 
-Two things had to be done first, and they are the two traps this appendix
-warns about. The globals `sefunc` reaches have to exist before the wrapper can
-take their addresses, so the ones the program never declares need a `Dim` at
-program level — see A.7. And the library file has to be crunched on the way in
-(`XMODEM C`, or `LOAD ,C`) to leave room for the binary.
+One thing has to be done first, and it is the trap A.7 describes. The globals
+`sefunc` reaches must exist before the wrapper can take their addresses, so the
+five this program never declares need a `Dim` at program level.
 
-**If your board is the smaller one**, the answer is several smaller
-conversions from the second listing. `tdb2utc` has a 3.5 KB blob and carries
-`jbrent`, `jdfunc`, `utc2tdb` and `findleap` — between them nearly 5,000
-calls; `gast2` carries `nut2000_lp`; `eci2topo` carries six more. Choose them
-so their closures do not overlap, put them all in one library file with a
-single command, and `LIBRARY SAVE` that.
+**On firmware older than 6.03.02b10** the library route cost 3.4x the blob and
+`sefunc` would not go onto a 100 KB board at all (A.8). The answer there is
+several smaller conversions from the second listing: `tdb2utc` has a 3.5 KB
+blob and carries `jbrent`, `jdfunc`, `utc2tdb` and `findleap` — between them
+nearly 5,000 calls; `gast2` carries `nut2000_lp`; `eci2topo` carries six more.
+Choose them so their closures do not overlap and put them all in one library
+file with a single command.
 
 Two things to take from that. The listing, not the profile, tells you what to
 convert. And when a routine is out of reach it is now nearly always about size
@@ -862,36 +877,28 @@ fit; only the binary was dropped. Calling it then gives
 `Error : Internal fault 5(sorry)`.
 
 In order of what to try: `--lean`, then crunching the rest of the program
-(`XMODEM C`, `AUTOSAVE C`, `LOAD ,C`), then `--library` and `LIBRARY SAVE`,
-which stores the binary alone and drops the hex text entirely.
+(`XMODEM C`, `AUTOSAVE C`, `LOAD ,C`), then `--library` and `LIBRARY LOAD`,
+which puts the blob in the library and leaves the program almost all of
+program memory.
 
-**The library has its own ceiling, and it is not the library's size.**
-`LIBRARY SAVE` copies the CSUB out of *program* memory, so the library file
-has to load into program memory first — and loading it costs the hex text
-**and** the binary built from it, at the same time. Roughly 3.4x the blob.
+**The library costs the blob and nothing more.** `LIBRARY LOAD "file.bas"`
+reads the file itself, converting each CSUB's hex to binary as it streams
+past, and never stores the hex text at all. So the limit is simply the library
+area — a slot the size of program memory, 100 KB on an RP2040 and 144 KB on an
+RP2350 — against the blob alone, not against 3.4x of it.
 
-That makes the ceiling **the board's program memory divided by about 3.4** —
-roughly a **29 KB blob on an RP2040's 100 KB**, and about **42 KB on an
-RP2350's 144 KB** — whatever the library area itself has free. `solar_eclipse`
-sits between the two: its 37 KB `sefunc` will not go into an RP2040's library
-and goes into an RP2350's without trouble (section 9).
+`solar_eclipse` is the case that makes the difference plain: its 37 KB
+`sefunc` becomes a 37 KB library entry and loads on either board (section 9).
 
-Crunching the library file on the way in (`XMODEM C`, `LOAD ,C`) buys some of
-that back, because it is the *text* that shrinks.
-
-Past that the failure is quiet, and worth recognising:
-
-- the load stops early — the tell is a missing `Saved nnn bytes`
-- `LIBRARY SAVE` reports a byte count far smaller than the blob
-- `LIBRARY LIST` shows the CSUB, because its *declaration* did fit
-- calling it gives `Error : Internal fault 5(sorry)`
-
-A 3.5 KB blob saves as 3660 bytes and works. A 36.9 KB blob on the same board
-reports 752 bytes — the wrapper and the declaration, with no code behind them.
-The tool prints what the load will need; compare it with `MEMORY` first.
-
-If a routine is over the line, convert something further down its call graph
-instead, as in section 9.
+**Older firmware is the thing to watch.** Before 6.03.02b10 the only route was
+`LIBRARY SAVE`, which takes the CSUB out of *program* memory — so the library
+file had to load there first, costing its hex text **and** the binary at once,
+about 3.4x the blob. That put the ceiling near a 29 KB blob on an RP2040. Past
+it the failure was quiet and is worth recognising if you meet it on an older
+board: the load stops early with no `Saved nnn bytes`, the save reports a byte
+count far smaller than the blob, `LIBRARY LIST` still shows the CSUB because
+its *declaration* fitted, and calling it gives `Error : Internal fault
+5(sorry)`.
 
 ---
 
