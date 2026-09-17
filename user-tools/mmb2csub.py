@@ -927,17 +927,19 @@ def do_list(conv, mmb2c, opt):
 
     print("\nConvertible, and not already inside another one's blob:")
     print("  %-14s %6s %8s %7s %7s  %s"
-          % ("routine", "args", "blob", "text", "closure", "also brings in"))
+          % ("routine", "args", "blob", "prog", "closure", "also brings in"))
     for n in sorted(roots, key=lambda x: -res[x][2]):
         ok, why, size, cl, na = res[n]
         others = sorted(c for c in cl if c != n)
         joined = ", ".join(others)
-        # text is what has to fit in PROGRAM memory: the hex is about 2.4x the
-        # blob, and an argument count over the ceiling means it cannot be
-        # called at all, however well it compiled
+        # What has to fit in PROGRAM memory, which is the blob TWICE over:
+        # the hex text of the CSUB block (about 2.4x) plus the binary the
+        # interpreter builds from it (1x). The board shows the two on
+        # separate MEMORY lines. An argument count over the ceiling means
+        # it cannot be called at all, however well it compiled.
         print("  %-14s %6s %8d %6dk %7d  %s"
               % (n, ("%d !" % na) if na > 16 else str(na), size,
-                 int(size * 2.4) // 1024, len(cl),
+                 int(size * 3.4) // 1024, len(cl),
                  (joined[:58] + "...") if len(joined) > 58 else (joined or "-")))
     sub = sorted(okset - set(roots), key=lambda x: -res[x][2])
     if sub:
@@ -946,21 +948,23 @@ def do_list(conv, mmb2c, opt):
         # try is the largest routine BELOW it that is not.
         print("\nAlso convertible, and worth having if a root above is out of reach:")
         print("  %-14s %6s %8s %7s %7s  %s"
-              % ("routine", "args", "blob", "text", "closure", "carried by"))
+              % ("routine", "args", "blob", "prog", "closure", "carried by"))
         for n in sub:
             ok, why, size, cl, na = res[n]
             print("  %-14s %6s %8d %6dk %7d  %s"
                   % (n, ("%d !" % na) if na > 16 else str(na), size,
-                     int(size * 2.4) // 1024, len(cl),
+                     int(size * 3.4) // 1024, len(cl),
                      ", ".join(sorted(covered_by[n])[:3])))
     bad = [n for n in names if not res[n][0]]
     if bad:
         print("\nNot convertible:")
         for n in bad:
             print("  %-14s %s" % (n, res[n][1]))
-    print("\nA CSUB costs its hex TEXT as well as its binary - roughly 3.5x the")
-    print("blob size in program memory - so check the total against the board")
-    print("before converting the big ones, and use LIBRARY SAVE if it will not fit.")
+    print("\nprog is what has to fit in PROGRAM memory: the hex TEXT of the CSUB")
+    print("plus the binary built from it, about 3.4x the blob. Compare it with the")
+    print("Free figure from MEMORY on the board - a missing 'Embedded C Routine'")
+    print("line there means the binary did not fit. --library moves it out of the")
+    print("program entirely, for LIBRARY SAVE.")
 
 
 # ---------------------------------------------------------------- main

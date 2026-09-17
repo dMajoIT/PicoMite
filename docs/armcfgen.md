@@ -9,6 +9,11 @@ This manual is in three parts:
    with `armcfgen.py`.
 3. **Appendix A — The CallTable** — every firmware routine a CSUB can call.
 
+If you would rather not write C at all, `mmb2csub.py` converts an MMBasic
+SUB or FUNCTION into a CSUB for you, using these same CallTable routines —
+see `docs/mmb2csub.md`. This manual is the one to read when you want control
+over the C, or when what you need is not something MMBasic can express.
+
 ---
 
 # Part 1 — Writing a CSUB
@@ -622,6 +627,11 @@ working.
 | `memcpy` | 0x158 | `void *memcpy(void *, const void *, size_t)` |
 | `memset` | 0x15C | `void *memset(void *, int, size_t)` |
 | `memmove` | 0x160 | `void *memmove(void *, const void *, size_t)` |
+| `Log` | 0x1A0 | `MMFLOAT log(MMFLOAT)` |
+| `Tan` | 0x1A4 | `MMFLOAT tan(MMFLOAT)` |
+| `RndVal` | 0x19C | `MMFLOAT RndVal(void)` — `RND`, same generator as BASIC |
+| `TimerVal` | 0x198 | `MMFLOAT TimerVal(void)` — `TIMER`, milliseconds |
+| `TimerSet` | 0x1AC | `void TimerSet(long long ms)` — `TIMER = n` |
 | `Cosine` | 0xF4 | `MMFLOAT cos(MMFLOAT)` |
 | `Sqrt` | 0xF8 | `MMFLOAT sqrt(MMFLOAT)` |
 | `Atan2` | 0xFC | `MMFLOAT atan2(MMFLOAT y, MMFLOAT x)` |
@@ -656,6 +666,45 @@ still `double`, so convert at the boundary: `DtoS` the incoming `pf()` values to
 > On the RP2040 (no FPU) these are *software* single precision — still faster
 > than software double, but not FPU‑accelerated. The double routines above use
 > the DCP coprocessor on RP2350.
+
+### MMBasic strings
+
+Added in 6.03.02b8. An MMBasic string is a **length byte followed by the
+data**: `s[0]` is the length and `s+1` the first character, so it is not a C
+string and `strlen`/`strcpy` do not apply to it.
+
+`MtoC` and `CtoM` convert in place, between that form and a NUL-terminated C
+string, and each returns its argument.
+
+| Name | Offset | Prototype / use |
+|---|---|---|
+| `MtoC` | 0x164 | `unsigned char *MtoC(unsigned char *s)` — MMBasic form to C string, in place |
+| `CtoM` | 0x168 | `unsigned char *CtoM(unsigned char *s)` — C string to MMBasic form, in place |
+| `Mstrcpy` | 0x16C | `void Mstrcpy(unsigned char *dst, unsigned char *src)` |
+| `Mstrcat` | 0x170 | `void Mstrcat(unsigned char *dst, const unsigned char *src)` |
+| `Mstrcmp` | 0x174 | `int Mstrcmp(const unsigned char *, const unsigned char *)` |
+
+These are the interpreter's **own** implementations of the string functions,
+so a CSUB and BASIC cannot disagree about what `MID$` means. Each takes the
+destination as its first argument and returns it; `GetTempStrMemory` (0x30)
+gives you a buffer of the right size.
+
+They never call `error()`, because `error()` does a `longjmp` that would
+abandon your CSUB's stack frame. **They clamp instead**: an out-of-range
+`start` or `count` is silently brought into range rather than reported. Check
+the arguments yourself if you need MMBasic's error.
+
+| Name | Offset | Prototype / use |
+|---|---|---|
+| `StrLeft` | 0x178 | `unsigned char *StrLeft(unsigned char *dst, const unsigned char *s, int n)` — `LEFT$` |
+| `StrRight` | 0x17C | `unsigned char *StrRight(unsigned char *dst, const unsigned char *s, int n)` — `RIGHT$` |
+| `StrCase` | 0x180 | `unsigned char *StrCase(unsigned char *dst, const unsigned char *s, int upper)` — `UCASE$` when upper, `LCASE$` when 0 |
+| `StrMid` | 0x184 | `unsigned char *StrMid(unsigned char *dst, const unsigned char *s, int spos, int nbr)` — `MID$`, spos is 1-based |
+| `StrChar` | 0x188 | `unsigned char *StrChar(unsigned char *dst, int c)` — `CHR$` |
+| `StrFill` | 0x18C | `unsigned char *StrFill(unsigned char *dst, int ch, int n)` — `SPACE$` (ch=' ') and `STRING$` |
+| `StrInstr` | 0x190 | `int StrInstr(const unsigned char *s1, const unsigned char *s2, int start)` — `INSTR`, 1-based, 0 if not found |
+| `StrFormat` | 0x194 | `unsigned char *StrFormat(unsigned char *dst, MMFLOAT f, long long i64, int isint, int m, int n, int ch)` — `STR$`; pass `isint` to choose which of `f`/`i64` is read, and `STR_AUTO_PRECISION` for n to get BASIC's default |
+| `StrVal` | 0x1A8 | `int StrVal(const unsigned char *p, MMFLOAT *f, long long *i)` — `VAL`, on a **C** string; returns non-zero if the result is an integer |
 
 ### Graphics
 

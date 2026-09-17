@@ -37,7 +37,171 @@ the firmware has little for this tool to remove.
 
 ---
 
-## 2. The recommended workflow
+## 2. Setting up
+
+`mmb2csub` is a Python program that drives a C compiler. Nothing is installed
+and nothing is configured: once the five pieces below are present it works
+from wherever you unpacked the firmware source.
+
+### 2.1 What you need
+
+| | |
+|---|---|
+| **Python 3.6 or later** | 3.8+ recommended |
+| **Arm GNU toolchain** | `arm-none-eabi-gcc` — the same compiler that builds the firmware |
+| **pyelftools** | a Python package; `armcfgen.py` reads the linked ELF with it |
+| **The PicoMite firmware source** | for `PicoCFunctions.h` and `mmcsub.h` |
+| **`mmb2c.py`** | the MMBasic-to-C transpiler, from the Fuzix distribution |
+
+Two things you do **not** need: the Pico SDK, and any ability to build the
+firmware. `mmb2csub` compiles a small freestanding blob, not a firmware image.
+
+`pyserial` is needed only if you use `xsend.py` to send programs to the board
+(section 7).
+
+### 2.2 Where the pieces have to live
+
+`mmb2csub.py` finds everything relative to itself, so there are no include
+paths to set:
+
+```
+PicoMite/                     <- the firmware source tree
+├── PicoCFunctions.h          <- found automatically
+└── user-tools/
+    ├── mmb2csub.py           <- you run this
+    ├── mmcsub.h              <- found automatically
+    └── armcfgen.py           <- called automatically
+```
+
+**Keep `mmb2csub.py` inside `user-tools/`.** Copied elsewhere it can no longer
+find the header it compiles against.
+
+`mmb2c.py` is the exception, because it belongs to another project and is not
+copied into this one. It is looked for in this order:
+
+1. `--mmb2c PATH` on the command line
+2. the `MMB2C_PATH` environment variable
+3. `mmb2c.py` sitting next to `mmb2csub.py` in `user-tools/`
+4. a couple of default Fuzix locations
+
+If none matches you get a message naming the places it looked. The simplest
+answer for most people is (3) — copy `mmb2c.py` into `user-tools/`.
+
+### 2.3 Windows
+
+**Python.** Install from python.org or the Microsoft Store, ticking *Add
+Python to PATH*. Check:
+
+```
+python --version
+```
+
+**The Arm toolchain.** Download the *arm-none-eabi* toolchain from Arm's
+Developer site and install it. The installer offers *Add path to environment
+variable* — tick it. If you have already built the firmware you have this
+already. Check:
+
+```
+arm-none-eabi-gcc --version
+```
+
+If that says it is not recognised, add the toolchain's `bin` to your PATH. It
+is typically:
+
+```
+C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\<version>\bin
+```
+
+**pyelftools:**
+
+```
+pip install pyelftools
+```
+
+**mmb2c.py.** Copy it into `user-tools\`, or point at it once per session:
+
+```
+set MMB2C_PATH=C:\path\to\mmb2c.py
+```
+
+To set it permanently, use *Edit environment variables for your account* in
+the Start menu.
+
+If you keep Fuzix in WSL rather than on Windows, Windows can read it directly
+through `\\wsl.localhost\<distro>\home\<you>\...` — no copying needed.
+
+### 2.4 Linux
+
+**Python** is already present on any current distribution. Check it is 3.6 or
+later with `python3 --version`. Use `python3` in place of `python` throughout
+this manual if your system has no `python`.
+
+**The Arm toolchain and pyelftools**, on Debian/Ubuntu/Raspberry Pi OS:
+
+```
+sudo apt install gcc-arm-none-eabi python3-pyelftools
+```
+
+On Fedora:
+
+```
+sudo dnf install arm-none-eabi-gcc-cs arm-none-eabi-newlib python3-pyelftools
+```
+
+On Arch:
+
+```
+sudo pacman -S arm-none-eabi-gcc python-pyelftools
+```
+
+If your distribution's toolchain is old or missing, Arm's own `.tar.xz` build
+works anywhere — unpack it and add its `bin` to your PATH:
+
+```
+export PATH=$PATH:/opt/arm-gnu-toolchain-<version>/bin
+```
+
+Put that line in `~/.bashrc` to make it permanent.
+
+`pip install pyelftools` also works, but on distributions that manage Python
+packages themselves you may need `pip install --user pyelftools` or a virtual
+environment.
+
+**mmb2c.py.** If you have a Fuzix checkout it is already there:
+
+```
+export MMB2C_PATH=~/src/FUZIX/Applications/mmb2c/mmb2c.py
+```
+
+### 2.5 Check it works
+
+This converts nothing and writes nothing — it compiles and links every routine
+in a program and reports what it found:
+
+```
+python mmb2csub.py yourprogram.bas --list
+```
+
+A listing means the whole chain works: Python found `mmb2c.py`, translated
+your program, called the compiler, and linked the result.
+
+### 2.6 If it does not
+
+| message | cause |
+|---|---|
+| `cannot find mmb2c.py` | see 2.2 — the message names every place it looked |
+| `arm-none-eabi-gcc: not found`, or `is not recognized` | the toolchain is not on your PATH |
+| `No module named 'elftools'` | `pip install pyelftools` |
+| `mmcsub.h: No such file` | `mmb2csub.py` has been moved out of `user-tools/` |
+| `No module named 'serial'` | only `xsend.py` needs this: `pip install pyserial` |
+
+A failure here is always one of these five. Once `--list` produces a listing
+the environment is finished with, and every later problem is about your
+program rather than your setup.
+
+---
+
+## 3. The recommended workflow
 
 ### Step 1 — find out where the time goes
 
@@ -60,13 +224,13 @@ program.
 
 ```
 Convertible, and not already inside another one's blob:
-  routine          args     blob    text closure  also brings in
-  DrawFrame           6     4280     10k       3  Rotate, Project, Clip
-  Julia              10     1136      2k       1  -
+  routine          args     blob    prog closure  also brings in
+  DrawFrame           6     4280     14k       3  Rotate, Project, Clip
+  Julia              10     1136      3k       1  -
 
 Also convertible, and worth having if a root above is out of reach:
-  routine          args     blob    text closure  carried by
-  Rotate              4      980      2k       1  DrawFrame
+  routine          args     blob    prog closure  carried by
+  Rotate              4      980      3k       1  DrawFrame
 
 Not convertible:
   AskUser        needs mm_input_line, mm_input_next
@@ -80,9 +244,10 @@ The four numbers are the whole decision:
   separate arguments and travel as a single array of their addresses, so a
   routine reaching twenty of them still takes only a handful.
 - **blob** — the machine code.
-- **text** — what it costs in **program memory**, which is what actually has to
-  fit. A CSUB is stored as hex text as well as binary, so this is about 2.4x
-  the blob. Compare it with what your board has spare.
+- **prog** — what it costs in **program memory**, which is what actually has
+  to fit. A CSUB is stored as hex text *and* as the binary built from it, so
+  this is about 3.4x the blob. Compare it with the `Free` figure from
+  `MEMORY` on the board.
 - **closure** — how many routines travel with it.
 
 ### Step 3 — pick ONE routine, as high up as fits
@@ -174,7 +339,7 @@ Do the correctness check before the timing. A fast wrong answer is not progress.
 
 ---
 
-## 3. What can be converted
+## 4. What can be converted
 
 **Yes:** SUBs and FUNCTIONs, numeric or string; numeric and string scalars,
 and numeric arrays, as parameters or globals; `LOCAL`s including arrays and
@@ -185,6 +350,12 @@ LCASE$ CHR$ SPACE$ STRING$ INSTR STR$ VAL LEN`, `PRINT`, and `PIXEL`.
 
 **Not yet:** string *arrays* as parameters; `INPUT`; `ON ERROR`; interrupt
 handlers; most graphics beyond `PIXEL`; file I/O; user-defined `TYPE`s.
+
+If what you need is in that second list, or is something MMBasic cannot
+express at all, a **hand-written CSUB** can still do it — that is a different
+job and has its own manual, `docs/armcfgen.md`, whose Appendix A lists every
+firmware routine a CSUB can call. The two tools produce the same kind of
+`CSUB ... END CSUB` block and can be mixed freely in one program.
 
 String work inside a CSUB runs on the firmware's own string routines — the same
 code `MID$` uses when your BASIC calls it — so a string-heavy routine gains what
@@ -201,7 +372,7 @@ and what is deliberately not a limitation.
 
 ---
 
-## 4. The limits, and what to do about them
+## 5. The limits, and what to do about them
 
 **Arguments.** `MAX_CSUB_ARGS` is 16 on RP2350 and 10 on RP2040, and that
 counts your parameters plus the globals the routine reaches. Past ten globals
@@ -230,7 +401,7 @@ A.2 has the detail.
 
 ---
 
-## 5. Options
+## 6. Options
 
 | | |
 |---|---|
@@ -252,7 +423,7 @@ the wrapper carries the original name instead.
 
 ---
 
-## 6. Getting the program onto the board
+## 7. Getting the program onto the board
 
 `user-tools/xsend.py` sends a program by XMODEM straight into program memory:
 
@@ -268,7 +439,7 @@ of the new one. If you benchmark that, you benchmark the old code.
 
 ---
 
-## 7. When something goes wrong
+## 8. When something goes wrong
 
 **`undefined reference to mm_xxx`** — that MMBasic feature has no CSUB runtime
 yet. The name tells you which: `mm_input_next` is `INPUT`, `mm_map_get` is
@@ -291,7 +462,7 @@ translation, and a difference is a bug in the tool, not in your program.
 
 ---
 
-## 8. A worked example, and an honest one
+## 9. A worked example, and an honest one
 
 `solar_eclipse.bas` — 3,200 lines, 33 routines — profiles like this: `findleap`
 1,455 calls, `utc2tdb` 1,455, `jdfunc` 1,454, `nut2000_lp` 954, then a dozen
@@ -333,7 +504,7 @@ the tool can build it.
 
 ## Appendix A — Limitations, and where they come from
 
-Section 3 lists what converts and section 4 the practical limits. This
+Section 4 lists what converts and section 5 the practical limits. This
 appendix explains *why*, because the reasons are more useful than the list:
 almost every restriction below follows from one of four facts about what a
 CSUB is, and once you know those four you can usually predict the answer
@@ -459,7 +630,7 @@ to build an argument pointer — so it costs a little wrapper text and nothing
 at run time.
 
 A routine reaching twenty globals is still usually the wrong thing to convert,
-for the reason in section 8: it is a sign the work is spread across the
+for the reason in section 9: it is a sign the work is spread across the
 program rather than contained in the routine.
 
 ---
@@ -517,9 +688,24 @@ has run. Programs written with `OPTION EXPLICIT` cannot have the problem.
 
 ### A.8 Program memory
 
-A CSUB is stored as hex text as well as binary, so it costs about **2.4x the
-blob size** in program memory. The `text` column of `--list` is the number
-that has to fit.
+A CSUB costs program memory **twice**: once as the hex text of the
+`CSUB ... END CSUB` block, and again as the binary the interpreter builds from
+that text. The board shows them on separate lines:
+
+```
+Program:
+   9K ( 8%) Program (126 lines)     <- the hex text, about 2.4x the blob
+   3K ( 2%) 1 Embedded C Routine    <- the binary,   about 1x
+  88K (90%) Free
+```
+
+So budget about **3.4x the blob size**, which is what the `prog` column of
+`--list` reports.
+
+**A missing `Embedded C Routine` line is the tell** that a CSUB's code did not
+make it. The program still lists and the CSUB still appears, because the text
+fit; only the binary was dropped. Calling it then gives
+`Error : Internal fault 5(sorry)`.
 
 In order of what to try: `--lean`, then crunching the rest of the program
 (`XMODEM C`, `AUTOSAVE C`, `LOAD ,C`), then `--library` and `LIBRARY SAVE`,
@@ -545,7 +731,7 @@ reports 752 bytes — the wrapper and the declaration, with no code behind them.
 The tool prints what the load will need; compare it with `MEMORY` first.
 
 If a routine is over the line, convert something further down its call graph
-instead, as in section 8.
+instead, as in section 9.
 
 ---
 
