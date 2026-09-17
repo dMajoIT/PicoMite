@@ -155,7 +155,7 @@ Do the correctness check before the timing. A fast wrong answer is not progress.
 
 **Yes:** SUBs and FUNCTIONs, numeric or string; numeric and string scalars,
 and numeric arrays, as parameters or globals; `LOCAL`s including arrays and
-strings; `IF`/`FOR`/`DO`/`WHILE`/`SELECT`/`EXIT`; all arithmetic and comparison;
+strings; `STATIC`s, which the wrapper keeps for you; recursion; `IF`/`FOR`/`DO`/`WHILE`/`SELECT`/`EXIT`; all arithmetic and comparison;
 `CONST`; and the MMBasic functions with firmware support — `SIN COS TAN LOG SQR
 ATAN2 ASIN ACOS POWER INT FIX ABS SGN RND TIMER`, `LEFT$ RIGHT$ MID$ UCASE$
 LCASE$ CHR$ SPACE$ STRING$ INSTR STR$ VAL LEN`, `PRINT`, and `PIXEL`.
@@ -171,6 +171,10 @@ You do not have to memorise that list. **Anything unsupported is refused**, by
 name, before anything is written — either by the tool or by the C compiler,
 which is the real scope check. The tool will not produce a CSUB it cannot
 account for.
+
+**Appendix A** explains where each restriction comes from, and covers two
+things this list cannot: what a CSUB does *instead* of stopping with an error,
+and what is deliberately not a limitation.
 
 ---
 
@@ -195,6 +199,11 @@ wrapper bigger.
 your converted routine is now *one* statement. The tool puts a break check
 inside every loop so `Ctrl-C` still works; without that a long CSUB makes the
 board stop answering.
+
+**No range checks, no clean stop.** A CSUB cannot reach the interpreter's
+error handling, so an out-of-range subscript writes to memory instead of
+reporting `Index out of bounds`. Convert code that already works. Appendix
+A.2 has the detail.
 
 ---
 
@@ -289,3 +298,214 @@ Two things to take from that. The listing, not the profile, tells you what to
 convert. And when a routine is out of reach it is now nearly always about size
 rather than shape — which is a question of where you put the blob, not whether
 the tool can build it.
+
+---
+
+## Appendix A — Limitations, and where they come from
+
+Section 3 lists what converts and section 4 the practical limits. This
+appendix explains *why*, because the reasons are more useful than the list:
+almost every restriction below follows from one of four facts about what a
+CSUB is, and once you know those four you can usually predict the answer
+without looking anything up.
+
+**The four facts.**
+
+1. To the interpreter, a CSUB is **one statement**.
+2. The blob is **code and constants only** — it has no writable data.
+3. It links **without a C library**.
+4. It has **no path back** to the interpreter's error handling.
+
+---
+
+### A.1 No writable data
+
+The firmware loads the blob at an address of its choosing and gives it no
+data segment. There is nowhere to put a variable that outlives a call.
+
+**`STATIC` still works**, but not by living in the CSUB. The wrapper declares
+an MMBasic `STATIC` of its own and passes its address in, which gives exactly
+the lifetime the original had — one instance, initialised on the first call,
+surviving every later one. Array bounds and initialisers are copied from your
+declaration, so this:
+
+```basic
+Static hits%, acc! = 1.5
+Static tab%(4)
+```
+
+becomes a wrapper holding the same three variables and passing all three. The
+cost is one argument each, against the ceiling in A.5.
+
+**What you cannot do** is keep state anywhere else. There is no equivalent of
+a C `static` inside the routine, and the 256 bytes of `CFuncRam` that a CSUB
+does own are already spoken for by the string scratch stack and the globals
+table.
+
+You will not hit this by accident. Since 6.03.02b8 the linker checks it:
+
+```
+this CSUB has writable static data (.bss); a CSUB has no data segment
+```
+
+That check exists because the failure it prevents is silent. The C is valid,
+the compile is clean, the blob builds and runs — and every access goes to
+memory belonging to something else. It is worth knowing about if you also
+write CSUBs by hand, because it applies to those identically.
+
+---
+
+### A.2 No error path
+
+`error()` in the firmware does a `longjmp`. A CSUB cannot call it: the jump
+would abandon the CSUB's own stack frame. So a CSUB has no way to stop with a
+message, and that has three consequences worth taking seriously.
+
+**`ON ERROR` is refused.** Nothing to add — the tool tells you.
+
+**Array subscripts are not checked.** This is the one that catches people.
+MMBasic checks every subscript and stops with `Index out of bounds`. The
+generated C does not check at all:
+
+```c
+__L->v_s[(int)(v_k)] = v_k;     /* no range test, by design */
+```
+
+A subscript one past the end writes to whatever is next in memory. In the
+interpreted version that same line gives you a clean error and a line number.
+**Convert code that is already correct**, and do not use a CSUB to find bugs.
+
+**Stack overflow resets the board.** Recursion is supported and works, but
+without the interpreter's depth check. A recursive routine with a `LOCAL`
+array was measured both ways: MMBasic stopped it cleanly at depth 9 with
+`Stack overflow, at depth 9`, while the converted CSUB ran past depth 100 and
+reset the board somewhere before 150, with no message. Deep or unbounded
+recursion is the wrong thing to convert.
+
+The general rule: a CSUB fails the way C fails, not the way BASIC fails.
+
+---
+
+### A.3 One statement
+
+The interpreter checks the break key *between* statements, and your routine is
+now a single statement. The tool puts a break check inside every loop, so
+`Ctrl-C` still works — without it a long CSUB makes the board stop answering.
+The check costs a counter increment per iteration and fires once every 1024.
+
+Two smaller consequences: a profiler cannot see inside a CSUB, so convert
+before you profile again rather than after; and a run-time fault has no line
+number to report, which is the other half of A.2.
+
+---
+
+### A.4 No C library
+
+Everything routes to the firmware's own routines through the CallTable, so
+there is no second copy of soft-float or string code in the blob. When
+something has no route, you get a link error naming it:
+
+- **`undefined reference to mm_xxx`** — an MMBasic feature with no CSUB
+  runtime yet. The name says which: `mm_input_next` is `INPUT`, `mm_fb_copy`
+  is the framebuffer.
+- **`undefined reference to __aeabi_xxx`** — an arithmetic helper is missing.
+  That one is a gap in the tool rather than in your program; please report it.
+
+This is why the tool can be trusted not to produce a CSUB it cannot account
+for: the compiler and linker are the scope check, so the supported list cannot
+quietly drift out of date.
+
+---
+
+### A.5 The argument ceiling
+
+`MAX_CSUB_ARGS` is **16 on RP2350 and 10 on RP2040**, counting your
+parameters, one per global the routine reaches, and one per `STATIC`.
+
+Past ten globals the tool stops passing them separately and gathers them into
+a single array of addresses, which lifts the limit for practical purposes. The
+wrapper fills it with `PEEK(VARADDR x)` — the same call the interpreter makes
+to build an argument pointer — so it costs a little wrapper text and nothing
+at run time.
+
+A routine reaching twenty globals is still usually the wrong thing to convert,
+for the reason in section 8: it is a sign the work is spread across the
+program rather than contained in the routine.
+
+---
+
+### A.6 Strings
+
+String work runs on the firmware's own routines — the same code `MID$` uses
+when your BASIC calls it — so results are identical and the gain is only the
+interpreting overhead. Three limits:
+
+**A statement's temporaries are bounded.** String expressions build
+temporaries in a 4 KB scratch arena, about sixteen full-length strings, thrown
+away at the end of each statement. A single statement that builds more than
+that wraps round and reuses the space rather than overrunning it, which would
+corrupt that statement's own earlier temporaries. Splitting a monster
+concatenation across several statements is the fix; in practice this is very
+hard to reach.
+
+**String arrays cannot be parameters.** A string array's element stride
+follows the `LENGTH` it was declared with, and the CSUB is never told what
+that is, so indexing one would be wrong *silently*. Refused for that reason.
+Scalar string parameters are fine — they are already exactly what the ABI
+passes. The same applies to a `STATIC` string array.
+
+**`LENGTH` on a simple string variable is ignored** by MMBasic itself, which
+always gives those 256 bytes — so nothing is lost in translation there.
+
+---
+
+### A.7 Program memory
+
+A CSUB is stored as hex text as well as binary, so it costs about **2.4x the
+blob size** in program memory. The `text` column of `--list` is the number
+that has to fit.
+
+In order of what to try: `--lean`, then crunching the rest of the program
+(`XMODEM C`, `AUTOSAVE C`, `LOAD ,C`), then `LIBRARY SAVE`, which stores the
+binary alone and drops the hex text entirely.
+
+---
+
+### A.8 What is not translated at all
+
+As of 6.03.02b8, 132 of the 166 routines in the test corpus convert. What the
+remaining 34 are waiting on, largest group first:
+
+| | |
+|---|---|
+| interrupt handlers (`SETTICK`, `ON KEY`, pin interrupts) | a CSUB cannot be one |
+| user-defined `TYPE`s, as parameters or locals | not yet translated |
+| `INPUT` | no CSUB runtime yet |
+| graphics beyond `PIXEL`, framebuffers, file I/O | no CSUB runtime yet |
+| `DIM` of a `LOCAL` array at run time | needs a heap the blob does not have |
+| routine names containing dots | a tool bug, not a limitation |
+
+You do not have to memorise any of it. Everything unsupported is refused by
+name before anything is written, so the failure mode is a message rather than
+a surprise.
+
+---
+
+### A.9 What is *not* a limitation
+
+Worth stating, because it saves chasing imagined problems:
+
+- **Arithmetic is identical.** Integer and floating-point operations, and
+  every maths function, call the same firmware routines the interpreter calls.
+  There is no reduced-precision path and no second implementation.
+- **String functions are identical**, for the same reason.
+- **Recursion works**, within A.2's caveat about depth.
+- **`LOCAL` arrays and strings work**, including in recursive routines, each
+  call getting its own.
+- **Call sites do not change.** The CSUB takes the routine's name, or a
+  wrapper does when something has to be marshalled.
+
+So if a converted routine gives a different answer from the interpreted one,
+that is a **bug in the tool**, not a rounding difference or a documented
+limit. The `.bak` still has the original; please report the smallest input
+that differs.
