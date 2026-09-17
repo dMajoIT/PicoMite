@@ -3932,7 +3932,11 @@ int MIPS16 FileLoadLibrary(unsigned char *fname, uint32_t *hashout, unsigned cha
         return false;
     lib_scan(fnbr, hashout, NULL, &textlen, NULL, &binlen, 0xFFFFFFFF, &nfix);
     FileClose(fnbr);
-    if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && Option.LIBRARY_HASH == *hashout)
+    /* A zero hash means the slot was written by some route other than LIBRARY
+       LOAD (LIBRARY SAVE, or a DELETE), so it cannot be claimed to hold this
+       file and the work must be done. */
+    if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && Option.LIBRARY_HASH &&
+        Option.LIBRARY_HASH == *hashout)
         return false; /* already exactly this - nothing to do, and nothing allocated */
 
     text = GetTempMemory(textlen + 4);

@@ -2191,6 +2191,13 @@ void MIPS16 cmd_library(void)
         }
         FlashWriteClose();
         Option.LIBRARY_FLASH_SIZE = MAX_PROG_SIZE;
+        /* LIBRARY_HASH records WHICH FILE the library in flash came from, and
+           LIBRARY LOAD skips all its work when it matches.  This route puts a
+           different library in the same slot, so that record stops being true:
+           clear it.  Left stale, a program installing its own library is told
+           it already has one when the slot holds somebody else's, and runs on
+           to fail with "Unknown command". */
+        Option.LIBRARY_HASH = 0;
         SaveOptions();
 
         if (MMCharPos > 1)
@@ -2308,7 +2315,7 @@ void MIPS16 cmd_library(void)
         }
         if (!FileLoadLibrary(argv[0], &hash, &image, &libbin, &libbinlen, &libnfix))
             return;
-        if (haslib && Option.LIBRARY_HASH == hash)
+        if (haslib && Option.LIBRARY_HASH && Option.LIBRARY_HASH == hash)
             return; /* already have exactly this one - nothing to do */
         if (haslib && !overwrite)
         {
@@ -2389,6 +2396,7 @@ void MIPS16 cmd_library(void)
         enable_interrupts_pico();
 
         Option.LIBRARY_FLASH_SIZE = 0;
+        Option.LIBRARY_HASH = 0;
         SaveOptions();
         return;
         // Clear Program Memory and also the Library at the end.
