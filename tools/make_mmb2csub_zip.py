@@ -29,8 +29,9 @@ FW = os.path.dirname(HERE)
 TOOLS = os.path.join(FW, "user-tools")
 NAME = "mmb2csub"
 
-# mmb2c.py belongs to the Fuzix project and is not kept in this tree, so it is
-# looked for the same way mmb2csub.py looks for it.
+# mmb2c.py is a tool in its own right and is kept in one place rather than
+# copied into every project that uses it, so it is looked for the same way
+# mmb2csub.py looks for it.
 MMB2C_CANDIDATES = [
     os.environ.get("MMB2C_PATH"),
     os.path.join(TOOLS, "mmb2c.py"),
@@ -48,8 +49,8 @@ WHAT IS IN HERE
   user-tools/mmb2csub.py    the converter - this is what you run
   user-tools/mmcsub.h       the runtime the generated CSUB compiles against
   user-tools/armcfgen.py    turns the compiled object into a CSUB hex block
-  user-tools/mmb2c.py       the MMBasic-to-C translator, from the Fuzix
-                            project - see THIRD PARTY below
+  user-tools/mmb2c.py       the MMBasic-to-C translator that does the
+                            MMBasic-to-C half of the job
   user-tools/xsend.py       optional: sends a program to the board by XMODEM
   PicoCFunctions.h          the firmware's CSUB header
   docs/                     this tool's manual, and the one for writing a
@@ -85,12 +86,6 @@ THE BOARD NEEDS FIRMWARE 6.03.02b9 OR LATER
   calls a CallTable entry that does not exist yet, and the board crashes with
   no message. If a CSUB that built cleanly misbehaves from its very first
   call, check this first.
-
-THIRD PARTY
-  user-tools/mmb2c.py is not part of the PicoMite project. It is the MMBasic
-  to C translator from the Fuzix project and is included here only so that
-  this package runs out of the box. Its own licence and copyright apply to
-  it; check those before redistributing this archive.
 """
 
 

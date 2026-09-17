@@ -345,7 +345,7 @@ static MMFLOAT mm_fix(MMFLOAT v) { return IntToFloat(__aeabi_d2lz(v)); }
  *
  *  MMPrintString, IntToStr and FloatToStr are all CallTable vectors, so
  *  this is mapping rather than implementing. The buffered *_se/_ie/_fe
- *  forms exist in the Fuzix runtime to batch console writes; here every
+ *  forms exist in mmb2c's own runtime to batch console writes; here every
  *  write already goes through one call, so they are the same thing.
  * ------------------------------------------------------------------ */
 /* The buffer comes off the scratch stack, NOT from a static: a CSUB has no

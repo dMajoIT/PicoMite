@@ -78,7 +78,7 @@ from wherever you unpacked the firmware source.
 | **Arm GNU toolchain** | `arm-none-eabi-gcc` — the same compiler that builds the firmware |
 | **pyelftools** | a Python package; `armcfgen.py` reads the linked ELF with it |
 | **The PicoMite firmware source** | for `PicoCFunctions.h` and `mmcsub.h` |
-| **`mmb2c.py`** | the MMBasic-to-C transpiler, from the Fuzix distribution |
+| **`mmb2c.py`** | the MMBasic-to-C translator |
 | **Firmware 6.03.02b9 or later** | on the board itself — see below |
 
 Two things you do **not** need: the Pico SDK, and any ability to build the
@@ -119,13 +119,15 @@ PicoMite/                     <- the firmware source tree
 **Keep `mmb2csub.py` inside `user-tools/`.** Copied elsewhere it can no longer
 find the header it compiles against.
 
-`mmb2c.py` is the exception, because it belongs to another project and is not
-copied into this one. It is looked for in this order:
+`mmb2c.py` is the exception. It is a tool in its own right — the same
+translator that, converted to C, runs as a native application under the Fuzix
+port — so it is kept in one place rather than copied into every project that
+uses it. It is looked for in this order:
 
 1. `--mmb2c PATH` on the command line
 2. the `MMB2C_PATH` environment variable
 3. `mmb2c.py` sitting next to `mmb2csub.py` in `user-tools/`
-4. a couple of default Fuzix locations
+4. a couple of default locations
 
 If none matches you get a message naming the places it looked. The simplest
 answer for most people is (3) — copy `mmb2c.py` into `user-tools/`.
@@ -170,7 +172,7 @@ set MMB2C_PATH=C:\path\to\mmb2c.py
 To set it permanently, use *Edit environment variables for your account* in
 the Start menu.
 
-If you keep Fuzix in WSL rather than on Windows, Windows can read it directly
+If you keep it under WSL rather than on Windows, Windows can read it directly
 through `\\wsl.localhost\<distro>\home\<you>\...` — no copying needed.
 
 ### 2.4 Linux
@@ -210,7 +212,7 @@ Put that line in `~/.bashrc` to make it permanent.
 packages themselves you may need `pip install --user pyelftools` or a virtual
 environment.
 
-**mmb2c.py.** If you have a Fuzix checkout it is already there:
+**mmb2c.py.** Point at wherever you keep it:
 
 ```
 export MMB2C_PATH=~/src/FUZIX/Applications/mmb2c/mmb2c.py

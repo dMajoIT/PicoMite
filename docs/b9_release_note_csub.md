@@ -15,11 +15,11 @@ as it calls a SUB. The Julia set demo included with the tool renders in 5.9
 seconds instead of 119 on an RP2040, and 2.5 instead of 86 on an RP2350 - 20x
 and 35x - and draws a byte-identical image either way.
 
-**The heavy lifting is not ours.** The MMBasic-to-C translation is done by
-`mmb2c.py`, Alan Cox's MMBasic translator from the Fuzix project — a far more
-complete piece of work than we could have justified writing, and it already
-understood MMBasic's scope rules, string semantics and array layouts. What has
-been added here is the other half: a driver that picks one routine out of your
+**How it works.** The translation from MMBasic to C is done by `mmb2c.py`, a
+complete MMBasic-to-C translator — the same one that, converted to C, runs as
+a native application under the Fuzix port. It already understood MMBasic's
+scope rules, string semantics and array layouts, which is the hard part. What
+`mmb2csub` adds is the other half: a driver that picks one routine out of your
 program and works out what it needs, and a runtime that maps the translated C
 onto the firmware's *own* routines through the CallTable.
 

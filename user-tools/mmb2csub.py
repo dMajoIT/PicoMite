@@ -3,7 +3,7 @@
 
     python mmb2csub.py prog.bas --sub PlotJulia [-o out.txt] [--keep-c]
 
-It drives the Fuzix MMBasic->C transpiler (mmb2c.py) to get C for the chosen
+It drives the MMBasic->C translator (mmb2c.py) to get C for the chosen
 routine, wraps it in a CSUB entry shim, and runs armcfgen.py to produce the
 `CSUB name ... End CSUB` block.
 
@@ -44,8 +44,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FIRMWARE = os.path.dirname(HERE)          # PicoCFunctions.h lives one up
 ARMCFGEN = os.path.join(HERE, "armcfgen.py")
 
-# Where mmb2c.py may be found, in order.  Keeping the FUZIX tree canonical
-# rather than vendoring a copy: this is a driver, not a fork.
+# Where mmb2c.py may be found, in order.  It is a tool in its own right and
+# is kept in one place rather than copied into every project that uses it -
+# this is a driver for it, not a fork of it.
 MMB2C_CANDIDATES = [
     os.environ.get("MMB2C_PATH"),
     os.path.join(HERE, "mmb2c.py"),
