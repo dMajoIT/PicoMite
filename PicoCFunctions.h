@@ -67,6 +67,9 @@
 #endif
 #define MMFLOAT double
 #define MAXKEYLEN 64
+#define MAXSTRLEN 255          // maximum length of an MMBasic string
+#define STRINGSIZE 256         // must be 1 more than MAXSTRLEN
+#define STR_AUTO_PRECISION 999 // STR$/FORMAT$: as many digits as it takes
 
 // Address of the API (Call) Table.
 // Discovered at RUNTIME so one compiled CSUB runs on every PicoMite variant and

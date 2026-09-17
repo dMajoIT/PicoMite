@@ -287,13 +287,16 @@ def check_scope(conv, routine, name, routines=None):
         if uses_on_error(conv, r):
             bad.append("%s uses ON ERROR; a CSUB cannot reach the "
                        "interpreter's error handling" % who)
-        if r.is_func and r.ty == "s":
-            bad.append("%s is a string FUNCTION; strings are phase 2" % who)
         for p in r.params:
             if p.stype is not None:
                 bad.append("%s: parameter '%s' is a user TYPE" % (who, p.name))
-            elif getattr(p, "ty", None) == "s":
-                bad.append("%s: parameter '%s' is a string; strings are phase 2"
+            elif getattr(p, "ty", None) == "s" and p.is_array:
+                # A string SCALAR is just a char* - what the ABI already passes.
+                # A string ARRAY is not: its element stride follows a declared
+                # LENGTH that the CSUB is never told, so indexing it would be
+                # wrong, silently.
+                bad.append("%s: parameter '%s' is a string ARRAY; its element "
+                           "stride follows a LENGTH the CSUB is not told"
                            % (who, p.name))
     return bad
 
@@ -429,10 +432,16 @@ def entry_shim(conv, routine, entry, bodytext, gl, gtab=False):
     if routine.is_func:
         # MMBasic passes every argument by reference, so a FUNCTION's result is
         # just one more out-parameter and the generated C is used as emitted.
-        retslot = CT[routine.ty]
+        # A STRING function already works that way in mmb2c's output - it takes
+        # its destination as its first parameter, char *__ret - so there the
+        # slot is handed straight through rather than assigned to.
         decl.append("void *a0")
         passed.append(sfx("__r", False, routine.ty))
         slot = 1
+        if routine.ty == "s":
+            args.append("(char *)a0")
+        else:
+            retslot = CT[routine.ty]
     for p in routine.params:
         args.append("(%s *)a%d" % (CT[p.ty], slot))
         decl.append("void *a%d" % slot)

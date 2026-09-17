@@ -69,15 +69,16 @@ Also convertible, and worth having if a root above is out of reach:
   Rotate              4      980      2k       1  DrawFrame
 
 Not convertible:
-  ReadName       parameter 'n' is a string; strings are phase 2
   AskUser        needs mm_input_line, mm_input_next
+  Report         parameter 'pt' is a user TYPE
 ```
 
 The four numbers are the whole decision:
 
 - **args** — how many arguments the CSUB will take. Your parameters, plus one
-  for every global the routine reaches. A `!` means it is over the limit
-  (16 on RP2350, 10 on RP2040) and the routine cannot be called at all.
+  for every global the routine reaches. Past ten, the globals stop being
+  separate arguments and travel as a single array of their addresses, so a
+  routine reaching twenty of them still takes only a handful.
 - **blob** — the machine code.
 - **text** — what it costs in **program memory**, which is what actually has to
   fit. A CSUB is stored as hex text as well as binary, so this is about 2.4x
@@ -152,15 +153,19 @@ Do the correctness check before the timing. A fast wrong answer is not progress.
 
 ## 3. What can be converted
 
-**Yes:** SUBs and numeric FUNCTIONs; numeric scalars and arrays as parameters
-or globals; `LOCAL`s including arrays; `IF`/`FOR`/`DO`/`WHILE`/`SELECT`/`EXIT`;
-all arithmetic and comparison; `CONST`; and the MMBasic functions with firmware
-support — `SIN COS TAN LOG SQR ATAN2 ASIN ACOS POWER INT FIX ABS SGN RND TIMER`,
-`LEFT$ RIGHT$ MID$ UCASE$ LCASE$ CHR$ SPACE$ STRING$ INSTR STR$ VAL LEN`,
-`PRINT`, and `PIXEL`.
+**Yes:** SUBs and FUNCTIONs, numeric or string; numeric and string scalars,
+and numeric arrays, as parameters or globals; `LOCAL`s including arrays and
+strings; `IF`/`FOR`/`DO`/`WHILE`/`SELECT`/`EXIT`; all arithmetic and comparison;
+`CONST`; and the MMBasic functions with firmware support — `SIN COS TAN LOG SQR
+ATAN2 ASIN ACOS POWER INT FIX ABS SGN RND TIMER`, `LEFT$ RIGHT$ MID$ UCASE$
+LCASE$ CHR$ SPACE$ STRING$ INSTR STR$ VAL LEN`, `PRINT`, and `PIXEL`.
 
-**Not yet:** strings as *parameters*; `INPUT`; `ON ERROR`; most graphics beyond
-`PIXEL`; file I/O; user-defined `TYPE`s.
+**Not yet:** string *arrays* as parameters; `INPUT`; `ON ERROR`; interrupt
+handlers; most graphics beyond `PIXEL`; file I/O; user-defined `TYPE`s.
+
+String work inside a CSUB runs on the firmware's own string routines — the same
+code `MID$` uses when your BASIC calls it — so a string-heavy routine gains what
+the interpreting overhead was costing and no more. See the table in section 1.
 
 You do not have to memorise that list. **Anything unsupported is refused**, by
 name, before anything is written — either by the tool or by the C compiler,
@@ -171,10 +176,12 @@ account for.
 
 ## 4. The limits, and what to do about them
 
-**Arguments.** `MAX_CSUB_ARGS` is 16 on RP2350 and 10 on RP2040. Every global
-the routine reaches costs one. A routine reaching twenty globals is usually the
-wrong thing to convert; either convert something further down the call graph,
-or gather the globals into an array and pass that.
+**Arguments.** `MAX_CSUB_ARGS` is 16 on RP2350 and 10 on RP2040, and that
+counts your parameters plus the globals the routine reaches. Past ten globals
+the tool gathers them into one array of addresses instead, which lifts the
+limit for practical purposes — the wrapper fills it with `PEEK(VARADDR x)`,
+which is the same call the interpreter makes to build an argument pointer.
+It costs a little wrapper text and nothing at run time.
 
 **Program memory.** `text` in the listing, against what `MM.INFO(PROGRAM SIZE)`
 tells you is free. Remedies, in order: `--lean`, then crunching the rest of the
@@ -261,17 +268,24 @@ The call-count ordering suggests converting `findleap`. The listing says
 otherwise: `findleap` is *inside* `sefunc`'s blob, and converting `sefunc`
 covers 15 of the 20 profiled routines and 99.8% of the calls.
 
-But `sefunc` reaches **twenty globals**, so it would need 22 arguments and
-cannot be called at all — and at 87 KB of program text it would not fit anyway.
-So would `minima`, `brent` and `broot`, the three roots above it.
+`sefunc` reaches **twenty globals**, which used to put it out of reach on
+argument count alone. It no longer does — they travel as one array, so the CSUB
+takes three arguments: `x!`, `fx!` and the table. What rules it out now is size.
+Its blob is 37 KB, which is about 89 KB of program text, and `minima`, `brent`
+and `broot` — the three roots above it — are larger still.
 
-The answer for this program is therefore several smaller conversions from the
-second listing — `tdb2utc` at 9 KB carries `jbrent`, `jdfunc`, `utc2tdb` and
-`findleap` between them nearly 5,000 calls; `gast2` at 6 KB carries
-`nut2000_lp`; `eci2topo` at 5 KB carries six more — chosen so their closures do
-not overlap.
+So the choice is between two routes:
+
+- **`LIBRARY SAVE`**, which stores the 37 KB binary without the hex text. If you
+  have a spare flash slot, one conversion covers 15 of the 20 profiled routines
+  and 99.8% of the calls.
+- **Several smaller conversions** from the second listing, if you do not.
+  `tdb2utc` at 9 KB carries `jbrent`, `jdfunc`, `utc2tdb` and `findleap` —
+  between them nearly 5,000 calls; `gast2` at 6 KB carries `nut2000_lp`;
+  `eci2topo` at 5 KB carries six more. Choose them so their closures do not
+  overlap.
 
 Two things to take from that. The listing, not the profile, tells you what to
-convert. And a program written around shared global state is hard to convert
-whatever the tool does: the thing that makes `sefunc` unconvertible is not its
-size but its twenty globals.
+convert. And when a routine is out of reach it is now nearly always about size
+rather than shape — which is a question of where you put the blob, not whether
+the tool can build it.

@@ -36,16 +36,17 @@ typedef long long MMINTEGER;
 /* MMFLOAT is already double, from PicoCFunctions.h */
 
 /* An MMBasic string is a LENGTH BYTE followed by the data: s[0] is the length,
-   s+1 the first character. These are the interpreter's own limits. */
-#ifndef MAXSTRLEN
-#define MAXSTRLEN 255
-#endif
-#ifndef STRINGSIZE
-#define STRINGSIZE 256
-#endif
-#ifndef MM_AUTO_PRECISION
-#define MM_AUTO_PRECISION 999 /* == the firmware's STR_AUTO_PRECISION */
-#endif
+   s+1 the first character. MAXSTRLEN, STRINGSIZE, MAXDIM and
+   STR_AUTO_PRECISION all come from PicoCFunctions.h, which publishes the
+   firmware's own values - so they track the build rather than being guessed
+   here, and a hand-written CSUB gets them too.
+
+   These are mmb2c's names for the same things. It uses them in the struct it
+   declares for a routine's LOCAL arrays and strings, which the blob carries,
+   so they have to exist under these spellings. */
+#define MM_STRSZ (MAXSTRLEN + 2)      /* length byte, data, trailing NUL */
+#define MM_MAXDIM MAXDIM              /* bounds table is [count, d0..dn] */
+#define MM_AUTO_PRECISION STR_AUTO_PRECISION
 
 /* ------------------------------------------------------------------ *
  *  The scratch stack
@@ -292,6 +293,23 @@ static void mm_pr_f(MMFLOAT v)
 #define mm_scmp(a, b) Mstrcmp((const unsigned char *)(a), (const unsigned char *)(b))
 #define mm_sset(d, s) Mstrcpy((unsigned char *)(d), (unsigned char *)(s))
 #define mm_ssetm(d, cap, s) Mstrcpy((unsigned char *)(d), (unsigned char *)(s))
+
+/* A destination for a string FUNCTION's result, and a by-value copy of a
+   string argument. Both are scratch temporaries, so they live until the
+   statement's mm_release() - which is the lifetime MMBasic gives them. */
+static char *mm_tmp(void)
+{
+    char *t = (char *)mm_tmpstr();
+    t[0] = 0;
+    return t;
+}
+
+static char *mm_scopy(const char *s)
+{
+    unsigned char *t = mm_tmpstr();
+    Mstrcpy(t, (unsigned char *)s);
+    return (char *)t;
+}
 
 static char *mm_scat(const char *a, const char *b)
 {
