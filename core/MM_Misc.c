@@ -2247,7 +2247,9 @@ void MIPS16 cmd_library(void)
     {
         int overwrite = 0, haslib;
         uint32_t hash = 0;
-        unsigned char *image = NULL;
+        unsigned char *image = NULL, *libbin = NULL;
+        uint32_t libbinlen = 0;
+        int libnfix = 0;
         /* Captured before anything else runs.  Loading the file clears
            CurrentLinePtr somewhere down in the file layer, and writing the
            image sets it to a line inside the library, so by the end of this
@@ -2304,7 +2306,7 @@ void MIPS16 cmd_library(void)
             if (*c != 0xFFFFFFFF)
                 error("Flash Slot % already in use", MAXFLASHSLOTS);
         }
-        if (!FileLoadLibrary(argv[0], &hash, &image))
+        if (!FileLoadLibrary(argv[0], &hash, &image, &libbin, &libbinlen, &libnfix))
             return;
         if (haslib && Option.LIBRARY_HASH == hash)
             return; /* already have exactly this one - nothing to do */
@@ -2328,7 +2330,11 @@ void MIPS16 cmd_library(void)
            rather than at the line we are executing.  Everything after this
            depends on it - error reporting, and the restart below - so put it
            back. */
-        SaveProgramToFlash(image, false, LIBRARY_FLASH);
+        /* NOT SaveProgramToFlash: that stores the hex TEXT of every CSUB as well as
+           the binary built from it, about 3.4x the blob, which is what stopped a
+           large CSUB fitting a library it would otherwise sit in comfortably. The
+           reader above has already split the two; only the binary goes down. */
+        SaveLibraryImage(image, libbin, libbinlen, libnfix);
         CurrentLinePtr = savedline;
         Option.LIBRARY_FLASH_SIZE = MAX_PROG_SIZE;
         Option.LIBRARY_HASH = hash;

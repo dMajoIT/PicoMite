@@ -3687,53 +3687,366 @@ int FileLoadCMM2Program(char *fname, bool message)
  * Returns true on success, with *hashout set.  The caller decides, from the
  * hash, whether to go on and commit it.
  */
-int FileLoadLibrary(unsigned char *fname, uint32_t *hashout, unsigned char **image)
+/***********************************************************************************************
+ * LIBRARY LOAD "file.bas"
+ *
+ * The file is read ONCE and split as it streams past: the ordinary BASIC becomes a small source
+ * image, and every CSUB's and font's hex becomes binary. The hex TEXT is never kept.
+ *
+ * That is what makes a large CSUB reach the library at all. Going through program memory - which
+ * is what LIBRARY SAVE without a filename must do - a program holding a CSUB carries the hex
+ * text AND the binary built from it, about 3.4x the blob, so a 37 KB CSUB wants 121 KB to reach
+ * a library entry that is only 37 KB. Here the cost is the binary alone.
+ *
+ * Nothing is written to flash until the whole file has been read, so the hash can be compared
+ * and an unchanged library left alone - a program that installs its own library must not erase
+ * and rewrite flash on every RUN.
+ ***********************************************************************************************/
+
+/* One line of a CSUB or font body: hex words, optionally followed by a comment.  Returns 0 only
+   if the line holds something that is not a hex word, which is how the end of a body is told
+   from the middle of one. */
+static int MIPS16 lib_hex_line(unsigned char *s, unsigned char *bin, uint32_t *len, uint32_t max)
 {
-    int fnbr, fsize;
-    char *p, *buf;
-    int c;
-    uint32_t h = 2166136261u; /* FNV-1a over the raw file, before crunching */
+    unsigned char *p = s;
+    for (;;)
+    {
+        uint32_t n = 0;
+        int i;
+        while (*p == ' ')
+            p++;
+        if (*p == 0 || *p == '\'')
+            return 1; /* end of line, or a comment - the line is consumed. A comment-only
+                         line counts: armcfgen puts a name marker between the functions of
+                         a merged blob, and anything but --lean leaves them in. */
+        for (i = 0; i < 8; i++)
+            if (!isxdigit((uint8_t)p[i]))
+                return 0; /* not eight hex digits: not a body line */
+        for (i = 0; i < 8; i++)
+        {
+            n <<= 4;
+            n |= isdigit((uint8_t)p[i]) ? (uint32_t)(p[i] - '0')
+                                        : (uint32_t)(mytoupper(p[i]) - 'A' + 10);
+        }
+        p += 8;
+        if (*p && *p != ' ' && *p != '\'')
+            return 0; /* a longer run than a word - not our format */
+        if (*len + 4 > max)
+            error("Library too big");
+        if (bin) /* NULL on the measuring pass */
+            memcpy(bin + *len, &n, 4);
+        *len += 4;
+    }
+}
+
+/* Is this line's first word WORD (case insensitive)?  Returns what follows it, or NULL. */
+static unsigned char *MIPS16 lib_firstword(unsigned char *s, const char *word)
+{
+    int n = strlen(word);
+    while (*s == ' ')
+        s++;
+    if (strncasecmp((char *)s, word, n))
+        return NULL;
+    if (isnamechar((uint8_t)s[n]))
+        return NULL; /* a longer name that merely starts with it */
+    s += n;
+    while (*s == ' ')
+        s++;
+    return s;
+}
+
+/* Walk the file once: hash it, and either MEASURE what it will take or fill the buffers.
+   text and bin may be NULL, which is the measuring pass - what comes out of a library file
+   is wildly lopsided (sefunc.bas is 86 KB of which 752 bytes are BASIC), so guessing a size
+   for either would mean reserving far more than the whole file to be safe. */
+static int MIPS16 lib_scan(int fnbr, uint32_t *hashout, unsigned char *text, uint32_t *textlen,
+                           unsigned char *bin, uint32_t *binlen, uint32_t binmax, int *nfixout)
+{
+    int c, prevchar = 0, incsub = 0, isfont, nrec = 0, nfix = 0;
+    unsigned char *p, *t = text;
+    uint32_t tl = 0, bl = 0, recstart = 0, h = 2166136261u;
+
+    while (!FileEOF(fnbr))
+    {
+        p = inpbuf;
+        for (;;)
+        {
+            if (FileEOF(fnbr))
+                break;
+            c = FileGetChar(fnbr) & 0x7f;
+            h ^= (uint32_t)(unsigned char)c;
+            h *= 16777619u;
+            if (c == '\r' || (c == '\n' && prevchar != '\r'))
+            {
+                prevchar = c;
+                break;
+            }
+            prevchar = c;
+            if (c == '\n')
+                continue;
+            if (c == TAB)
+                c = ' ';
+            if (isprint(c))
+            {
+                *p++ = c;
+                if ((p - inpbuf) >= MAXSTRLEN)
+                {
+                    FileClose(fnbr);
+                    error("Line is too long");
+                }
+            }
+        }
+        *p = 0;
+
+        if (incsub)
+        {
+            if (lib_firstword(inpbuf, "end"))
+            {
+                if (bin)
+                {
+                    uint32_t len = bl - recstart - 8;
+                    memcpy(bin + recstart + 4, &len, 4); /* size: all that follows this word */
+                }
+                incsub = 0;
+                /* fall through: the END line itself is kept */
+            }
+            else
+            {
+                if (!lib_hex_line(inpbuf, bin, &bl, binmax))
+                {
+                    FileClose(fnbr);
+                    error("Invalid hex word");
+                }
+                continue; /* the hex TEXT is dropped - this is the whole point */
+            }
+        }
+        else
+        {
+            isfont = (lib_firstword(inpbuf, "definefont") != NULL);
+            if (lib_firstword(inpbuf, "csub") || lib_firstword(inpbuf, "cfunction") || isfont)
+            {
+                uint32_t addr = 0xFFFFFFFF; /* a routine: filled in once the text is down */
+                if (nrec >= MAXCFUNCTION)
+                {
+                    FileClose(fnbr);
+                    error("Too many embedded routines");
+                }
+                if (isfont)
+                {
+                    /* A font's address word is its number - that is how the runtime tells a
+                       font from a routine (see SaveProgramToFlash), so it is known now and
+                       needs no looking up afterwards. */
+                    unsigned char *q = lib_firstword(inpbuf, "definefont");
+                    if (*q == '#')
+                        q++;
+                    addr = 0;
+                    while (*q >= '0' && *q <= '9')
+                        addr = addr * 10 + (uint32_t)(*q++ - '0');
+                    if (addr < 1 || addr > FONT_TABLE_SIZE)
+                    {
+                        FileClose(fnbr);
+                        error("Font number");
+                    }
+                    if (addr == 1 || addr == 6 || addr == 7)
+                    {
+                        FileClose(fnbr);
+                        error("Cannot redefine fonts 1, 6, or 7");
+                    }
+                    /* bit 31 marks the entry as a font - that is how the runtime
+                       tells one from a routine, whose address word is an offset
+                       into the image. See SaveProgramToFlash. */
+                    addr = (addr - 1) | 0x80000000u;
+                }
+                else
+                    nfix++; /* its address is an offset into the text, known once that is down */
+                recstart = bl;
+                if (bin)
+                    memcpy(bin + bl, &addr, 4);
+                bl += 8; /* the address, and the size once the body has been read */
+                nrec++;
+                incsub = 1;
+            }
+            else
+            {
+                unsigned char *q = inpbuf;
+                while (*q == ' ')
+                    q++;
+                if (*q == 0 || *q == '\'')
+                    continue; /* blank or comment: it would only cost library space */
+            }
+        }
+
+        {
+            unsigned char *q = inpbuf;
+            while (*q)
+            {
+                if (t)
+                    *t++ = *q;
+                q++;
+                tl++;
+            }
+            if (t)
+                *t++ = '\n';
+            tl++;
+        }
+    }
+    if (incsub)
+    {
+        FileClose(fnbr);
+        error("Missing END declaration");
+    }
+    if (t)
+        *t = 0;
+    *hashout = h;
+    *textlen = tl;
+    *binlen = bl;
+    *nfixout = nfix;
+    return true;
+}
+
+/* Read the file, and hand back the BASIC with every hex body removed, the binary those bodies
+   became, and a hash of the file. Touches no flash: the caller decides whether to write. */
+int MIPS16 FileLoadLibrary(unsigned char *fname, uint32_t *hashout, unsigned char **image,
+                           unsigned char **binout, uint32_t *binlenout, int *nfixout)
+{
+    int fnbr, fsize, nfix;
+    unsigned char *bin = NULL, *text;
+    uint32_t textlen = 0, binlen = 0;
+    char *fp;
+
     if (!InitSDCard())
         return false;
-    /* No initFonts() here, though FileLoadProgram below starts with one.  That
-     * is safe there because it goes on to replace the whole program and
-     * PrepareProgram rebuilds the font table from the new one; here it would
-     * throw away the fonts of the program that is CURRENTLY RUNNING and put
-     * nothing back.  It cost the fonts of every program that called
-     * LIBRARY LOAD - including on the runs where the library already matched
-     * and this function returns without touching anything. */
-    fnbr = FindFreeFileNbr();
-    p = (char *)getFstring(fname);
-    AppendDefaultExtension(p, ".bas");
-    fsize = FileSize(p);
+    fp = (char *)getFstring(fname);
+    AppendDefaultExtension(fp, ".bas");
+    fsize = FileSize(fp);
     if (fsize <= 0)
         error("File not found");
     if (fsize > MAX_PROG_SIZE)
         error("File size % cannot exceed %", fsize, MAX_PROG_SIZE);
-    if (!BasicFileOpen(p, fnbr, FA_READ))
+
+    /* Pass one measures and hashes, and allocates nothing. When the library already holds
+       this file that is the whole job - a program that installs its own library must not
+       erase and rewrite flash on every RUN. */
+    fnbr = FindFreeFileNbr();
+    if (!BasicFileOpen(fp, fnbr, FA_READ))
         return false;
-    /* Sized from the file rather than taking the whole heap: LIBRARY LOAD runs
-     * before the program has declared anything, so the heap is free, but there
-     * is no reason to demand all of it for a small library. */
-    p = buf = GetTempMemory(fsize + 512);
-    CrunchData((unsigned char **)&p, 0); /* reset the crunch state machine */
-    while (!FileEOF(fnbr))
-    {
-        c = FileGetChar(fnbr) & 0x7f;
-        h ^= (uint32_t)(unsigned char)c;
-        h *= 16777619u;
-        if (isprint(c) || c == 13 || c == 10 || c == TAB)
-        {
-            if (c == TAB)
-                c = ' ';
-            CrunchData((unsigned char **)&p, c);
-        }
-    }
-    *p = 0;
+    lib_scan(fnbr, hashout, NULL, &textlen, NULL, &binlen, 0xFFFFFFFF, &nfix);
     FileClose(fnbr);
-    *hashout = h;
-    *image = (unsigned char *)buf;
+    if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && Option.LIBRARY_HASH == *hashout)
+        return false; /* already exactly this - nothing to do, and nothing allocated */
+
+    text = GetTempMemory(textlen + 4);
+    if (binlen)
+        bin = GetTempMemory(binlen);
+    fnbr = FindFreeFileNbr();
+    if (!BasicFileOpen(fp, fnbr, FA_READ))
+        return false;
+    lib_scan(fnbr, hashout, text, &textlen, bin, &binlen, binlen, &nfix);
+    FileClose(fnbr);
+
+    *image = text;
+    *binout = bin;
+    *binlenout = binlen;
+    *nfixout = nfix;
     return true;
+}
+
+/* Write what FileLoadLibrary produced: the BASIC, then the bodies' binary behind it. */
+void MIPS16 SaveLibraryImage(unsigned char *pm, unsigned char *bin, uint32_t binlen, int nfix)
+{
+    unsigned char *p, buf[STRINGSIZE];
+    unsigned short tkn;
+    int i, prevchar = 0;
+
+    memcpy(buf, tknbuf, STRINGSIZE); /* tokenise() writes through tknbuf */
+    initFonts();
+    clearrepeat();
+    FlashWriteInit(LIBRARY_FLASH);
+    safe_flash_range_erase(realflashpointer, MAX_PROG_SIZE);
+    {
+        int j = MAX_PROG_SIZE / 4;
+        int *pp = (int *)LibMemory;
+        while (j--)
+            if (*pp++ != 0xFFFFFFFF)
+            {
+                enable_interrupts_pico();
+                error("Flash erase problem");
+            }
+    }
+
+    while (*pm)
+    {
+        p = inpbuf;
+        while (!(*pm == 0 || *pm == '\r' || (*pm == '\n' && prevchar != '\r')))
+        {
+            if (isprint((uint8_t)*pm))
+                *p++ = *pm;
+            prevchar = *pm++;
+        }
+        if (*pm)
+            prevchar = *pm++;
+        *p = 0;
+        if (*inpbuf == 0)
+            continue;
+        tokenise(false);
+        p = tknbuf;
+        while (!(p[0] == 0 && p[1] == 0))
+        {
+            FlashWriteByte(*p++);
+            if ((int)((char *)realflashpointer - (char *)LibMemory) >= MAX_PROG_SIZE - 5)
+                error("Library too big");
+        }
+        FlashWriteByte(0);
+    }
+    FlashWriteByte(0);
+    FlashWriteAlign(); /* pads the block AND writes the 0xffffffff that marks the binaries */
+
+    /* A routine's address is the offset of its token in the image, knowable only now the text
+       is down. Fonts already carry their number and are skipped. */
+    p = (unsigned char *)LibMemory;
+    i = 0;
+    while (!(p[0] == 0 && p[1] == 0) && i < nfix)
+    {
+        if (*p == T_NEWLINE)
+            p += T_NEWLINE_HDR;
+        if (*p == T_LINENBR)
+            p += 3;
+        skipspace(p);
+        if (*p == T_LABEL)
+        {
+            p += p[1] + 2;
+            skipspace(p);
+        }
+        tkn = (unsigned short)(p[0] & 0x7f);
+        tkn |= (unsigned short)((p[1] & 0x7f) << 7);
+        if (tkn == cmdCSUB)
+        {
+            uint32_t addr = (uint32_t)(p - (unsigned char *)LibMemory);
+            /* the first record still waiting for one - fonts carry their number
+               already, so they are never 0xffffffff and are stepped over */
+            uint32_t k = 0;
+            while (k < binlen)
+            {
+                uint32_t a;
+                memcpy(&a, bin + k, 4);
+                if (a == 0xFFFFFFFF)
+                {
+                    memcpy(bin + k, &addr, 4);
+                    break;
+                }
+                k += (*(uint32_t *)(bin + k + 4)) + 8;
+            }
+            i++;
+        }
+        while (*p)
+            p++;
+        p++;
+    }
+
+    for (i = 0; i < (int)binlen; i++)
+        FlashWriteByte(bin[i]);
+    FlashWriteClose();
+    memcpy(tknbuf, buf, STRINGSIZE);
 }
 
 int FileLoadProgram(unsigned char *fname, bool chain, bool crunch)
@@ -3958,7 +4271,7 @@ void MIPS16 SaveProgramToRAM(unsigned char *pm, int msg, uint8_t *ram)
                 // font 6 has some special characters, some of which depend on font 1
                 if (fontnbr == 1 || fontnbr == 6 || fontnbr == 7)
                 {
-                    error("Cannot redefine fonts 1, 6 or 7");
+                    error("Cannot redefine fonts 1, 6, or 7");
                 }
                 realmempointer += 4;
                 skipelement(p); // go to the end of the command

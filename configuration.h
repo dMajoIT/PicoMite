@@ -174,7 +174,10 @@ extern "C"
 #define MAX_CPU 378000
 #define MIN_CPU 252000
 #ifdef USBKEYBOARD
-#define FLASH_TARGET_OFFSET (832 * 1024)
+   /* +16 KB (2026-09-17): the hex-stripping reader for LIBRARY LOAD (FileIO.c).
+      It fitted without this at +284 bytes, and the font handling then took all
+      but 108 of them - which is no place to stop. */
+#define FLASH_TARGET_OFFSET (848 * 1024)
 #define MagicKey 0xCD8778E7
    /* -4 KB (2026-09-07): same C-heap headroom fix as the three variants
       above - see the note there. VGAUSB's newlib C heap (__StackLimit -
@@ -190,7 +193,10 @@ extern "C"
       in FileIO.c (see the note by OPTIMIZED_SOURCES in CMakeLists.txt); the
       offset itself was never the fault. Margin here is thin, +1084 bytes, so
       the next across-the-board addition needs another 16 KB step. */
-#define FLASH_TARGET_OFFSET (800 * 1024)
+   /* +16 KB (2026-09-17): the hex-stripping reader for LIBRARY LOAD (FileIO.c)
+      costs ~1.4 KB - the across-the-board addition the note above said would
+      need a step. */
+#define FLASH_TARGET_OFFSET (816 * 1024)
 #define HEAP_MEMORY_SIZE (100 * 1024)
 #define MagicKey 0x3193CA54
 #endif
@@ -332,7 +338,10 @@ extern "C"
 #define MagicKey 0xEE897110
    /* -16 KB (2026-09-16): compiling misc/FileIO.c at -Os freed ~4.5 KB, so
       912 KB fits again and the 16 KB goes back to the A: drive. */
-#define FLASH_TARGET_OFFSET (912 * 1024)
+   /* +16 KB (2026-09-17): the hex-stripping reader for LIBRARY LOAD (FileIO.c)
+      costs ~1.4 KB and this variant had only 0.4 KB spare. Flash moves in 16 KB
+      steps, so one step. */
+#define FLASH_TARGET_OFFSET (928 * 1024)
    /* -4 KB (2026-09-07): the newlib C heap is the gap between __end__ (top of
       BSS) and __StackLimit, and TinyUSB 0.21 + CFG_TUH_TASK_QUEUE_SZ 64 pushed
       __end__ up until that gap fell well under 4096 bytes - below which
