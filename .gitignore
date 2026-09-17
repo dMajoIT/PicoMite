@@ -63,3 +63,7 @@ dist/
 /test.bmp
 /test.png
 Bas/elite_tools/cache/
+
+# the mmb2csub distribution unpacked in the tree for use - a working copy,
+# like the uf2s, not something the repo carries
+/mmb2csub/

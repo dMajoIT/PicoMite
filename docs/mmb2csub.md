@@ -618,8 +618,13 @@ wrapper and the declaration — and calling it gives `Internal fault 5`. An
 RP2350 has 144 KB, and it simply works.
 
 On an RP2350, then, the whole of `sefunc` goes into the library and the
-program runs in **2.7 seconds instead of 13**. One conversion, covering 15 of
-the 20 profiled routines and 99.8% of the calls.
+program runs in **2.5 seconds instead of 13** — 2.7 at 252 MHz and 2.48 at
+378. One conversion, covering 15 of the 20 profiled routines and 99.8% of the
+calls.
+
+Note how little the clock speed matters once the routine is converted: half
+again as much CPU buys under 10%. Before the conversion the program was
+waiting on the interpreter, and that is what has gone.
 
 Two things had to be done first, and they are the two traps this appendix
 warns about. The globals `sefunc` reaches have to exist before the wrapper can
