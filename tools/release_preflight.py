@@ -168,7 +168,8 @@ else:
 #    tell "never regenerated" from "regenerated, came out the same", and the
 #    second happens routinely: helpmin.txt carries syntax and summary only, so
 #    most manual edits leave it byte-identical and a date check cries wolf.
-for h, extra in (("help.txt", []), ("helpmin.txt", ["--short"])):
+for h, extra in (("help.txt", []), ("helpmin.txt", ["--short"]),
+                 ("helptiny.txt", ["--tiny"])):
     hp = os.path.join(REPO, "docs", h)
     if not os.path.exists(hp):
         check("docs/%s present" % h, False, "run tools/gen_help.py")
@@ -184,7 +185,7 @@ for h, extra in (("help.txt", []), ("helpmin.txt", ["--short"])):
     else:
         same = open(hp, "rb").read() == open(tmp, "rb").read()
         check("docs/%s matches the manual" % h, same,
-              "stale - run: python tools/gen_help.py%s" % (" --short" if extra else ""))
+              "stale - run: python tools/gen_help.py %s" % " ".join(extra))
         os.remove(tmp)
 
 # 10. everything the release ships is committed and pushed.  Work in progress
@@ -210,6 +211,6 @@ print()
 if fails:
     print("PRE-FLIGHT FAILED: " + ", ".join(fails))
     sys.exit(1)
-print("PRE-FLIGHT PASSED for V%s - 20 assets ready" % version)
-print("  16 uf2 + the manual PDF + %s + docs/help.txt + docs/helpmin.txt"
-      % zipname)
+print("PRE-FLIGHT PASSED for V%s - 21 assets ready" % version)
+print("  16 uf2 + the manual PDF + %s" % zipname)
+print("  + docs/help.txt, docs/helpmin.txt, docs/helptiny.txt")
