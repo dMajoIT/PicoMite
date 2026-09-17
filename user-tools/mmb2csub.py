@@ -295,11 +295,24 @@ def check_scope(conv, routine, name, routines=None):
             elif getattr(p, "ty", None) == "s":
                 bad.append("%s: parameter '%s' is a string; strings are phase 2"
                            % (who, p.name))
-    n = len(routine.params) + sum(1 for p in routine.params if p.is_array)
-    if n > 16:
-        bad.append("%d arguments needed; the limit is MAX_CSUB_ARGS "
-                   "(16 on RP2350, 10 on RP2040)" % n)
     return bad
+
+
+def arg_count(routine, bodytext, gl):
+    """How many arguments the CSUB will take.
+
+    Its own parameters, a bound for each array it indexes with BOUND(), one for
+    a FUNCTION's result - and ONE PER GLOBAL.  That last is what makes this
+    worth checking separately: solar_eclipse's sefunc has two parameters and
+    twenty globals, so it wants twenty-two arguments and cannot be called at
+    all.  MAX_CSUB_ARGS is 16 on RP2350 and 10 on RP2040.
+    """
+    n = len(gl) + (1 if routine.is_func else 0)
+    for p in routine.params:
+        n += 1
+        if p.is_array and bounds_used(bodytext, p):
+            n += 1
+    return n
 
 
 # ---------------------------------------------------------------- emit
@@ -583,6 +596,148 @@ def write_c(cpath, source, subname, routines, bodies, shim, gl, consts,
         f.write(shim + "\n")
 
 
+def try_build(conv, mmb2c, routine, name, opt="s"):
+    """Can this routine be converted, and at what cost?
+
+    Returns (ok, detail, blob_bytes, closure_names).  Actually compiles and
+    links, because the compiler is the scope check - anything else would be a
+    guess that goes stale.
+    """
+    import tempfile
+    try:
+        rs = closure(conv, routine)
+        bodies = {}
+        for r in rs:
+            b = slice_function(conv, r.cname)
+            if b is None:
+                return False, "%s did not translate" % r.name, 0, [], 0
+            bodies[r.cname] = b
+        bodytext = "\n".join(bodies[r.cname] for r in rs)
+        probs = check_scope(conv, routine, name, rs)
+        if probs:
+            return False, probs[0], 0, [r.name for r in rs], 0
+        gl = globals_touched(conv, rs)
+        if len(gl) > 62:
+            return False, "%d globals; CFuncRam holds 62" % len(gl), 0, [], 0
+        shim, nargs, passed = entry_shim(conv, routine, name + "K", bodytext, gl)
+    except Exception as e:
+        return False, "%s: %s" % (type(e).__name__, e), 0, [], 0
+
+    tmp = tempfile.mkdtemp()
+    cpath = os.path.join(tmp, "%s.c" % name)
+    write_c(cpath, "(list)", name, rs, bodies, shim, gl,
+            consts_used(conv, mmb2c, bodytext), local_structs_for(conv, rs))
+    out = os.path.join(tmp, "%s.txt" % name)
+    r = subprocess.run([sys.executable, ARMCFGEN, cpath, "--compile",
+                        "-n", name + "K", "-e", name + "K", "-O", opt,
+                        "-I", FIRMWARE, "-I", HERE, "-o", out],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        why = "did not build"
+        syms = sorted({l.split("`")[1].rstrip("'")
+                       for l in r.stderr.splitlines() if "undefined reference to" in l})
+        if syms:
+            why = "needs " + ", ".join(syms[:3])
+        else:
+            errs = [l for l in r.stderr.splitlines() if "error:" in l]
+            if errs:
+                why = errs[0].split("error:")[-1].strip()[:44]
+        return False, why, 0, [r_.name for r_ in rs], 0
+    blob = open(out).read()
+    words = sum(len(l.split()) for l in blob.splitlines()
+                if l.startswith("\t") and not l.lstrip().startswith("'"))
+    return True, "", (words - 1) * 4, [x.name for x in rs],         arg_count(routine, bodytext, gl)
+
+
+def warn_overlap(conv, names):
+    """Say so when two chosen routines would each carry the same callees.
+
+    Each becomes a separate CSUB with its own copy of its closure, so picking
+    two routines from the same call tree pays for the shared part twice. The
+    usual answer is to convert only the one higher up.
+    """
+    cl = {}
+    for nm in names:
+        r = conv.routines.get(nm) or conv.routines.get(nm.lower())
+        if r is not None:
+            cl[nm] = set(x.name for x in closure(conv, r))
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            if a not in cl or b not in cl:
+                continue
+            if b in cl[a]:
+                print("note: %s already carries %s - converting both duplicates it"
+                      % (a, b))
+            elif a in cl[b]:
+                print("note: %s already carries %s - converting both duplicates it"
+                      % (b, a))
+            else:
+                both = cl[a] & cl[b]
+                if both:
+                    print("note: %s and %s share %d routine%s (%s) - each blob "
+                          "gets its own copy"
+                          % (a, b, len(both), "" if len(both) == 1 else "s",
+                             ", ".join(sorted(both)[:4])))
+
+
+def do_list(conv, mmb2c, opt):
+    """Report what can be converted, what each costs, and what covers what."""
+    names = sorted(conv.routines)
+    res = {}
+    sys.stderr.write("checking %d routines" % len(names))
+    for nm in names:
+        res[nm] = try_build(conv, mmb2c, conv.routines[nm], nm, opt)
+        sys.stderr.write(".")
+        sys.stderr.flush()
+    sys.stderr.write("\n")
+
+    okset = set(n for n in names if res[n][0])
+    # a routine is a ROOT if no other convertible routine's closure contains it
+    covered_by = {}
+    for n in okset:
+        for other in res[n][3]:
+            if other != n:
+                covered_by.setdefault(other, []).append(n)
+    roots = [n for n in okset if n not in covered_by]
+
+    print("\nConvertible, and not already inside another one's blob:")
+    print("  %-14s %6s %8s %7s %7s  %s"
+          % ("routine", "args", "blob", "text", "closure", "also brings in"))
+    for n in sorted(roots, key=lambda x: -res[x][2]):
+        ok, why, size, cl, na = res[n]
+        others = sorted(c for c in cl if c != n)
+        joined = ", ".join(others)
+        # text is what has to fit in PROGRAM memory: the hex is about 2.4x the
+        # blob, and an argument count over the ceiling means it cannot be
+        # called at all, however well it compiled
+        print("  %-14s %6s %8d %6dk %7d  %s"
+              % (n, ("%d !" % na) if na > 16 else str(na), size,
+                 int(size * 2.4) // 1024, len(cl),
+                 (joined[:58] + "...") if len(joined) > 58 else (joined or "-")))
+    sub = sorted(okset - set(roots), key=lambda x: -res[x][2])
+    if sub:
+        # Shown with their own numbers, because when a root is out of reach -
+        # too many arguments, or too much program memory - the next thing to
+        # try is the largest routine BELOW it that is not.
+        print("\nAlso convertible, and worth having if a root above is out of reach:")
+        print("  %-14s %6s %8s %7s %7s  %s"
+              % ("routine", "args", "blob", "text", "closure", "carried by"))
+        for n in sub:
+            ok, why, size, cl, na = res[n]
+            print("  %-14s %6s %8d %6dk %7d  %s"
+                  % (n, ("%d !" % na) if na > 16 else str(na), size,
+                     int(size * 2.4) // 1024, len(cl),
+                     ", ".join(sorted(covered_by[n])[:3])))
+    bad = [n for n in names if not res[n][0]]
+    if bad:
+        print("\nNot convertible:")
+        for n in bad:
+            print("  %-14s %s" % (n, res[n][1]))
+    print("\nA CSUB costs its hex TEXT as well as its binary - roughly 3.5x the")
+    print("blob size in program memory - so check the total against the board")
+    print("before converting the big ones, and use LIBRARY SAVE if it will not fit.")
+
+
 # ---------------------------------------------------------------- main
 
 def find_routine_text(conv, routine):
@@ -676,7 +831,14 @@ def main():
     ap = argparse.ArgumentParser(
         description="Convert one MMBasic SUB or FUNCTION into a CSUB, in place.")
     ap.add_argument("source", help="the .bas program")
-    ap.add_argument("sub", help="the SUB or FUNCTION to convert")
+    ap.add_argument("sub", nargs="*",
+                    help="the SUB(s) or FUNCTION(s) to convert. Each becomes a "
+                         "SEPARATE CSUB with its own copy of everything it "
+                         "calls, so prefer one routine high in the call graph "
+                         "over several below it")
+    ap.add_argument("--list", action="store_true",
+                    help="report what can be converted and what it costs, "
+                         "and change nothing")
     ap.add_argument("--name", help="CSUB name (default <sub>K)")
     ap.add_argument("-O", "--opt", default="s", help="armcfgen -O level (default s)")
     ap.add_argument("--mmb2c", help="path to mmb2c.py")
@@ -700,7 +862,27 @@ def main():
     mmb2c = load_mmb2c(args.mmb2c)
     conv = convert_program(mmb2c, args.source)
 
-    canon = args.sub.upper()
+    if args.list:
+        do_list(conv, mmb2c, args.opt)
+        return
+    if not args.sub:
+        sys.exit("error: name a SUB or FUNCTION to convert, or use --list to "
+                 "see what can be")
+
+    if len(args.sub) > 1:
+        # Each routine becomes its own CSUB with its own copy of everything it
+        # calls, so converting two that share callees duplicates them. Say so,
+        # then do them one at a time - each conversion rewrites the source, so
+        # the next has to re-read it.
+        warn_overlap(conv, args.sub)
+        rest = [a for a in sys.argv[1:] if a not in args.sub and a != args.source]
+        for nm in args.sub:
+            rc = subprocess.run([sys.executable, __file__, args.source, nm] + rest)
+            if rc.returncode:
+                sys.exit(rc.returncode)
+        return
+
+    canon = args.sub[0].upper()
     routine = None
     for k, r in conv.routines.items():
         if k.upper() == canon:
@@ -708,7 +890,7 @@ def main():
             break
     if routine is None:
         sys.exit("error: no SUB or FUNCTION named '%s' in %s\n  found: %s"
-                 % (args.sub, args.source, ", ".join(sorted(conv.routines))))
+                 % (args.sub[0], args.source, ", ".join(sorted(conv.routines))))
 
     # Everything the routine calls comes with it: mmb2c emits an inter-routine
     # call as f_other(...), and armcfgen's merge mode packs them into one blob
@@ -724,9 +906,9 @@ def main():
         bodies[r.cname] = b
     bodytext = "\n".join(bodies[r.cname] for r in routines)
 
-    problems = check_scope(conv, routine, args.sub, routines)
+    problems = check_scope(conv, routine, args.sub[0], routines)
     if problems:
-        print("error: %s cannot be a CSUB yet:" % args.sub)
+        print("error: %s cannot be a CSUB yet:" % args.sub[0])
         for p in problems:
             print("  - " + p)
         sys.exit(1)
@@ -734,7 +916,7 @@ def main():
     gl = globals_touched(conv, routines)
     if len(gl) > 62:
         sys.exit("error: %s and what it calls reach %d globals; CFuncRam holds 62"
-                 % (args.sub, len(gl)))
+                 % (args.sub[0], len(gl)))
 
     # Name it first, because the name depends on whether a wrapper is needed.
     # When the CSUB takes exactly the routine's own arguments there is nothing
@@ -743,18 +925,25 @@ def main():
     # when a wrapper has to sit in front (a FUNCTION's result, an array bound,
     # globals) does the CSUB need a name of its own for the wrapper to call.
     _, _, probe = entry_shim(conv, routine, "probe", bodytext, gl)
-    needs_wrapper = adapter_sub(args.sub, routine, "probe", probe) is not None
-    entry = args.name or ((args.sub + "K") if needs_wrapper else args.sub)
+    needs_wrapper = adapter_sub(args.sub[0], routine, "probe", probe) is not None
+    entry = args.name or ((args.sub[0] + "K") if needs_wrapper else args.sub[0])
     shim, nargs, passed = entry_shim(conv, routine, entry, bodytext, gl)
+    if nargs > 16:
+        sys.exit("error: %s would need %d arguments (%d of them globals), and "
+                 "MAX_CSUB_ARGS is 16 on RP2350, 10 on RP2040.\n"
+                 "  A routine reaching that many globals is usually the wrong "
+                 "one to convert - try one further down the call graph, or "
+                 "gather the globals into an array."
+                 % (args.sub[0], nargs, len(gl)))
 
     stem = os.path.splitext(os.path.basename(args.source))[0]
     srcdir = os.path.dirname(os.path.abspath(args.source))
-    cpath = os.path.join(srcdir, "%s_%s.c" % (stem, args.sub.lower()))
-    write_c(cpath, args.source, args.sub, routines, bodies, shim, gl,
+    cpath = os.path.join(srcdir, "%s_%s.c" % (stem, args.sub[0].lower()))
+    write_c(cpath, args.source, args.sub[0], routines, bodies, shim, gl,
             consts_used(conv, mmb2c, bodytext),
             local_structs_for(conv, routines))
 
-    out = os.path.join(srcdir, "%s_%s.txt" % (stem, args.sub.lower()))
+    out = os.path.join(srcdir, "%s_%s.txt" % (stem, args.sub[0].lower()))
     cmd = [sys.executable, ARMCFGEN, cpath, "--compile",
            "-n", entry, "-e", entry, "-O", args.opt,
            "-I", FIRMWARE, "-I", HERE, "-o", out]
@@ -775,13 +964,13 @@ def main():
     open(out, "w").write(block)
     ctext = open(cpath).read()
 
-    wrapper = adapter_sub(args.sub, routine, entry, passed)
+    wrapper = adapter_sub(args.sub[0], routine, entry, passed)
     nwords = sum(len(l.split()) for l in block.splitlines()
                  if l.startswith("\t") and not l.lstrip().startswith("'"))
 
     print("%s: %s %s -> CSUB %s"
           % (os.path.basename(args.source),
-             "FUNCTION" if routine.is_func else "SUB", args.sub, entry))
+             "FUNCTION" if routine.is_func else "SUB", args.sub[0], entry))
     if gl:
         print("  globals passed by reference: " + ", ".join(nm for nm, _ in gl))
     print("  %d argument%s: %s"
@@ -798,7 +987,7 @@ def main():
         return
 
     before = sum(len(ln) for ln in conv.lines)
-    rewrite_source(args.source, conv, routine, args.sub, wrapper, block, ctext,
+    rewrite_source(args.source, conv, routine, args.sub[0], wrapper, block, ctext,
                    not (args.no_c or args.lean),
                    not (args.no_original or args.lean),
                    not args.no_backup)
