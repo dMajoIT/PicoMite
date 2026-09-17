@@ -910,9 +910,7 @@ void fun_chr(void)
 	int i;
 
 	i = getint(ep, 0, 0xff);
-	sret = GetTempStrMemory(); // this will last for the life of the command
-	sret[0] = 1;
-	sret[1] = i;
+	sret = StrChar(GetTempStrMemory(), i);
 	targ = T_STR;
 }
 
@@ -1184,8 +1182,8 @@ void fun_log(void)
 // S$ = MID$(s, spos [, nbr])
 void fun_mid(void)
 {
-	unsigned char *s, *p1, *p2;
-	int spos, nbr = 0, i;
+	unsigned char *s;
+	int spos, nbr = 0;
 	getcsargs(&ep, 5);
 
 	if (argc == 5)
@@ -1202,21 +1200,8 @@ void fun_mid(void)
 	s = getstring(argv[0]);				  // the string
 	spos = getint(argv[2], 1, MAXSTRLEN); // the mid position
 
-	sret = GetTempStrMemory(); // this will last for the life of the command
+	sret = StrMid(GetTempStrMemory(), s, spos, nbr);
 	targ = T_STR;
-	if (spos > *s || nbr == 0) // if the numeric args are not in the string
-		return;				   // return a null string
-	else
-	{
-		i = *s - spos + 1; // find how many chars remaining in the string
-		if (i > nbr)
-			i = nbr; // reduce it if we don't need that many
-		p1 = sret;
-		p2 = s + spos;
-		*p1++ = i; // set the length of the MMBasic string
-		while (i--)
-			*p1++ = *p2++; // copy the nbr chars required
-	}
 }
 
 // Return the value of Pi.  Thanks to Alan Williams for the contribution
@@ -1424,9 +1409,7 @@ void fun_space(void)
 	int i;
 
 	i = getint(ep, 0, MAXSTRLEN);
-	sret = GetTempStrMemory(); // this will last for the life of the command
-	memset(sret + 1, ' ', i);
-	*sret = i;
+	sret = StrFill(GetTempStrMemory(), ' ', i);
 	targ = T_STR;
 }
 
@@ -1513,20 +1496,103 @@ void fun_string(void)
 	if (j < 0 || j > 255)
 		error("Argument value: $", argv[2]);
 
-	sret = GetTempStrMemory(); // this will last for the life of the command
-	memset(sret + 1, j, i);
-	*sret = i;
+	sret = StrFill(GetTempStrMemory(), j, i);
 	targ = T_STR;
 }
 // Return a substring offset by a number of characters from the left (beginning) of the string.
 // s$ = LEFT$( string$, nbr )
+/* ====================================================================
+ *  String cores
+ *
+ *  The operation, with the parsing left behind in the fun_ wrapper below
+ *  each one.  A core takes plain C arguments, writes into a buffer the
+ *  CALLER owns, returns it, and touches none of sret/targ/iret.  It also
+ *  never calls error(): error() longjmps, which from inside a CSUB would
+ *  abandon the CSUB's frame - so a core CLAMPS and the wrapper does the
+ *  validation, where the interpreter's error machinery is the right answer.
+ *
+ *  That is what lets the same code serve two callers: the interpreter
+ *  through fun_xxx, and a CSUB through the CallTable.  One implementation,
+ *  so the two can never drift apart.
+ *
+ *  Destination size: every caller here passes GetTempStrMemory(), which is
+ *  STRINGSIZE.  A core will not write more than MAXSTRLEN + 1 bytes.
+ * ==================================================================== */
+
+unsigned char *StrLeft(unsigned char *dst, const unsigned char *s, int n)
+{
+	Mstrcpy(dst, (unsigned char *)s);
+	if (n < *dst)
+		*dst = n; // truncate if it is less than the current string length
+	return dst;
+}
+
+unsigned char *StrRight(unsigned char *dst, const unsigned char *s, int n)
+{
+	unsigned char *p1 = dst;
+	const unsigned char *p2;
+	if (n > *s)
+		n = *s; // get the number of chars to copy
+	p2 = s + (*s - n) + 1;
+	*p1++ = n; // insert the length of the returned string
+	while (n--)
+		*p1++ = *p2++; // and copy the characters
+	return dst;
+}
+
+unsigned char *StrCase(unsigned char *dst, const unsigned char *s, int upper)
+{
+	unsigned char *p = dst;
+	int i = *p++ = *s++; // the length, copied across first
+	while (i--)
+	{
+		*p = upper ? mytoupper(*s) : tolower(*s);
+		p++;
+		s++;
+	}
+	return dst;
+}
+
+unsigned char *StrMid(unsigned char *dst, const unsigned char *s, int spos, int nbr)
+{
+	unsigned char *p1;
+	const unsigned char *p2;
+	int i;
+	*dst = 0;					   // the answer is a null string when the
+	if (spos > *s || nbr <= 0)	   // numeric args are not in the string
+		return dst;
+	i = *s - spos + 1; // find how many chars remaining in the string
+	if (i > nbr)
+		i = nbr; // reduce it if we don't need that many
+	p1 = dst;
+	p2 = s + spos;
+	*p1++ = i; // set the length of the MMBasic string
+	while (i--)
+		*p1++ = *p2++; // copy the nbr chars required
+	return dst;
+}
+
+unsigned char *StrChar(unsigned char *dst, int c)
+{
+	dst[0] = 1;
+	dst[1] = (unsigned char)c;
+	return dst;
+}
+
+unsigned char *StrFill(unsigned char *dst, int ch, int n)
+{
+	if (n < 0)
+		n = 0;
+	if (n > MAXSTRLEN)
+		n = MAXSTRLEN;
+	memset(dst + 1, ch, n);
+	*dst = n;
+	return dst;
+}
+
 void fun_left(unsigned char *p, int i)
 {
-	unsigned char *s = GetTempStrMemory(); // this will last for the life of the command
-	Mstrcpy(s, p);
-	if (i < *s)
-		*s = i; // truncate if it is less than the current string length
-	sret = s;
+	sret = StrLeft(GetTempStrMemory(), p, i); // lasts for the life of the command
 	targ = T_STR;
 }
 
@@ -1534,22 +1600,13 @@ void fun_left(unsigned char *p, int i)
 // s$ = RIGHT$( string$, number-of-chars )
 void fun_right(unsigned char *s, int nbr)
 {
-	unsigned char *p1, *p2;
-	if (nbr > *s)
-		nbr = *s;			   // get the number of chars to copy
-	sret = GetTempStrMemory(); // this will last for the life of the command
-	p1 = sret;
-	p2 = s + (*s - nbr) + 1;
-	*p1++ = nbr; // inset the length of the returned string
-	while (nbr--)
-		*p1++ = *p2++; // and copy the characters
+	sret = StrRight(GetTempStrMemory(), s, nbr);
 	targ = T_STR;
 }
 
 void fun_schange(void)
 {
-	unsigned char *s, *p;
-	int i;
+	unsigned char *s;
 	getcsargs(&ep, 5);
 	if (*argv[0] == 'E')
 	{
@@ -1574,17 +1631,7 @@ void fun_schange(void)
 
 		bool upper = *argv[0] == 'U';
 		s = getstring(argv[2]);
-		p = sret = GetTempStrMemory(); // this will last for the life of the command
-		i = *p++ = *s++;			   // get the length of the string and save in the destination
-		while (i--)
-		{
-			if (upper)
-				*p = mytoupper(*s);
-			else
-				*p = tolower(*s);
-			p++;
-			s++;
-		}
+		sret = StrCase(GetTempStrMemory(), s, upper);
 	}
 	targ = T_STR;
 }

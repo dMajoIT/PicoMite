@@ -657,6 +657,16 @@ long long int FloatToInt64(MMFLOAT x);
     unsigned char *CtoM(unsigned char *p);
     void Mstrcpy(unsigned char *dest, unsigned char *src);
     void Mstrcat(unsigned char *restrict dest, const unsigned char *restrict src);
+    /* String cores: the operation without the parsing (see Functions.c).
+       Plain arguments, a destination the CALLER owns, no sret/targ, and no
+       error() - they clamp, and the fun_ wrapper does the validating. Shared
+       by the interpreter and, through the CallTable, by CSUBs. */
+    unsigned char *StrLeft(unsigned char *dst, const unsigned char *s, int n);
+    unsigned char *StrRight(unsigned char *dst, const unsigned char *s, int n);
+    unsigned char *StrCase(unsigned char *dst, const unsigned char *s, int upper);
+    unsigned char *StrMid(unsigned char *dst, const unsigned char *s, int spos, int nbr);
+    unsigned char *StrChar(unsigned char *dst, int c);
+    unsigned char *StrFill(unsigned char *dst, int ch, int n);
     int Mstrcmp(const unsigned char *s1, const unsigned char *s2);
     unsigned char *getCstring(unsigned char *p);
     unsigned char *getFstring(unsigned char *p);

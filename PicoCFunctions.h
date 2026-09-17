@@ -32,6 +32,13 @@
  *          constant all compile inline and need no vector. Define
  *          CSUB_MEM_SHIMS to get the memcpy/memset/memmove symbols the
  *          compiler calls by name.
+ *  v2.3.0  MMBasic strings. MtoC/CtoM/Mstrcpy/Mstrcat/Mstrcmp (0x164-0x174)
+ *          were already plain C and are exposed as they stand. StrLeft/
+ *          StrRight/StrCase/StrMid/StrChar/StrFill (0x178-0x18C) are the
+ *          bodies of LEFT$, RIGHT$, UCASE$/LCASE$, MID$, CHR$ and SPACE$/
+ *          STRING$, split out of their fun_ wrappers so the interpreter and a
+ *          CSUB share one implementation. An MMBasic string is a LENGTH BYTE
+ *          followed by the data, not a C string.
  *
  ******************************************************************************************/
 #include <stdint.h>	 /* option_s and the vector prototypes use int8_t/uint16_t/... */
@@ -168,6 +175,27 @@
 #define Vector_memcpy (*(unsigned int *)(BaseAddress + 0x158))  // void *memcpy(void*,const void*,size_t)
 #define Vector_memset (*(unsigned int *)(BaseAddress + 0x15C))  // void *memset(void*,int,size_t)
 #define Vector_memmove (*(unsigned int *)(BaseAddress + 0x160)) // void *memmove(void*,const void*,size_t)
+// MMBasic string primitives. An MMBasic string is a LENGTH BYTE followed by the
+// data - not a C string - so these are the conversions and the three operations
+// that length-prefixed form needs. They are the firmware's own routines, not
+// copies, so a CSUB and the interpreter always agree.
+#define Vector_MtoC (*(unsigned int *)(BaseAddress + 0x164))    // unsigned char *MtoC(unsigned char *)
+#define Vector_CtoM (*(unsigned int *)(BaseAddress + 0x168))    // unsigned char *CtoM(unsigned char *)
+#define Vector_Mstrcpy (*(unsigned int *)(BaseAddress + 0x16C)) // void Mstrcpy(unsigned char *dst, unsigned char *src)
+#define Vector_Mstrcat (*(unsigned int *)(BaseAddress + 0x170)) // void Mstrcat(unsigned char *dst, const unsigned char *src)
+#define Vector_Mstrcmp (*(unsigned int *)(BaseAddress + 0x174)) // int Mstrcmp(const unsigned char *, const unsigned char *)
+// MMBasic string OPERATIONS. These are the bodies of LEFT$, RIGHT$, UCASE$/
+// LCASE$, MID$, CHR$ and SPACE$/STRING$ with the argument parsing left behind
+// in the interpreter, so a CSUB runs exactly the code MMBasic runs. Each takes
+// the destination as its first argument - GetTempStrMemory() (0x30) gives a
+// STRINGSIZE buffer the interpreter reclaims after the CSUB returns - and each
+// returns that destination, so they nest.
+#define Vector_StrLeft (*(unsigned int *)(BaseAddress + 0x178))  // LEFT$
+#define Vector_StrRight (*(unsigned int *)(BaseAddress + 0x17C)) // RIGHT$
+#define Vector_StrCase (*(unsigned int *)(BaseAddress + 0x180))  // UCASE$ / LCASE$
+#define Vector_StrMid (*(unsigned int *)(BaseAddress + 0x184))   // MID$
+#define Vector_StrChar (*(unsigned int *)(BaseAddress + 0x188))  // CHR$
+#define Vector_StrFill (*(unsigned int *)(BaseAddress + 0x18C))  // SPACE$ / STRING$
 
 // Macros to call each function.
 #define uSec(a) ((void (*)(unsigned long long))Vector_uSec)(a)
@@ -283,6 +311,25 @@
 #define LShl(a, b) ((long long (*)(long long, int))Vector_LShl)(a, b)
 #define LAsr(a, b) ((long long (*)(long long, int))Vector_LAsr)(a, b)
 #define LLsr(a, b) ((unsigned long long (*)(unsigned long long, int))Vector_LLsr)(a, b)
+
+/* MMBasic strings. The format is a length byte followed by the data, so a
+   string handed to a CSUB is NOT a C string: s[0] is its length and s+1 is the
+   first character. MtoC and CtoM convert IN PLACE and return the buffer, so
+   MtoC(s) makes s usable with C string functions and CtoM(s) puts it back.
+   The destination of Mstrcpy/Mstrcat must have room - a simple MMBasic string
+   variable always has STRINGSIZE (256) bytes, but an array DIMmed with LENGTH
+   has only what was asked for. */
+#define MtoC(a) ((unsigned char *(*)(unsigned char *))Vector_MtoC)(a)
+#define CtoM(a) ((unsigned char *(*)(unsigned char *))Vector_CtoM)(a)
+#define Mstrcpy(a, b) ((void (*)(unsigned char *, unsigned char *))Vector_Mstrcpy)(a, b)
+#define Mstrcat(a, b) ((void (*)(unsigned char *, const unsigned char *))Vector_Mstrcat)(a, b)
+#define Mstrcmp(a, b) ((int (*)(const unsigned char *, const unsigned char *))Vector_Mstrcmp)(a, b)
+#define StrLeft(d, s, n) ((unsigned char *(*)(unsigned char *, const unsigned char *, int))Vector_StrLeft)(d, s, n)
+#define StrRight(d, s, n) ((unsigned char *(*)(unsigned char *, const unsigned char *, int))Vector_StrRight)(d, s, n)
+#define StrCase(d, s, up) ((unsigned char *(*)(unsigned char *, const unsigned char *, int))Vector_StrCase)(d, s, up)
+#define StrMid(d, s, p, n) ((unsigned char *(*)(unsigned char *, const unsigned char *, int, int))Vector_StrMid)(d, s, p, n)
+#define StrChar(d, c) ((unsigned char *(*)(unsigned char *, int))Vector_StrChar)(d, c)
+#define StrFill(d, c, n) ((unsigned char *(*)(unsigned char *, int, int))Vector_StrFill)(d, c, n)
 
 /* memcpy / memset / memmove shims.
  *

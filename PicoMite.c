@@ -564,6 +564,29 @@ uint8_t PSRAMpin;
         (void *)memcpy,  // 0x158 void *memcpy(void*,const void*,size_t)
         (void *)memset,  // 0x15c void *memset(void*,int,size_t)
         (void *)memmove, // 0x160 void *memmove(void*,const void*,size_t)
+        // MMBasic string primitives - append-only, do not reorder.
+        // These were already plain C functions over MMBasic's length-prefixed
+        // strings (a length byte, then the data), so they are exposed as they
+        // stand: no wrapper, no refactoring, nothing to keep in step. Between
+        // them they cover assignment, concatenation and comparison, which is
+        // most of what any string expression does.
+        (void *)MtoC,    // 0x164 unsigned char *MtoC(unsigned char *)   MMBasic -> C, in place
+        (void *)CtoM,    // 0x168 unsigned char *CtoM(unsigned char *)   C -> MMBasic, in place
+        (void *)Mstrcpy, // 0x16c void Mstrcpy(unsigned char *dst, unsigned char *src)
+        (void *)Mstrcat, // 0x170 void Mstrcat(unsigned char *dst, const unsigned char *src)
+        (void *)Mstrcmp, // 0x174 int  Mstrcmp(const unsigned char *s1, const unsigned char *s2)
+        // String operations, shared with the interpreter. Each is the body of
+        // the matching MMBasic function with the argument parsing left behind
+        // in its fun_ wrapper (see the cores in core/Functions.c), so a CSUB
+        // and MMBasic run the SAME code and cannot disagree. Each writes into
+        // a destination the caller supplies - GetTempStrMemory() (0x30 with
+        // STRINGSIZE) is the natural source - and clamps rather than erroring.
+        (void *)StrLeft,  // 0x178 unsigned char *StrLeft(dst, s, n)            LEFT$
+        (void *)StrRight, // 0x17c unsigned char *StrRight(dst, s, n)           RIGHT$
+        (void *)StrCase,  // 0x180 unsigned char *StrCase(dst, s, upper)        UCASE$/LCASE$
+        (void *)StrMid,   // 0x184 unsigned char *StrMid(dst, s, spos, nbr)     MID$
+        (void *)StrChar,  // 0x188 unsigned char *StrChar(dst, c)               CHR$
+        (void *)StrFill,  // 0x18c unsigned char *StrFill(dst, ch, n)           SPACE$/STRING$
     };
 #ifdef rp2350
     // this is a frig to place the calltable at 0x1000023C as in previous releases
