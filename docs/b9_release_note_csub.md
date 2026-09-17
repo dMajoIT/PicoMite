@@ -38,7 +38,7 @@ output from one file on a PicoMiteVGA (RP2040) and a PicoMiteHDMIWEB
 (RP2350B). So a converted program can be posted or shipped exactly like any
 other `.bas`.
 
-**What to expect.** Loops, array work and arithmetic run 10–20x faster.
+**What to expect.** Loops, array work and arithmetic run 10–35x faster.
 Routines that mostly call the firmware already — graphics, `SIN`, string
 formatting — gain much less, because only the interpreting overhead goes away.
 The tool tells you which yours is before you commit to anything: `--list`
