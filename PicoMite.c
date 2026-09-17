@@ -587,6 +587,15 @@ uint8_t PSRAMpin;
         (void *)StrMid,   // 0x184 unsigned char *StrMid(dst, s, spos, nbr)     MID$
         (void *)StrChar,  // 0x188 unsigned char *StrChar(dst, c)               CHR$
         (void *)StrFill,  // 0x18c unsigned char *StrFill(dst, ch, n)           SPACE$/STRING$
+        (void *)StrInstr,  // 0x190 int StrInstr(s1, s2, start)                   INSTR (0-based start)
+        (void *)StrFormat, // 0x194 unsigned char *StrFormat(dst,f,i64,isint,m,n,ch)  STR$
+        // Not strings, but the same idea: the body of the MMBasic function with
+        // the parsing left behind in its wrapper, so a CSUB gets the answer the
+        // interpreter would give - including RND's reseeding and TIMER's origin.
+        (void *)TimerVal, // 0x198 MMFLOAT TimerVal(void)   TIMER, in milliseconds
+        (void *)RndVal,   // 0x19c MMFLOAT RndVal(void)     RND
+        (void *)log,      // 0x1a0 MMFLOAT log(MMFLOAT)
+        (void *)tan,      // 0x1a4 MMFLOAT tan(MMFLOAT)
     };
 #ifdef rp2350
     // this is a frig to place the calltable at 0x1000023C as in previous releases

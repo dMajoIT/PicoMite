@@ -1055,22 +1055,7 @@ void fun_instr(void)
 		s1 = getstring(argv[0 + n]);
 		s2 = getstring(argv[2 + n]);
 		targ = T_INT;
-		if (start > *s1 - *s2 + 1 || *s2 == 0)
-			iret = 0;
-		else
-		{
-			// find s2 in s1 using MMBasic strings
-			int i;
-			for (i = start; i < *s1 - *s2 + 1; i++)
-			{
-				if (memcmp(s1 + i + 1, s2 + 1, *s2) == 0)
-				{
-					iret = i + 1;
-					return;
-				}
-			}
-		}
-		iret = 0;
+		iret = StrInstr(s1, s2, start);
 	}
 	else
 	{
@@ -1222,7 +1207,7 @@ void fun_rad(void)
 
 // generate a random number that is greater than or equal to 0 but less than 1
 // n = RND()
-void fun_rnd(void)
+MMFLOAT RndVal(void)
 {
 #ifdef rp2350
 	static unsigned int rnd_count = 0;
@@ -1230,10 +1215,13 @@ void fun_rnd(void)
 	{ // reseed every 100 calls to keep the random numbers changing
 		srand(get_rand_32());
 	}
-	fret = (MMFLOAT)rand() / ((MMFLOAT)RAND_MAX + (MMFLOAT)RAND_MAX / 1000000);
-#else
-	fret = (MMFLOAT)rand() / ((MMFLOAT)RAND_MAX + (MMFLOAT)RAND_MAX / 1000000);
 #endif
+	return (MMFLOAT)rand() / ((MMFLOAT)RAND_MAX + (MMFLOAT)RAND_MAX / 1000000);
+}
+
+void fun_rnd(void)
+{
+	fret = RndVal();
 	targ = T_NBR;
 }
 
@@ -1447,25 +1435,7 @@ void fun_str(void)
 		ch = ((unsigned char)p[1] & 0x7f);
 	}
 
-	sret = GetTempStrMemory(); // this will last for the life of the command
-	if (t & T_NBR)
-		FloatToStr((char *)sret, f, m, n, ch); // convert the float
-	else
-	{
-		if (n < 0)
-			FloatToStr((char *)sret, i64, m, n, ch); // convert as a float
-		else
-		{
-			IntToStrPad((char *)sret, i64, ch, m, 10); // convert the integer
-			if (n != STR_AUTO_PRECISION && n > 0)
-			{
-				strcat((char *)sret, ".");
-				while (n--)
-					strcat((char *)sret, "0"); // and add on any zeros after the point
-			}
-		}
-	}
-	CtoM(sret);
+	sret = StrFormat(GetTempStrMemory(), f, i64, !(t & T_NBR), m, n, ch);
 	targ = T_STR;
 }
 
@@ -1588,6 +1558,48 @@ unsigned char *StrFill(unsigned char *dst, int ch, int n)
 	memset(dst + 1, ch, n);
 	*dst = n;
 	return dst;
+}
+
+int StrInstr(const unsigned char *s1, const unsigned char *s2, int start)
+{
+	int i;
+	if (start < 0)
+		start = 0;
+	if (start > *s1 - *s2 + 1 || *s2 == 0)
+		return 0;
+	// find s2 in s1 using MMBasic strings
+	for (i = start; i < *s1 - *s2 + 1; i++)
+	{
+		if (memcmp(s1 + i + 1, s2 + 1, *s2) == 0)
+			return i + 1;
+	}
+	return 0;
+}
+
+// STR$ once the argument has been evaluated: isint selects the integer path,
+// m is the digits before the point, n after it (STR_AUTO_PRECISION for the
+// default) and ch is the padding character.
+unsigned char *StrFormat(unsigned char *dst, MMFLOAT f, long long int i64,
+						 int isint, int m, int n, int ch)
+{
+	if (!isint)
+		FloatToStr((char *)dst, f, m, n, ch); // convert the float
+	else
+	{
+		if (n < 0)
+			FloatToStr((char *)dst, i64, m, n, ch); // convert as a float
+		else
+		{
+			IntToStrPad((char *)dst, i64, ch, m, 10); // convert the integer
+			if (n != STR_AUTO_PRECISION && n > 0)
+			{
+				strcat((char *)dst, ".");
+				while (n--)
+					strcat((char *)dst, "0"); // and add on any zeros after the point
+			}
+		}
+	}
+	return CtoM(dst);
 }
 
 void fun_left(unsigned char *p, int i)

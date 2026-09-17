@@ -667,6 +667,11 @@ long long int FloatToInt64(MMFLOAT x);
     unsigned char *StrMid(unsigned char *dst, const unsigned char *s, int spos, int nbr);
     unsigned char *StrChar(unsigned char *dst, int c);
     unsigned char *StrFill(unsigned char *dst, int ch, int n);
+    int StrInstr(const unsigned char *s1, const unsigned char *s2, int start);
+    unsigned char *StrFormat(unsigned char *dst, MMFLOAT f, long long int i64,
+                             int isint, int m, int n, int ch);
+    MMFLOAT RndVal(void);
+    MMFLOAT TimerVal(void);
     int Mstrcmp(const unsigned char *s1, const unsigned char *s2);
     unsigned char *getCstring(unsigned char *p);
     unsigned char *getFstring(unsigned char *p);

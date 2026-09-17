@@ -196,6 +196,12 @@
 #define Vector_StrMid (*(unsigned int *)(BaseAddress + 0x184))   // MID$
 #define Vector_StrChar (*(unsigned int *)(BaseAddress + 0x188))  // CHR$
 #define Vector_StrFill (*(unsigned int *)(BaseAddress + 0x18C))  // SPACE$ / STRING$
+#define Vector_StrInstr (*(unsigned int *)(BaseAddress + 0x190))  // INSTR
+#define Vector_StrFormat (*(unsigned int *)(BaseAddress + 0x194)) // STR$
+#define Vector_TimerVal (*(unsigned int *)(BaseAddress + 0x198))  // TIMER, milliseconds
+#define Vector_RndVal (*(unsigned int *)(BaseAddress + 0x19C))    // RND
+#define Vector_Log (*(unsigned int *)(BaseAddress + 0x1A0))       // MMFLOAT log(MMFLOAT)
+#define Vector_Tan (*(unsigned int *)(BaseAddress + 0x1A4))       // MMFLOAT tan(MMFLOAT)
 
 // Macros to call each function.
 #define uSec(a) ((void (*)(unsigned long long))Vector_uSec)(a)
@@ -330,6 +336,12 @@
 #define StrMid(d, s, p, n) ((unsigned char *(*)(unsigned char *, const unsigned char *, int, int))Vector_StrMid)(d, s, p, n)
 #define StrChar(d, c) ((unsigned char *(*)(unsigned char *, int))Vector_StrChar)(d, c)
 #define StrFill(d, c, n) ((unsigned char *(*)(unsigned char *, int, int))Vector_StrFill)(d, c, n)
+#define StrInstr(a, b, st) ((int (*)(const unsigned char *, const unsigned char *, int))Vector_StrInstr)(a, b, st)
+#define StrFormat(d, f, i, isint, m, n, c) ((unsigned char *(*)(unsigned char *, MMFLOAT, long long, int, int, int, int))Vector_StrFormat)(d, f, i, isint, m, n, c)
+#define TimerVal() ((MMFLOAT (*)(void))Vector_TimerVal)()
+#define RndVal() ((MMFLOAT (*)(void))Vector_RndVal)()
+#define Log(a) ((MMFLOAT (*)(MMFLOAT))Vector_Log)(a)
+#define Tan(a) ((MMFLOAT (*)(MMFLOAT))Vector_Tan)(a)
 
 /* memcpy / memset / memmove shims.
  *

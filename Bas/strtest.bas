@@ -69,6 +69,33 @@ Show "ST 5 s",  String$(5, "x")
 Show "ST 5 n",  String$(5, 65)
 Show "ST 255",  String$(255, 90)
 
+Print "--- STR$ ---"
+Show "S int",      Str$(12345)
+Show "S int neg",  Str$(-12345)
+Show "S int m",    Str$(12345, 10)
+Show "S int m n",  Str$(12345, 10, 3)
+Show "S int pad",  Str$(12345, 10, 0, "0")
+Show "S flt",      Str$(3.14159265)
+Show "S flt m n",  Str$(3.14159265, 3, 4)
+Show "S flt neg",  Str$(-3.14159265, 3, 4)
+Show "S zero",     Str$(0)
+Show "S big",      Str$(1234567890123)
+Show "S small",    Str$(0.000001234)
+Show "S bench",    Str$(-1.5, 6, 6)
+
+Print "--- INSTR ---"
+Show2 "I found",     Instr(s$, "World")
+Show2 "I first",     Instr(s$, "H")
+Show2 "I last",      Instr(s$, "d")
+Show2 "I missing",   Instr(s$, "zzz")
+Show2 "I empty n",   Instr(s$, e$)
+Show2 "I empty h",   Instr(e$, "a")
+Show2 "I start 1",   Instr(1, s$, "o")
+Show2 "I start 6",   Instr(6, s$, "o")
+Show2 "I start big", Instr(200, s$, "o")
+Show2 "I whole",     Instr(s$, s$)
+Show2 "I longer",    Instr("ab", "abc")
+
 Print "--- nested ---"
 Show "N 1", UCase$(Mid$(s$, 8, 5))
 Show "N 2", Left$(Right$(s$, 5), 3)
@@ -97,4 +124,9 @@ Sub Show nm$, v$
     EndIf
   Next j
   Print nm$; " len="; n; " ck="; ck; " ["; h$; "]"
+End Sub
+
+' the same idea for an integer result
+Sub Show2 nm$, v
+  Print nm$; " = "; v
 End Sub

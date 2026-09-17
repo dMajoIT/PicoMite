@@ -525,9 +525,14 @@ void cmd_timer(void)
     timeroffset = mytime - (uint64_t)getint(++cmdline, 0, mytime / 1000) * 1000;
 }
 // this is invoked as a function
+MMFLOAT __not_in_flash_func(TimerVal)(void)
+{
+    return (MMFLOAT)(time_us_64() - timeroffset) / 1000.0;
+}
+
 void __not_in_flash_func(fun_timer)(void)
 {
-    fret = (MMFLOAT)(time_us_64() - timeroffset) / 1000.0;
+    fret = TimerVal();
     targ = T_NBR;
 }
 uint64_t gettimefromepoch(int *year, int *month, int *day, int *hour, int *minute, int *second)
