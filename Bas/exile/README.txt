@@ -194,6 +194,18 @@ is nonsense, try:
 
 and run it again.
 
+If it stops at once with "Unknown command" and asked you nothing, the
+board is carrying another program's library.  There is only one library
+slot on the machine, and Exile's kernel needs it.  Firmware up to and
+including 6.03.02b9 can lose track of what is in that slot, so Exile is
+told it already has its library when it has not.  The cure is:
+
+    LIBRARY DELETE
+
+and then run the game again.  Be aware that this removes whatever
+library was there, so if another program put it in, that program will
+need to install it again.
+
 If the game stops with an error, the board remembers it: at the
 prompt, PRINT MM.ERRNO, MM.ERRMSG$, MM.ERRLINE will say what and
 where.  Those three, with the version, are the most useful thing
