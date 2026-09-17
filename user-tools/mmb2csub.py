@@ -482,6 +482,44 @@ def type_list(routine, bodytext, gl):
     return ", ".join(out)
 
 
+def repack(block):
+    """Strip the CSUB's comments and refill its lines to eight words.
+
+    armcfgen names each function in the blob with a comment line of its own and
+    starts a fresh line at each function, so a blob of many small routines comes
+    out as ragged five- and six-word lines with a comment between each.  Both
+    cost program memory: the interpreter stores the text.
+
+    The words themselves are untouched and stay in order - only how they are
+    laid out changes - so the blob the firmware ends up with is identical.
+    The entry-offset word keeps a line of its own, being a different thing from
+    the code that follows it.
+
+    Repacking goes with --lean because it makes the markers WRONG rather than
+    merely absent: a marker names the words that follow it, and after refilling
+    the lines it would point at the wrong place.
+    """
+    head, words = None, []
+    for ln in block.split("\n"):
+        st = ln.strip()
+        if not st or st.startswith("'"):
+            continue
+        if st.upper().startswith("CSUB "):
+            head = ln.rstrip()
+            continue
+        if st.upper().startswith("END CSUB"):
+            continue
+        words.extend(st.split())
+    if head is None or not words:
+        return block
+    out = [head, "\t" + words[0]]            # the entry offset
+    code = words[1:]
+    for i in range(0, len(code), 8):
+        out.append("\t" + " ".join(code[i:i + 8]))
+    out.append("End CSUB")
+    return "\n".join(out) + "\n"
+
+
 def adapter_sub(name, routine, entry, passed):
     """A thin MMBasic SUB or FUNCTION with the ORIGINAL name.
 
@@ -732,6 +770,8 @@ def main():
     block = open(out).read()
     block = block.replace("CSUB " + entry.upper(),
                           "CSUB %s %s" % (entry, type_list(routine, bodytext, gl)), 1)
+    if args.lean:
+        block = repack(block)
     open(out, "w").write(block)
     ctext = open(cpath).read()
 
