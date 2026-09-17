@@ -415,7 +415,7 @@ def bounds_used(text, p):
     return ("__b_" + p.name.replace(".", "__")) in bodies_only
 
 
-def entry_shim(conv, routine, entry, bodytext, gl):
+def entry_shim(conv, routine, entry, bodytext, gl, gtab=False):
     """The CSUB entry: cast the interpreter's void*, publish the globals, call.
 
     The routine's own parameters go straight through as arguments.  The globals
@@ -451,16 +451,35 @@ def entry_shim(conv, routine, entry, bodytext, gl):
     heap = [(nm, s) for nm, s in gl if s.acc.startswith("H->")]
     flat = [(nm, s) for nm, s in gl if not s.acc.startswith("H->")]
     sets = []
-    for k, (nm, s) in enumerate(heap):
-        sets.append("    H->%s = (%s *)a%d;" % (s.acc[3:], CT[s.ty], slot))
+    if gl and gtab:
+        # ONE argument for all of them: an INTEGER array of addresses that the
+        # wrapper fills with PEEK(VARADDR x). That is not an approximation of
+        # the pointer the ABI would have passed - PEEK(VARADDR) calls findvar
+        # with the same flags CallCFunction does, so it IS that pointer. The
+        # argument ceiling then stops mattering however many globals there are.
         decl.append("void *a%d" % slot)
-        passed.append(sfx(nm, s.is_array, s.ty))
+        passed.append("__gt()")
+        sets.append("    {")
+        sets.append("        const MMINTEGER *__t = (const MMINTEGER *)a%d;" % slot)
+        for k, (nm, s) in enumerate(heap):
+            sets.append("        H->%s = (%s *)(unsigned)__t[%d];"
+                        % (s.acc[3:], CT[s.ty], k))
+        for k, (nm, s) in enumerate(flat):
+            sets.append("        MMCSUB_G[%d] = (void *)(unsigned)__t[%d];"
+                        % (len(heap) + k, len(heap) + k))
+        sets.append("    }")
         slot += 1
-    for k, (nm, s) in enumerate(flat):
-        sets.append("    MMCSUB_G[%d] = a%d;" % (len(heap) + k, slot))
-        decl.append("void *a%d" % slot)
-        passed.append(sfx(nm, s.is_array, s.ty))
-        slot += 1
+    else:
+        for k, (nm, s) in enumerate(heap):
+            sets.append("    H->%s = (%s *)a%d;" % (s.acc[3:], CT[s.ty], slot))
+            decl.append("void *a%d" % slot)
+            passed.append(sfx(nm, s.is_array, s.ty))
+            slot += 1
+        for k, (nm, s) in enumerate(flat):
+            sets.append("    MMCSUB_G[%d] = a%d;" % (len(heap) + k, slot))
+            decl.append("void *a%d" % slot)
+            passed.append(sfx(nm, s.is_array, s.ty))
+            slot += 1
 
     lines = ["/* CSUB entry - the interpreter hands us one pointer per argument. */",
              "long long %s(%s)" % (entry, ", ".join(decl) if decl else "void"),
@@ -475,7 +494,7 @@ def entry_shim(conv, routine, entry, bodytext, gl):
     return "\n".join(lines), slot, passed
 
 
-def type_list(routine, bodytext, gl):
+def type_list(routine, bodytext, gl, gtab=False):
     """The `CSUB name INTEGER, FLOAT, ...` type list, matching entry_shim.
 
     It has to cover the globals too: a routine with no parameters can still
@@ -490,8 +509,11 @@ def type_list(routine, bodytext, gl):
         out.append(T[p.ty])
         if p.is_array and bounds_used(bodytext, p):
             out.append("INTEGER")      # the bound
-    for nm, sym in sorted(gl, key=lambda g: not g[1].acc.startswith("H->")):
-        out.append(T[sym.ty])
+    if gl and gtab:
+        out.append("INTEGER")      # the single array of addresses
+    else:
+        for nm, sym in sorted(gl, key=lambda g: not g[1].acc.startswith("H->")):
+            out.append(T[sym.ty])
     return ", ".join(out)
 
 
@@ -533,7 +555,7 @@ def repack(block):
     return "\n".join(out) + "\n"
 
 
-def adapter_sub(name, routine, entry, passed):
+def adapter_sub(name, routine, entry, passed, gl=(), gtab=False, base=0):
     """A thin MMBasic SUB or FUNCTION with the ORIGINAL name.
 
     It supplies what the CSUB ABI cannot carry - a FUNCTION's result, an
@@ -542,15 +564,34 @@ def adapter_sub(name, routine, entry, passed):
     the CSUB carries the original name itself.
     """
     ps = [SFX[p.ty](p.name, p.is_array) for p in routine.params]
+    pre = []
+    if gl and gtab:
+        # One argument for every global: an array of their addresses.
+        # PEEK(VARADDR x) is findvar with the same flags CallCFunction uses to
+        # build an argument pointer, so these ARE the pointers the ABI would
+        # have passed - and it costs one findvar each, exactly as passing them
+        # separately would have. Built fresh every call rather than cached,
+        # because a REDIM between calls would strand a cached address.
+        heap = [(nm, s) for nm, s in gl if s.acc.startswith("H->")]
+        flat = [(nm, s) for nm, s in gl if not s.acc.startswith("H->")]
+        order = heap + flat
+        # The subscripts have to start at the program's OPTION BASE, and the
+        # C side reads from the data pointer, which is the FIRST element
+        # whichever base that is - so the two agree without knowing it.
+        pre.append("  Local Integer __gt(%d)" % (base + len(order) - 1))
+        for k, (nm, s) in enumerate(order):
+            pre.append("  __gt(%d) = Peek(VARADDR %s)"
+                       % (base + k, SFX[s.ty](nm, s.is_array)))
+    body = "\n".join(pre) + ("\n" if pre else "")
     if routine.is_func:
         fn = SFX[routine.ty](name, False)      # the FUNCTION keeps its type
         rn = SFX[routine.ty]("__r", False)     # and so must the local
-        return ("Function %s(%s)\n  Local %s\n  %s %s\n  %s = %s\nEnd Function\n"
-                % (fn, ", ".join(ps), rn, entry, ", ".join(passed), fn, rn))
-    if list(ps) == list(passed):
+        return ("Function %s(%s)\n  Local %s\n%s  %s %s\n  %s = %s\nEnd Function\n"
+                % (fn, ", ".join(ps), rn, body, entry, ", ".join(passed), fn, rn))
+    if not pre and list(ps) == list(passed):
         return None
-    return ("Sub %s%s\n  %s %s\nEnd Sub\n"
-            % (name, (" " + ", ".join(ps)) if ps else "",
+    return ("Sub %s%s\n%s  %s %s\nEnd Sub\n"
+            % (name, (" " + ", ".join(ps)) if ps else "", body,
                entry, ", ".join(passed)))
 
 
@@ -836,6 +877,10 @@ def main():
                          "SEPARATE CSUB with its own copy of everything it "
                          "calls, so prefer one routine high in the call graph "
                          "over several below it")
+    ap.add_argument("--gtab", action="store_true",
+                    help="always pass the globals as one array of addresses")
+    ap.add_argument("--no-gtab", action="store_true",
+                    help="never do that; fail instead if there are too many")
     ap.add_argument("--list", action="store_true",
                     help="report what can be converted and what it costs, "
                          "and change nothing")
@@ -924,10 +969,17 @@ def main():
     # sites go straight to it - MMBasic calls a CSUB exactly like a SUB. Only
     # when a wrapper has to sit in front (a FUNCTION's result, an array bound,
     # globals) does the CSUB need a name of its own for the wrapper to call.
-    _, _, probe = entry_shim(conv, routine, "probe", bodytext, gl)
-    needs_wrapper = adapter_sub(args.sub[0], routine, "probe", probe) is not None
+    # One argument per global reaches the ceiling quickly - MAX_CSUB_ARGS is 10
+    # on the RP2040 - so past that they travel as a single array of addresses
+    # the wrapper builds, which has no practical limit. Below it they are
+    # passed directly, which needs no wrapper at all when there are none.
+    _, direct_n, _ = entry_shim(conv, routine, "probe", bodytext, gl)
+    gtab = args.gtab or (direct_n > 10 and not args.no_gtab)
+    _, _, probe = entry_shim(conv, routine, "probe", bodytext, gl, gtab)
+    needs_wrapper = adapter_sub(args.sub[0], routine, "probe", probe,
+                                gl, gtab, conv.opt_base) is not None
     entry = args.name or ((args.sub[0] + "K") if needs_wrapper else args.sub[0])
-    shim, nargs, passed = entry_shim(conv, routine, entry, bodytext, gl)
+    shim, nargs, passed = entry_shim(conv, routine, entry, bodytext, gl, gtab)
     if nargs > 16:
         sys.exit("error: %s would need %d arguments (%d of them globals), and "
                  "MAX_CSUB_ARGS is 16 on RP2350, 10 on RP2040.\n"
@@ -958,13 +1010,14 @@ def main():
 
     block = open(out).read()
     block = block.replace("CSUB " + entry.upper(),
-                          "CSUB %s %s" % (entry, type_list(routine, bodytext, gl)), 1)
+                          "CSUB %s %s" % (entry, type_list(routine, bodytext, gl, gtab)), 1)
     if args.lean:
         block = repack(block)
     open(out, "w").write(block)
     ctext = open(cpath).read()
 
-    wrapper = adapter_sub(args.sub[0], routine, entry, passed)
+    wrapper = adapter_sub(args.sub[0], routine, entry, passed, gl, gtab,
+                          conv.opt_base)
     nwords = sum(len(l.split()) for l in block.splitlines()
                  if l.startswith("\t") and not l.lstrip().startswith("'"))
 
