@@ -67,10 +67,12 @@ unsigned int *FindCFunction(unsigned int *p, unsigned char *CmdPtr, unsigned cha
 
 long long int MIPS16 CallCFunction(unsigned char *CmdPtr, unsigned char *ArgList, unsigned char *DefP, unsigned char *CallersLinePtr)
 {
-    void *arg[10] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
-    int typ[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    long long int ret, i64[10];
-    MMFLOAT ff[10];
+    // MAX_CSUB_ARGS slots: 16 on RP2350, 10 on RP2040 (see configuration.h -
+    // each slot costs ~40 bytes of this frame, which lives on the core0 stack).
+    void *arg[MAX_CSUB_ARGS] = {NULL};
+    int typ[MAX_CSUB_ARGS] = {0};
+    long long int ret, i64[MAX_CSUB_ARGS];
+    MMFLOAT ff[MAX_CSUB_ARGS];
     unsigned char *pp;
     int i, type;
     uint32_t ii;
@@ -101,7 +103,7 @@ long long int MIPS16 CallCFunction(unsigned char *CmdPtr, unsigned char *ArgList
         if (i != DefaultType)
         {
             // if there is a type list get each entry
-            getcsargs(&p, 19);
+            getcsargs(&p, MAX_CSUB_ARGS * 2 - 1);
             for (i = 0; i < argc; i += 2)
             { // get each definition
                 CheckIfTypeSpecified(argv[i], &typ[i / 2], false);
@@ -114,7 +116,7 @@ long long int MIPS16 CallCFunction(unsigned char *CmdPtr, unsigned char *ArgList
     CurrentLinePtr = CallersLinePtr; // report errors at the caller
     if (*ArgList != ')')
     {
-        getcsargs(&ArgList, 19); // expand the command line of the caller
+        getcsargs(&ArgList, MAX_CSUB_ARGS * 2 - 1); // expand the command line of the caller
         for (i = 0; i < argc; i += 2)
         {
             // if this is a straight variable we want to pass a pointer to its value in RAM
@@ -168,7 +170,21 @@ long long int MIPS16 CallCFunction(unsigned char *CmdPtr, unsigned char *ArgList
     // run the function in flash
     ii = *p++;
     p = (unsigned int *)((unsigned int)p | 0x1);
-    ret = ((long long int (*)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *))(p + ii))(arg[0], arg[1], arg[2], arg[3], arg[4], arg[5], arg[6], arg[7], arg[8], arg[9]); // run the CFunction
+    // Run the CFunction. The cast's arity is the CALLER's business: AAPCS is
+    // caller-cleanup, so a blob compiled to take fewer arguments reads the
+    // registers it wants and ignores the extra stack words - which is why
+    // raising MAX_CSUB_ARGS cannot break an already-compiled CSUB.
+#if MAX_CSUB_ARGS == 16
+    ret = ((long long int (*)(void *, void *, void *, void *, void *, void *, void *, void *,
+                              void *, void *, void *, void *, void *, void *, void *, void *))(p + ii))(
+        arg[0], arg[1], arg[2], arg[3], arg[4], arg[5], arg[6], arg[7],
+        arg[8], arg[9], arg[10], arg[11], arg[12], arg[13], arg[14], arg[15]);
+#elif MAX_CSUB_ARGS == 10
+    ret = ((long long int (*)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *))(p + ii))(
+        arg[0], arg[1], arg[2], arg[3], arg[4], arg[5], arg[6], arg[7], arg[8], arg[9]);
+#else
+#error "MAX_CSUB_ARGS must be 10 or 16 - the call above spells its arguments out"
+#endif
 
     return ret;
 }

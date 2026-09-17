@@ -443,11 +443,22 @@ extern "C"
 /* ============================================================================
  * Operating characteristics - Limits and maximums
  * ============================================================================ */
-#define MAXERRMSG 64               // Max error msg size (MM.ErrMsg$ is truncated to this)
-#define MAXSOUNDS 4                // Maximum simultaneous sounds
-#define MAXKEYLEN 64               // Maximum key length
-#define MAXPID 8                   // Maximum PIDs
-#define MAX_ARG_COUNT 75           // Max arguments to PRINT, INPUT, WRITE, ON, DIM, ERASE, DATA, READ
+#define MAXERRMSG 64     // Max error msg size (MM.ErrMsg$ is truncated to this)
+#define MAXSOUNDS 4      // Maximum simultaneous sounds
+#define MAXKEYLEN 64     // Maximum key length
+#define MAXPID 8         // Maximum PIDs
+#define MAX_ARG_COUNT 75 // Max arguments to PRINT, INPUT, WRITE, ON, DIM, ERASE, DATA, READ
+// Max arguments to a CSUB. Each slot costs about 40 bytes of CallCFunction's
+// stack frame - arg[] + typ[] + i64[] + ff[], plus two argv[] entries in each
+// of its two getcsargs - and that frame lives on the core0 stack, so the RP2040
+// keeps the historical 10. Raising it is ABI-safe: AAPCS is caller-cleanup, so
+// an existing blob compiled for fewer arguments simply ignores the extra stack
+// words. Past ~16 the 256-byte program line runs out before the slots do.
+#ifdef rp2350
+#define MAX_CSUB_ARGS 16
+#else
+#define MAX_CSUB_ARGS 10
+#endif
 #define MAXCFUNCTION 20            // Maximum C functions
 #define MAX3D 32                   // Maximum 3D objects.  struct3d[] is a pointer per slot, so an
                                    // unused one costs 4 bytes and nothing else - the mesh itself is

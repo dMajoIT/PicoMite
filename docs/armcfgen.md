@@ -230,14 +230,35 @@ the stride is 256.
 
 These are not style preferences — break them and the blob crashes or won't build.
 
-1. **No floating‑point or 64‑bit‑multiply C operators.** Cortex‑M0+ has no FPU
-   and no 64‑bit multiply, so `a * b`, `a + b`, etc. on `double` (and `*`/`/` on
-   `long long`) make the compiler emit a libgcc helper (`__aeabi_dadd`,
-   `__aeabi_dmul`, `__aeabi_lmul`, …) that is **not in the blob**. Do that maths
-   by calling the firmware instead (§1.5). 32‑bit integer maths and 64‑bit
-   add/subtract are fine.
+1. **No floating‑point or 64‑bit multiply/divide/variable‑shift C operators.**
+   Cortex‑M0+ has no FPU, no 64‑bit multiply and no divide, and the blob links
+   without libgcc — so those operators make the compiler emit a helper
+   (`__aeabi_dadd`, `__aeabi_dmul`, `__aeabi_lmul`, `__aeabi_ldivmod`,
+   `__aeabi_llsl`, …) that is **not in the blob**. Do that maths by calling the
+   firmware instead (§1.5).
+
+   For `double`, **every** operator needs a firmware call. For `long long`, only
+   five do — `*`, `/`, `%`, and `<<`/`>>` by a **variable** count. Add, subtract,
+   negate, compare, `&`/`|`/`^`/`~` and shifts by a **constant** all compile
+   inline and are fine as written, as is all 32‑bit integer maths.
+
+   From firmware 6.03.02b8 the five have CallTable slots of their own — `LMul`,
+   `LDiv`, `LMod`, `LShl`, `LAsr`, `LLsr` (§1.5) — so 64‑bit maths no longer
+   means dropping to 32 bits. Note `LAsr` is the *arithmetic* right shift (sign
+   propagating) and `LLsr` the *logical* one; MMBasic's own `>>` operator is
+   logical, so `LLsr` is the one that matches it.
+
    *Safety net:* if you slip up, the build fails with `undefined reference to
    __aeabi_…` rather than producing a broken blob.
+
+   **`memcpy`/`memset`/`memmove` are a special case.** The compiler emits calls
+   to these *by name*, without you writing one — `char buf[64] = {0}`, a struct
+   assignment or an array copy all become one — so a CallTable macro cannot
+   catch them and the symbols themselves have to be in the blob. Put
+   `#define CSUB_MEM_SHIMS` before `#include "PicoCFunctions.h"` and you get
+   shims that forward to the firmware's own routines, 20 bytes each. Leave it
+   undefined and you save the space, at the price of an `undefined reference to
+   memset` if the compiler wants one.
    `switch` statements are fine: the tool compiles with `-fno-jump-tables`, so a
    `switch` (or an if‑chain the optimiser would turn into one) becomes compares and
    branches rather than a jump table through a libgcc helper
@@ -277,6 +298,8 @@ The routines you will use most:
 | `FAdd(a,b)` `FSub(a,b)` `FMul(a,b)` `FDiv(a,b)` | `double` + − × ÷ |
 | `Sine(x)` `Cosine(x)` `Sqrt(x)` `Atan2(y,x)` `Power(b,e)` | `double` maths |
 | `IntToFloat(i)` `FloatToInt(f)` | convert (FloatToInt rounds) |
+| `LMul(a,b)` `LDiv(a,b)` `LMod(a,b)` | `long long` × ÷ remainder |
+| `LShl(a,n)` `LAsr(a,n)` `LLsr(a,n)` | `long long` shifts by a variable count |
 | `DrawPixel(x,y,c)` | plot one pixel (c is a full RGB colour) |
 | `Display_Refresh()` | push direct drawing to a buffered panel |
 | `HRes` `VRes` | current screen size |
@@ -588,7 +611,17 @@ working.
 | `FDiv` | 0xAC | `MMFLOAT FDiv(MMFLOAT,MMFLOAT)` — a÷b |
 | `FCmp` | 0xB0 | `int FCmp(MMFLOAT,MMFLOAT)` — −1 / 0 / 1 |
 | `LoadFloat` | 0xB4 | `MMFLOAT LoadFloat(unsigned long long bits)` — reinterpret a bit pattern |
-| `IDiv` | 0xC8 | `int IDiv(int a, int b)` — integer divide |
+| `IDiv` | 0xC8 | `int IDiv(int a, int b)` — 32‑bit integer divide |
+| `IMod` | 0x13C | `int IMod(int a, int b)` — 32‑bit integer remainder |
+| `LMul` | 0x140 | `long long LMul(long long, long long)` — a × b |
+| `LDiv` | 0x144 | `long long LDiv(long long, long long)` — a ÷ b (MMBasic `\`) |
+| `LMod` | 0x148 | `long long LMod(long long, long long)` — a % b (MMBasic `MOD`) |
+| `LShl` | 0x14C | `long long LShl(long long, int n)` — a << n |
+| `LAsr` | 0x150 | `long long LAsr(long long, int n)` — a >> n, **arithmetic** (sign propagating) |
+| `LLsr` | 0x154 | `unsigned long long LLsr(unsigned long long, int n)` — a >> n, **logical**; this is what MMBasic's `>>` does |
+| `memcpy` | 0x158 | `void *memcpy(void *, const void *, size_t)` |
+| `memset` | 0x15C | `void *memset(void *, int, size_t)` |
+| `memmove` | 0x160 | `void *memmove(void *, const void *, size_t)` |
 | `Cosine` | 0xF4 | `MMFLOAT cos(MMFLOAT)` |
 | `Sqrt` | 0xF8 | `MMFLOAT sqrt(MMFLOAT)` |
 | `Atan2` | 0xFC | `MMFLOAT atan2(MMFLOAT y, MMFLOAT x)` |

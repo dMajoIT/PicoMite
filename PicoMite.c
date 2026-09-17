@@ -429,6 +429,21 @@ uint8_t PSRAMpin;
 
     int IDiv(int a, int b) { return a / b; }
     int IMod(int a, int b) { return a % b; }
+    // 64-bit integer helpers for CSUBs. A CSUB links with no libgcc, and on
+    // Cortex-M0+ these five operations are the only long long ones GCC cannot
+    // emit inline (add/sub/negate/compare/bitwise/constant-shift all are):
+    //   *  -> __aeabi_lmul      /  % -> __aeabi_ldivmod, __aeabi_uldivmod
+    //   << >> by a VARIABLE count -> __aeabi_llsl, __aeabi_lasr, __aeabi_llsr
+    // They must be C wrappers, not pointers straight at the __aeabi_ routines:
+    // __aeabi_ldivmod returns the quotient in r0:r1 and the remainder in r2:r3,
+    // which is not a C ABI. Divide by zero follows __aeabi_idiv0 (returns 0) as
+    // IDiv/IMod above already do - the caller checks, as MMBasic itself does.
+    long long LMul(long long a, long long b) { return a * b; }
+    long long LDiv(long long a, long long b) { return a / b; }
+    long long LMod(long long a, long long b) { return a % b; }
+    long long LShl(long long a, int n) { return a << n; }
+    long long LAsr(long long a, int n) { return a >> n; }
+    unsigned long long LLsr(unsigned long long a, int n) { return a >> n; }
     int FCmp(MMFLOAT a, MMFLOAT b)
     {
         if (a > b)
@@ -536,6 +551,19 @@ uint8_t PSRAMpin;
         (void *)StoI,   // 0x134 long long StoI(float)   single->int (rounds)
         (void *)ItoS,   // 0x138 float ItoS(long long)   int->single
         (void *)IMod,   // 0x13c int IMod(int,int)
+        // 64-bit integer helpers - append-only, do not reorder
+        (void *)LMul, // 0x140 long long LMul(long long,long long)
+        (void *)LDiv, // 0x144 long long LDiv(long long,long long)
+        (void *)LMod, // 0x148 long long LMod(long long,long long)
+        (void *)LShl, // 0x14c long long LShl(long long,int)          a << n
+        (void *)LAsr, // 0x150 long long LAsr(long long,int)          a >> n, signed
+        (void *)LLsr, // 0x154 unsigned long long LLsr(unsigned long long,int)
+        // block moves - the compiler emits calls to these BY NAME, so a CSUB
+        // that needs them also needs a shim called memcpy/memset/memmove that
+        // forwards to the vector (PicoCFunctions.h has them)
+        (void *)memcpy,  // 0x158 void *memcpy(void*,const void*,size_t)
+        (void *)memset,  // 0x15c void *memset(void*,int,size_t)
+        (void *)memmove, // 0x160 void *memmove(void*,const void*,size_t)
     };
 #ifdef rp2350
     // this is a frig to place the calltable at 0x1000023C as in previous releases

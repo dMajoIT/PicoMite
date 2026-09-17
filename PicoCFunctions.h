@@ -24,10 +24,19 @@
  *          on every variant and on both RP2040 and RP2350 - no per-chip address.
  *          Removed 14 wrapper macros that had no CallTable slot; DrawPixel added
  *          (implemented via DrawRectangle).
+ *  v2.2.0  64-bit integer helpers LMul/LDiv/LMod/LShl/LAsr/LLsr (0x140-0x154) and
+ *          memcpy/memset/memmove (0x158-0x160). On Cortex-M0+ these multiply,
+ *          divide, modulo and variable-count shift operations are the only
+ *          long long ones GCC cannot emit inline, and a CSUB links without
+ *          libgcc; add, subtract, negate, compare, AND/OR/XOR and shifts by a
+ *          constant all compile inline and need no vector. Define
+ *          CSUB_MEM_SHIMS to get the memcpy/memset/memmove symbols the
+ *          compiler calls by name.
  *
  ******************************************************************************************/
 #include <stdint.h>	 /* option_s and the vector prototypes use int8_t/uint16_t/... */
 #include <stdbool.h> /* and bool - both are freestanding headers, always available  */
+#include <stddef.h>	 /* size_t, so the memcpy/memset/memmove shims match the builtins */
 
 /*** Uncomment one of these three  ***/
 #define PICOMITE
@@ -145,6 +154,20 @@
 #define Vector_StoI (*(unsigned int *)(BaseAddress + 0x134))   // long long StoI(float)  single->int (rounds)
 #define Vector_ItoS (*(unsigned int *)(BaseAddress + 0x138))   // float ItoS(long long)  int->single
 #define Vector_IMod (*(unsigned int *)(BaseAddress + 0x13C))   // int IMod(int a, int b){ return a % b; }
+// 64-bit integer helpers. A CSUB links without libgcc, and on Cortex-M0+ these
+// are the only long long operations GCC cannot emit inline - add, subtract,
+// negate, compare, AND/OR/XOR and shifts by a CONSTANT all compile to inline
+// code and need no vector.
+#define Vector_LMul (*(unsigned int *)(BaseAddress + 0x140)) // long long LMul(long long,long long)   a * b
+#define Vector_LDiv (*(unsigned int *)(BaseAddress + 0x144)) // long long LDiv(long long,long long)   a / b
+#define Vector_LMod (*(unsigned int *)(BaseAddress + 0x148)) // long long LMod(long long,long long)   a % b
+#define Vector_LShl (*(unsigned int *)(BaseAddress + 0x14C)) // long long LShl(long long,int)         a << n
+#define Vector_LAsr (*(unsigned int *)(BaseAddress + 0x150)) // long long LAsr(long long,int)         a >> n (signed)
+#define Vector_LLsr (*(unsigned int *)(BaseAddress + 0x154)) // unsigned long long LLsr(unsigned long long,int)
+// block moves
+#define Vector_memcpy (*(unsigned int *)(BaseAddress + 0x158))  // void *memcpy(void*,const void*,size_t)
+#define Vector_memset (*(unsigned int *)(BaseAddress + 0x15C))  // void *memset(void*,int,size_t)
+#define Vector_memmove (*(unsigned int *)(BaseAddress + 0x160)) // void *memmove(void*,const void*,size_t)
 
 // Macros to call each function.
 #define uSec(a) ((void (*)(unsigned long long))Vector_uSec)(a)
@@ -254,6 +277,32 @@
 #define StoI(a) ((long long (*)(float))Vector_StoI)(a)
 #define ItoS(a) ((float (*)(long long))Vector_ItoS)(a)
 #define IMod(a, b) ((int (*)(int, int))Vector_IMod)(a, b)
+#define LMul(a, b) ((long long (*)(long long, long long))Vector_LMul)(a, b)
+#define LDiv(a, b) ((long long (*)(long long, long long))Vector_LDiv)(a, b)
+#define LMod(a, b) ((long long (*)(long long, long long))Vector_LMod)(a, b)
+#define LShl(a, b) ((long long (*)(long long, int))Vector_LShl)(a, b)
+#define LAsr(a, b) ((long long (*)(long long, int))Vector_LAsr)(a, b)
+#define LLsr(a, b) ((unsigned long long (*)(unsigned long long, int))Vector_LLsr)(a, b)
+
+/* memcpy / memset / memmove shims.
+ *
+ * These three are different from every other entry above: the compiler emits
+ * calls to them BY NAME, without you writing one - a `char buf[64] = {0}`, a
+ * struct assignment or an array copy all become a call to memset/memcpy. A
+ * macro cannot catch those, so the SYMBOLS have to exist in the blob. Define
+ * CSUB_MEM_SHIMS before including this header and these forward to the
+ * firmware's own routines through the CallTable (about eight instructions
+ * each); leave it undefined and you save the space, at the price of a link
+ * error if the compiler wants one.
+ *
+ * (The bodies cannot recurse: they are indirect calls through a vector, not
+ * loops the compiler could turn back into a memcpy.)
+ */
+#ifdef CSUB_MEM_SHIMS
+void *memcpy(void *d, const void *s, size_t n) { return ((void *(*)(void *, const void *, size_t))Vector_memcpy)(d, s, n); }
+void *memset(void *d, int c, size_t n) { return ((void *(*)(void *, int, size_t))Vector_memset)(d, c, n); }
+void *memmove(void *d, const void *s, size_t n) { return ((void *(*)(void *, const void *, size_t))Vector_memmove)(d, s, n); }
+#endif
 
 // the structure of the variable table, passed to the CFunction as a pointer Vector_vartbl which is #defined as g_vartbl
 struct s_vartbl
