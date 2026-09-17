@@ -202,6 +202,8 @@
 #define Vector_RndVal (*(unsigned int *)(BaseAddress + 0x19C))    // RND
 #define Vector_Log (*(unsigned int *)(BaseAddress + 0x1A0))       // MMFLOAT log(MMFLOAT)
 #define Vector_Tan (*(unsigned int *)(BaseAddress + 0x1A4))       // MMFLOAT tan(MMFLOAT)
+#define Vector_StrVal (*(unsigned int *)(BaseAddress + 0x1A8))    // VAL, on a C string
+#define Vector_TimerSet (*(unsigned int *)(BaseAddress + 0x1AC))  // TIMER = n
 
 // Macros to call each function.
 #define uSec(a) ((void (*)(unsigned long long))Vector_uSec)(a)
@@ -342,6 +344,10 @@
 #define RndVal() ((MMFLOAT (*)(void))Vector_RndVal)()
 #define Log(a) ((MMFLOAT (*)(MMFLOAT))Vector_Log)(a)
 #define Tan(a) ((MMFLOAT (*)(MMFLOAT))Vector_Tan)(a)
+// StrVal wants a C string, not an MMBasic one - MtoC a copy first. It returns
+// non-zero when the answer is a float (in *f) and zero when it is an integer.
+#define StrVal(p, f, i) ((int (*)(const unsigned char *, MMFLOAT *, long long *))Vector_StrVal)(p, f, i)
+#define TimerSet(ms) ((void (*)(long long))Vector_TimerSet)(ms)
 
 /* memcpy / memset / memmove shims.
  *

@@ -222,6 +222,24 @@ static char *mm_strrep(MMINTEGER n, MMINTEGER c)
     return (char *)StrFill(mm_tmpstr(), (int)c, (int)n);
 }
 
+/* VAL(). The core wants a C string, and MtoC converts IN PLACE, so it has to
+   work on a copy - the argument may be the caller's own variable. MMBasic's
+   VAL yields a number whichever branch it took, so the integer result is
+   widened here exactly as the interpreter widens it. */
+static MMFLOAT mm_val(const char *s)
+{
+    unsigned char *t = mm_tmpstr();
+    MMFLOAT f;
+    long long i;
+    Mstrcpy(t, (unsigned char *)s);
+    MtoC(t);
+    return StrVal(t, &f, &i) ? f : IntToFloat(i);
+}
+#define mm_atof(s) mm_val(s)
+
+/* TIMER = n */
+#define mm_timer_set(ms) TimerSet(FloatToInt(ms))
+
 /* INSTR's start is 1-based in MMBasic and 0-based in the core */
 static MMINTEGER mm_instr(MMINTEGER start, const char *hay, const char *needle)
 {

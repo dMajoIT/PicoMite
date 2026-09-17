@@ -596,6 +596,8 @@ uint8_t PSRAMpin;
         (void *)RndVal,   // 0x19c MMFLOAT RndVal(void)     RND
         (void *)log,      // 0x1a0 MMFLOAT log(MMFLOAT)
         (void *)tan,      // 0x1a4 MMFLOAT tan(MMFLOAT)
+        (void *)StrVal,   // 0x1a8 int StrVal(const uchar *cstr, MMFLOAT *f, long long *i)  VAL
+        (void *)TimerSet, // 0x1ac void TimerSet(long long ms)                              TIMER = n
     };
 #ifdef rp2350
     // this is a frig to place the calltable at 0x1000023C as in previous releases

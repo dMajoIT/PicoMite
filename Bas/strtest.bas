@@ -96,6 +96,23 @@ Show2 "I start big", Instr(200, s$, "o")
 Show2 "I whole",     Instr(s$, s$)
 Show2 "I longer",    Instr("ab", "abc")
 
+Print "--- VAL ---"
+Show2 "V int",      Val("123")
+Show2 "V neg",      Val("-123")
+Show2 "V flt",      Val("1.5")
+Show2 "V exp",      Val("1.5e3")
+Show2 "V lead sp",  Val("   42")
+Show2 "V trailing", Val("42abc")
+Show2 "V none",     Val("abc")
+Show2 "V empty",    Val(e$)
+Show2 "V hex",      Val("&HFF")
+Show2 "V hex low",  Val("&hff")
+Show2 "V oct",      Val("&O777")
+Show2 "V bin",      Val("&B1011")
+Show2 "V amp bad",  Val("&Z12")
+Show2 "V big int",  Val("1234567890123")
+Show2 "V dot",      Val(".5")
+
 Print "--- nested ---"
 Show "N 1", UCase$(Mid$(s$, 8, 5))
 Show "N 2", Left$(Right$(s$, 5), 3)

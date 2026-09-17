@@ -1306,47 +1306,51 @@ void fun_tan(void)
 
 // Returns the numerical value of the ?string$?.
 // n = VAL( string$ )
-void fun_val(void)
+// VAL() on a C string - getCstring has already converted it. Returns non-zero
+// when the answer is a float (left in *f) and zero when it is an integer (in
+// *i), which is the choice fun_val turns into targ.
+int StrVal(const unsigned char *p, MMFLOAT *f, long long int *i)
 {
-	unsigned char *p, *t1, *t2;
-	p = getCstring(ep);
-	targ = T_INT;
+	unsigned char *t1, *t2;
+	*f = 0;
+	*i = 0;
 	if (*p == '&')
 	{
 		p++;
-		iret = 0;
 		switch (mytoupper(*p++))
 		{
 		case 'H':
 			while (isxdigit(*p))
 			{
-				iret = (iret << 4) | ((mytoupper(*p) >= 'A') ? mytoupper(*p) - 'A' + 10 : *p - '0');
+				*i = (*i << 4) | ((mytoupper(*p) >= 'A') ? mytoupper(*p) - 'A' + 10 : *p - '0');
 				p++;
 			}
 			break;
 		case 'O':
 			while (*p >= '0' && *p <= '7')
 			{
-				iret = (iret << 3) | (*p++ - '0');
+				*i = (*i << 3) | (*p++ - '0');
 			}
 			break;
 		case 'B':
 			while (*p == '0' || *p == '1')
 			{
-				iret = (iret << 1) | (*p++ - '0');
+				*i = (*i << 1) | (*p++ - '0');
 			}
 			break;
 		default:
-			iret = 0;
+			*i = 0;
 		}
+		return 0;
 	}
-	else
-	{
-		fret = (MMFLOAT)strtod((char *)p, (char **)&t1);
-		iret = strtoll((char *)p, (char **)&t2, 10);
-		if (t1 > t2)
-			targ = T_NBR;
-	}
+	*f = (MMFLOAT)strtod((char *)p, (char **)&t1);
+	*i = strtoll((char *)p, (char **)&t2, 10);
+	return t1 > t2;
+}
+
+void fun_val(void)
+{
+	targ = StrVal(getCstring(ep), &fret, &iret) ? T_NBR : T_INT;
 }
 
 void fun_eval(void)

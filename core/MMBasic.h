@@ -672,6 +672,8 @@ long long int FloatToInt64(MMFLOAT x);
                              int isint, int m, int n, int ch);
     MMFLOAT RndVal(void);
     MMFLOAT TimerVal(void);
+    void TimerSet(long long int ms);
+    int StrVal(const unsigned char *p, MMFLOAT *f, long long int *i);
     int Mstrcmp(const unsigned char *s1, const unsigned char *s2);
     unsigned char *getCstring(unsigned char *p);
     unsigned char *getFstring(unsigned char *p);
