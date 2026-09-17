@@ -598,6 +598,11 @@ uint8_t PSRAMpin;
         (void *)tan,      // 0x1a4 MMFLOAT tan(MMFLOAT)
         (void *)StrVal,   // 0x1a8 int StrVal(const uchar *cstr, MMFLOAT *f, long long *i)  VAL
         (void *)TimerSet, // 0x1ac void TimerSet(long long ms)                              TIMER = n
+        // The colours COLOUR set. Addresses, like &HRes at 0x4c, because a
+        // CSUB needs the value AT THE TIME IT DRAWS - a statement that omits
+        // its colour is asking for whatever COLOUR last set.
+        (void *)&gui_fcolour, // 0x1b0 int, current foreground
+        (void *)&gui_bcolour, // 0x1b4 int, current background
     };
 #ifdef rp2350
     // this is a frig to place the calltable at 0x1000023C as in previous releases

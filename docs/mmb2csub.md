@@ -219,16 +219,84 @@ program rather than your setup.
 
 ## 3. The recommended workflow
 
-### Step 1 — find out where the time goes
+### Step 1 — make sure there is a routine to convert
+
+This tool converts a SUB or a FUNCTION. If your hot code is not in one, the
+first job is to put it in one, and **how you draw that boundary decides how
+well the conversion goes** — more than anything else you do later.
+
+The Julia set example began as inline code at the top of the program:
+
+```basic
+For y = 0 To 239
+  For x = 0 To 319
+    ' ... the escape-time loop ...
+  Next x
+Next y
+```
+
+Nothing there can be converted. Wrapped as a routine, all of it can:
+
+```basic
+Sub PlotJulia(w%, h%, cx!, cy!, maxiter%)
+  Local x%, y%
+  For y% = 0 To h% - 1
+    For x% = 0 To w% - 1
+      ' ... the escape-time loop ...
+    Next x%
+  Next y%
+End Sub
+```
+
+**Four rules for drawing the boundary.** They are the same rules, really:
+give the routine what it needs and let it get on with it.
+
+**Wrap the outermost loop, not the innermost.** A CSUB is one call, and the
+whole benefit is the interpreter not reading your code a million times. Put
+the boundary outside every loop you can, so one call does all the work. A
+routine called from inside a hot loop saves you almost nothing, because the
+interpreter is still running the loop.
+
+**Pass what it needs as parameters, not as globals.** The routine above takes
+its width, height and constants as arguments; it would have worked equally
+well reading them from globals, and converted far less comfortably. Every
+global a routine reaches costs an argument and makes the wrapper bigger, and
+past ten they have to be gathered into a table. Parameters are free.
+
+**Move the variables it only uses itself to `LOCAL`.** A variable that lives
+in the routine is compiled into the blob and costs nothing. The same variable
+left global is one more argument, one more line of wrapper, and one more thing
+that can go wrong. If a loop counter is global because the code used to be
+inline, make it `LOCAL` on the way in.
+
+**Keep the display and file work outside if you can.** A routine that spends
+its time in `PRINT` or `SAVE IMAGE` is running firmware code either way, so
+there is nothing for the tool to remove — see the table in section 1. Compute
+in the routine, report outside it.
+
+None of this is wasted effort if the conversion does not work out, because
+it is the same shape that makes a program readable: a routine with a clear
+boundary, taking what it needs and owning its own variables.
+
+Two things that are worth knowing before you carve:
+
+- If the code uses a global that nothing ever `DIM`s — common in older
+  programs, where a variable springs into being on first assignment — declare
+  it at program level while you are there. A.7 explains why this one bites
+  only after conversion.
+- A `FUNCTION` is as convertible as a `SUB`, numeric or string. You do not
+  have to reshape one into the other.
+
+### Step 2 — find out where the time goes
 
 Run your program with profiling on. You are looking for the routine with the
 most **self time**, not the most calls: a routine called 1,500 times that does
 nothing much matters less than one called 500 times that does everything.
 
-If your profile only gives call counts, treat them as a hint and use step 2 to
+If your profile only gives call counts, treat them as a hint and use step 3 to
 check the shape of the call graph before deciding.
 
-### Step 2 — ask what can be converted, and what it costs
+### Step 3 — ask what can be converted, and what it costs
 
 ```
 python mmb2csub.py myprogram.bas --list
@@ -266,7 +334,7 @@ The four numbers are the whole decision:
   `MEMORY` on the board.
 - **closure** — how many routines travel with it.
 
-### Step 3 — pick ONE routine, as high up as fits
+### Step 4 — pick ONE routine, as high up as fits
 
 This is the step people get wrong. **You do not pick a list of hot routines —
 you pick one root, and everything it calls comes with it.** The first section
@@ -284,7 +352,7 @@ If the root you want is out of reach — too many arguments, or more program
 memory than you have — drop to the largest routine below it that fits. That is
 what the second section of the listing is for.
 
-### Step 4 — convert it, keeping everything, and check it works
+### Step 5 — convert it, keeping everything, and check it works
 
 ```
 python mmb2csub.py myprogram.bas DrawFrame
@@ -297,7 +365,7 @@ comments, so you can read what happened. Your previous version is saved as
 Load it and run it. If it works, go on. If it does not, `--dry-run` builds and
 reports without touching your source, and `--keep-c` leaves the C on disk.
 
-### Step 5 — if it does not fit, make it lean
+### Step 6 — if it does not fit, make it lean
 
 The comments cost program memory — the interpreter stores the text.
 
@@ -339,7 +407,7 @@ the CSUB out of *program* memory, so the library file has to load first, and
 that costs the hex text and the binary together. The tool prints the figure to
 check against `MEMORY`.
 
-### Step 6 — prove it gives the same answer
+### Step 7 — prove it gives the same answer
 
 This is not optional. A CSUB that is subtly wrong does not print a helpful
 message; it hard-faults with no line number, or quietly returns a different
@@ -362,10 +430,21 @@ and numeric arrays, as parameters or globals; `LOCAL`s including arrays and
 strings; `STATIC`s, which the wrapper keeps for you; recursion; `IF`/`FOR`/`DO`/`WHILE`/`SELECT`/`EXIT`; all arithmetic and comparison;
 `CONST`; and the MMBasic functions with firmware support — `SIN COS TAN LOG SQR
 ATAN2 ASIN ACOS POWER INT FIX ABS SGN RND TIMER`, `LEFT$ RIGHT$ MID$ UCASE$
-LCASE$ CHR$ SPACE$ STRING$ INSTR STR$ VAL LEN`, `PRINT`, and `PIXEL`.
+LCASE$ CHR$ SPACE$ STRING$ INSTR STR$ VAL LEN ASC`, `RGB` (including the
+colour names), `MM.HRES` and `MM.VRES`, `PRINT`, and the drawing statements
+`PIXEL`, `LINE`, `BOX`, `CIRCLE` and `TRIANGLE`.
+
+`RGB` costs nothing at all: the translator works it out where it stands, so
+`RGB(red)` becomes a constant and `RGB(r, g, b)` becomes the shift-and-or it
+always was. The drawing statements call the same firmware routines the
+interpreter calls, so what you get on screen is identical — a converted
+routine and the original produce the same image byte for byte.
 
 **Not yet:** string *arrays* as parameters; `INPUT`; `ON ERROR`; interrupt
-handlers; most graphics beyond `PIXEL`; file I/O; user-defined `TYPE`s.
+handlers; file I/O; user-defined `TYPE`s; `MAP`; and the graphics beyond the
+list above — `RBOX`, `POLYGON`, sprites, framebuffers, and a `LINE` with a
+width, which is four different algorithms in the firmware and has no
+CallTable slot of its own.
 
 If what you need is in that second list, or is something MMBasic cannot
 express at all, a **hand-written CSUB** can still do it — that is a different
@@ -476,7 +555,7 @@ firmware version before anything else: `? MM.VER` must be 6.030209 (b9) or
 higher. See section 2.1. Nothing on your PC can detect this, because the blob
 is built without knowing what it will run on.
 
-**It compiled but the answer is wrong** — go back to step 6 and find the
+**It compiled but the answer is wrong** — go back to step 7 and find the
 smallest input that differs. The `.bak` has the interpreted original, so you can
 run both. Please report it: the generated C is meant to be a faithful
 translation, and a difference is a bug in the tool, not in your program.
@@ -603,6 +682,13 @@ array was measured both ways: MMBasic stopped it cleanly at depth 9 with
 `Stack overflow, at depth 9`, while the converted CSUB ran past depth 100 and
 reset the board somewhere before 150, with no message. Deep or unbounded
 recursion is the wrong thing to convert.
+
+**Arguments are not range-checked either.** `RGB(r, g, b)` is the one you
+are most likely to meet: MMBasic rejects a component outside 0 to 255 with an
+error, while the converted code simply keeps the low eight bits, so an
+out-of-range value silently becomes a different colour. This only bites code
+that was already erroring in the interpreter, which is the general shape of
+the problem — convert code that works.
 
 The general rule: a CSUB fails the way C fails, not the way BASIC fails.
 

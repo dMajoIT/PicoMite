@@ -192,9 +192,87 @@ static void *mm_zeroed(void *p, unsigned long n)
    active, so this is format- and version-independent. */
 #define mm_pixel(x, y, c) DrawPixel((int)(x), (int)(y), (int)(c))
 
+/* MM_CUR is what mmb2c emits for a colour the statement left out, and it
+   means "whatever COLOUR set" - which is not one value. MMBasic defaults a
+   COLOUR to the foreground and a FILL to none at all, so it is resolved per
+   argument rather than globally, exactly as cmd_box and cmd_circle do it.
+   0x7FFFFFFF cannot collide with a real colour, which is 24-bit RGB.
+
+   gui_fcolour and gui_bcolour are CallTable slots holding the ADDRESS of the
+   interpreter's own variables, so this reads whatever COLOUR last set rather
+   than a value captured when the blob was built. Needs the firmware build
+   that added slots 0x1b0/0x1b4 - before that, a drawing statement must be
+   given its colour explicitly. */
+#define MM_CUR 0x7FFFFFFFLL
+#define mm_col(c) ((int)((c) == MM_CUR ? (MMINTEGER)gui_fcolour : (MMINTEGER)(c)))
+#define mm_fill(f) ((int)((f) == MM_CUR ? -1 : (MMINTEGER)(f)))
+#define mm_bcol(c) ((int)((c) == MM_CUR ? (MMINTEGER)gui_bcolour : (MMINTEGER)(c)))
+
+#define mm_hres() ((MMINTEGER)HRes)
+#define mm_vres() ((MMINTEGER)VRes)
+
+/* LINE x1,y1,x2,y2 [,width] [,colour]. The firmware's DrawLine takes the
+   width, and mmb2c only emits this form when the width is 1 - a wider line
+   is four different algorithms picked by shape, and comes out as mmg_linew,
+   which has no slot. */
+#define mm_line(x1, y1, x2, y2, c) \
+    DrawLine((int)(x1), (int)(y1), (int)(x2), (int)(y2), 1, mm_col(c))
+
+/* CIRCLE x,y,r [,lw [,aspect [,colour [,fill]]]] and
+   TRIANGLE x1,y1,x2,y2,x3,y3 [,colour [,fill]] map straight onto their
+   CallTable routines, argument for argument. -1 as the fill means none. */
+#define mmg_circle(x, y, r, lw, c, f, asp) \
+    DrawCircle((int)(x), (int)(y), (int)(r), (int)(lw), mm_col(c), mm_fill(f), \
+               (MMFLOAT)(asp))
+#define mmg_triangle(x1, y1, x2, y2, x3, y3, c, f) \
+    DrawTriangle((int)(x1), (int)(y1), (int)(x2), (int)(y2), (int)(x3), \
+                 (int)(y3), mm_col(c), mm_fill(f))
+
+/* BOX x,y,w,h [,lw [,colour [,fill]]].
+   Two things happen here that a straight mapping would miss. MMBasic's BOX
+   takes a WIDTH and HEIGHT, which may be negative, while the firmware's
+   DrawBox takes a second CORNER: cmd_box converts with x1+w-1 for a positive
+   width and x1+w+1 for a negative one. And DrawBox itself has no CallTable
+   slot - but it is only composition, four DrawRectangle calls for the border
+   and one for the fill, so it is reproduced here exactly as Draw.c has it
+   rather than approximated. */
+static void mmg_box(MMINTEGER bx, MMINTEGER by, MMINTEGER bw, MMINTEGER bh,
+                    MMINTEGER lw, MMINTEGER c, MMINTEGER fill)
+{
+    int col = mm_col(c), fil = mm_fill(fill);
+    int x1 = (int)bx, y1 = (int)by;
+    int x2 = x1 + (int)bw + (bw > 0 ? -1 : 1);
+    int y2 = y1 + (int)bh + (bh > 0 ? -1 : 1);
+    int w = (int)lw, t;
+
+    if (bw == 0 || bh == 0)
+        return;                       /* cmd_box draws nothing for either */
+    if (x2 <= x1) { t = x1; x1 = x2; x2 = t; }
+    if (y2 <= y1) { t = y1; y1 = y2; y2 = t; }
+    if (w > x2 - x1) w = x2 - x1;
+    if (w > y2 - y1) w = y2 - y1;
+
+    if (w > 0)
+    {
+        w--;
+        DrawRectangle(x1, y1, x2, y1 + w, col);      /* top */
+        DrawRectangle(x1, y2 - w, x2, y2, col);      /* bottom */
+        DrawRectangle(x1, y1, x1 + w, y2, col);      /* left */
+        DrawRectangle(x2 - w, y1, x2, y2, col);      /* right */
+        w++;
+    }
+    if (fil >= 0)
+        DrawRectangle(x1 + w, y1 + w, x2 - w, y2 - w, fil);
+}
+
 /* Deliberately absent: mm_map_get (the MAP() function). The colour map has no
    CallTable slot, and in a fixed mode its sixteen values are constants - so
-   pass them in as an INTEGER array and index that instead. */
+   pass them in as an INTEGER array and index that instead.
+
+   Also absent: mmg_rbox (RBOX) and mmg_linew (a line with a width). Both are
+   real algorithms in the firmware rather than compositions - rounded corners
+   and four shape-dependent line kernels - and neither has a CallTable slot,
+   so neither can be reached without adding one. */
 
 /* ------------------------------------------------------------------ *
  *  Maths functions with a CallTable slot
@@ -323,6 +401,11 @@ static void mm_pr_f(MMFLOAT v)
  *  means. The ones that return a value put it in a scratch temporary.
  * ------------------------------------------------------------------ */
 #define mm_slen(s) ((int)((const unsigned char *)(s))[0])
+
+/* ASC(s$) - the first character. MMBasic errors on an empty string; a core
+   cannot, so this returns 0, which is what the length byte already says. */
+#define mm_asc(s) ((MMINTEGER)(((const unsigned char *)(s))[0] \
+                               ? ((const unsigned char *)(s))[1] : 0))
 #define mm_scmp(a, b) Mstrcmp((const unsigned char *)(a), (const unsigned char *)(b))
 #define mm_sset(d, s) Mstrcpy((unsigned char *)(d), (unsigned char *)(s))
 #define mm_ssetm(d, cap, s) Mstrcpy((unsigned char *)(d), (unsigned char *)(s))

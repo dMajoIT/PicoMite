@@ -207,6 +207,10 @@
 #define Vector_Tan (*(unsigned int *)(BaseAddress + 0x1A4))       // MMFLOAT tan(MMFLOAT)
 #define Vector_StrVal (*(unsigned int *)(BaseAddress + 0x1A8))    // VAL, on a C string
 #define Vector_TimerSet (*(unsigned int *)(BaseAddress + 0x1AC))  // TIMER = n
+// The colours COLOUR set. These slots hold the ADDRESS of the variable, as
+// HRes and VRes do, so the macro below reads its value at the point of use.
+#define Vector_gui_fcolour (*(unsigned int *)(BaseAddress + 0x1B0))
+#define Vector_gui_bcolour (*(unsigned int *)(BaseAddress + 0x1B4))
 
 // Macros to call each function.
 #define uSec(a) ((void (*)(unsigned long long))Vector_uSec)(a)
@@ -235,6 +239,8 @@
 #define FontTable (void *)((int *)(Vector_FontTable))
 #define ExtCurrentConfig ((int *)Vector_ExtCurrentConfig)
 #define HRes (*(unsigned int *)Vector_HRes)
+#define gui_fcolour (*(int *)Vector_gui_fcolour)
+#define gui_bcolour (*(int *)Vector_gui_bcolour)
 #define VRes (*(unsigned int *)Vector_VRes)
 #define SoftReset(SOFT_RESET) ((void (*)(void))Vector_SoftReset)()
 #define error(a) ((void (*)(char *))Vector_error)(a)
