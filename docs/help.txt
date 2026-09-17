@@ -1576,7 +1576,8 @@ The type of each parameter can be specified in the definition. For example:
 This specifies that there will be three parameters, the first two being
 integers and the third a string.
 Note:
-Up to ten arguments can be specified ('arg1', 'arg2', etc).
+Up to ten arguments can be specified on the RP2040 and up to sixteen on the
+RP2350 ('arg1', 'arg2', etc).
 If a variable or array is specified as an argument the C routine will receive
 a pointer to the memory allocated to the variable or array and the C routine
 can change this memory to return a value to the caller. In the case of arrays,

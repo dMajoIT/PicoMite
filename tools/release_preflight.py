@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -45,6 +46,15 @@ FIRMWARE_PATHS = [
     "cmake", "linker_overrides", "CMakeLists.txt", "buildpicomite.bat",
 ]
 
+# What the mmb2csub distribution zip is built from.  Bas/ is deliberately
+# absent even though two examples are packaged from it: it carries Peter's
+# in-flight BASIC work, and a half-finished program there must not condemn
+# the zip.
+PACKAGE_PATHS = [
+    "user-tools", "PicoCFunctions.h", "docs/mmb2csub.md", "docs/armcfgen.md",
+    "tools/make_mmb2csub_zip.py",
+]
+
 # Work in progress that never reaches a uf2 and so cannot block a release.
 # Listed at the end of the run so it stays visible rather than silently
 # dropped.  docs/Exile_* are the working notes for the Exile port.
@@ -52,7 +62,10 @@ WIP_PATHS = ["Bas", "Testfiles", "docs/Exile_*"]
 
 fails = []
 def check(name, ok, detail=""):
-    print(("  ok   " if ok else "  FAIL ") + name + (" - " + detail if detail else ""))
+    # detail is the REASON IT FAILED, so it is shown only on failure -
+    # printed beside an "ok" it reads as an instruction already carried out
+    print("  ok   " + name if ok
+          else "  FAIL " + name + (" - " + detail if detail else ""))
     if not ok:
         fails.append(name)
 
@@ -128,7 +141,53 @@ check("manual PDF regenerated since the docx last changed",
       t_pdf >= t_docx or bool(docx_dirty),
       "docx committed after the PDF")
 
-# 8. everything the release ships is committed and pushed.  Work in progress
+# 8. the mmb2csub distribution zip, named from Version.h by its builder.
+#    Gitignored like the uf2s, so freshness is its mtime against the COMMIT
+#    time of the tooling it packages - the same asymmetry the uf2 checks use,
+#    and for the same reason (Dropbox rewrites mtimes, not commit times).
+zipname = "mmb2csub-%s.zip" % version
+zippath = os.path.join(REPO, zipname)
+if not os.path.exists(zippath):
+    check("mmb2csub zip present", False,
+          "%s - run tools/make_mmb2csub_zip.py" % zipname)
+else:
+    check("mmb2csub zip present", True, zipname)
+    t_pkg = commit_time(PACKAGE_PATHS)
+    check("mmb2csub zip newer than the tooling it packages (%s)"
+          % git("log", "-1", "--format=%h", "--", *PACKAGE_PATHS),
+          os.path.getmtime(zippath) >= t_pkg,
+          "rebuild it - the zip predates the tools inside it")
+    pkg_dirty = git("status", "--porcelain", "--", *PACKAGE_PATHS)
+    check("no uncommitted change to what the zip packages", not pkg_dirty,
+          pkg_dirty.replace(chr(10), "; "))
+
+# 9. the two HELP files, which are generated FROM the manual - so they go
+#    stale exactly when the docx changes, and nothing else notices.
+#
+#    Checked by REGENERATING and comparing, not by date. A date check cannot
+#    tell "never regenerated" from "regenerated, came out the same", and the
+#    second happens routinely: helpmin.txt carries syntax and summary only, so
+#    most manual edits leave it byte-identical and a date check cries wolf.
+for h, extra in (("help.txt", []), ("helpmin.txt", ["--short"])):
+    hp = os.path.join(REPO, "docs", h)
+    if not os.path.exists(hp):
+        check("docs/%s present" % h, False, "run tools/gen_help.py")
+        continue
+    check("docs/%s present" % h, True)
+    tmp = os.path.join(tempfile.gettempdir(), "preflight_" + h)
+    r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "gen_help.py"),
+                        "-o", tmp] + extra,
+                       cwd=REPO, capture_output=True, text=True)
+    if r.returncode != 0:
+        check("docs/%s matches the manual" % h, False,
+              "could not run gen_help.py: " + (r.stderr.strip().splitlines() or [""])[-1])
+    else:
+        same = open(hp, "rb").read() == open(tmp, "rb").read()
+        check("docs/%s matches the manual" % h, same,
+              "stale - run: python tools/gen_help.py%s" % (" --short" if extra else ""))
+        os.remove(tmp)
+
+# 10. everything the release ships is committed and pushed.  Work in progress
 #    under Bas/ and Testfiles/ is NOT a release blocker - a half-finished
 #    BASIC program does not reach a uf2 - and gh release --target main tags
 #    the REMOTE head, so anything unpushed is simply excluded.  An unpushed
@@ -151,4 +210,6 @@ print()
 if fails:
     print("PRE-FLIGHT FAILED: " + ", ".join(fails))
     sys.exit(1)
-print("PRE-FLIGHT PASSED for V%s - 17 assets ready (16 uf2 + the manual PDF)" % version)
+print("PRE-FLIGHT PASSED for V%s - 20 assets ready" % version)
+print("  16 uf2 + the manual PDF + %s + docs/help.txt + docs/helpmin.txt"
+      % zipname)
