@@ -35,6 +35,27 @@ run *the same firmware code* whether your BASIC calls them or the CSUB does, so
 only the interpreting overhead goes away. A routine that spends its time inside
 the firmware has little for this tool to remove.
 
+### The result runs on every PicoMite
+
+**One converted program runs on both the RP2040 and the RP2350, and on every
+firmware variant, unchanged.** You do not build a version per chip, and you do
+not have to know what your users have.
+
+That is not a happy accident. The code is compiled for the Cortex-M0+, which
+the RP2350 also executes; it is position-independent, so it does not care
+where the firmware loads it; and it finds the firmware's routines through a
+table it locates *at run time* rather than at an address baked in when it was
+built. Nothing in the blob depends on the chip or on the variant.
+
+Tested rather than assumed: the same file — same bytes, same checksum —
+produces byte-identical output on a PicoMiteVGA running on an RP2040 and a
+PicoMiteHDMIWEB running on an RP2350B, across strings, `STATIC`s, recursion,
+`LOCAL` arrays and floating point.
+
+So a converted program can be published, posted on the forum or shipped to
+somebody else exactly as an ordinary `.bas` file, and it will work on their
+board. The only requirement is the firmware version.
+
 ---
 
 ## 2. Setting up
@@ -875,6 +896,9 @@ Worth stating, because it saves chasing imagined problems:
   call getting its own.
 - **Call sites do not change.** The CSUB takes the routine's name, or a
   wrapper does when something has to be marshalled.
+- **One blob runs everywhere.** RP2040 and RP2350, every firmware variant, no
+  per-chip build — see the end of section 1. A converted program is as
+  portable as the BASIC it came from.
 
 So if a converted routine gives a different answer from the interpreted one,
 that is a **bug in the tool**, not a rounding difference or a documented
