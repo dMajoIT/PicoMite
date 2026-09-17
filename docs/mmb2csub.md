@@ -608,21 +608,31 @@ correct. What stops it is size, in a way worth following through because it is
 the case `--library` was added for.
 
 Its blob is 37 KB. In the program that is about 89 KB of text, which does not
-fit. So it goes to a library instead — and it does not fit there either, for
-the reason in A.8: loading the 86 KB library file costs its hex text and its
-binary together, about 124 KB, on a board with 100 KB of program memory. The
-load stops quietly, `LIBRARY SAVE` writes 752 bytes — the wrapper and the
-declaration — and calling it gives `Internal fault 5`.
+fit — so it goes to a library instead, and **whether that works depends on the
+board**.
 
-So the answer for this program is **several smaller conversions** from the
-second listing, which is where it was heading anyway. `tdb2utc` has a 3.5 KB
-blob and carries `jbrent`, `jdfunc`, `utc2tdb` and `findleap` — between them
-nearly 5,000 calls; `gast2` carries `nut2000_lp`; `eci2topo` carries six more.
-Choose them so their closures do not overlap, put them all in one library file
-with a single command, and `LIBRARY SAVE` that.
+Getting it into the library costs the 86 KB library file *plus* the 37 KB
+binary built from it, both in program memory at once: about 121 KB. An RP2040
+has 100 KB, so the load stops quietly, `LIBRARY SAVE` writes 752 bytes — the
+wrapper and the declaration — and calling it gives `Internal fault 5`. An
+RP2350 has 144 KB, and it simply works.
 
-`solar_eclipse` also needs `Dim decl, rasc, rb, rlsun, rmm` adding at program
-level first — see A.7 for why.
+On an RP2350, then, the whole of `sefunc` goes into the library and the
+program runs in **2.7 seconds instead of 13**. One conversion, covering 15 of
+the 20 profiled routines and 99.8% of the calls.
+
+Two things had to be done first, and they are the two traps this appendix
+warns about. The globals `sefunc` reaches have to exist before the wrapper can
+take their addresses, so the ones the program never declares need a `Dim` at
+program level — see A.7. And the library file has to be crunched on the way in
+(`XMODEM C`, or `LOAD ,C`) to leave room for the binary.
+
+**If your board is the smaller one**, the answer is several smaller
+conversions from the second listing. `tdb2utc` has a 3.5 KB blob and carries
+`jbrent`, `jdfunc`, `utc2tdb` and `findleap` — between them nearly 5,000
+calls; `gast2` carries `nut2000_lp`; `eci2topo` carries six more. Choose them
+so their closures do not overlap, put them all in one library file with a
+single command, and `LIBRARY SAVE` that.
 
 Two things to take from that. The listing, not the profile, tells you what to
 convert. And when a routine is out of reach it is now nearly always about size
@@ -852,8 +862,14 @@ which stores the binary alone and drops the hex text entirely.
 has to load into program memory first — and loading it costs the hex text
 **and** the binary built from it, at the same time. Roughly 3.4x the blob.
 
-On a 100 KB board that puts the largest single CSUB you can get into the
-library at about **29 KB of blob**, whatever the library area has free.
+That makes the ceiling **the board's program memory divided by about 3.4** —
+roughly a **29 KB blob on an RP2040's 100 KB**, and about **42 KB on an
+RP2350's 144 KB** — whatever the library area itself has free. `solar_eclipse`
+sits between the two: its 37 KB `sefunc` will not go into an RP2040's library
+and goes into an RP2350's without trouble (section 9).
+
+Crunching the library file on the way in (`XMODEM C`, `LOAD ,C`) buys some of
+that back, because it is the *text* that shrinks.
 
 Past that the failure is quiet, and worth recognising:
 
