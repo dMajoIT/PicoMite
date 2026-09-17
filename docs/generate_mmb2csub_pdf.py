@@ -152,7 +152,12 @@ def add_table(pdf, headers, rows):
     x0 = pdf.l_margin
     bottom = pdf.h - pdf.b_margin
 
-    saved_auto = pdf.auto_page_break
+    # set_auto_page_break(False) also sets b_margin to its default of 0, so the
+    # bottom margin has to be saved HERE and restored explicitly. Restoring it
+    # with pdf.b_margin - which is 0 by then - re-enables page breaks with no
+    # bottom margin at all, and every page after the first table runs its text
+    # down through the footer.
+    saved_auto, saved_bmargin = pdf.auto_page_break, pdf.b_margin
     pdf.set_auto_page_break(False)
 
     def wrap_all(cells, style):
@@ -177,6 +182,9 @@ def add_table(pdf, headers, rows):
 
     pdf.set_x(x0)
     if show_head:
+        if pdf.get_y() + line_h * 2 > bottom:   # no room for a header here
+            pdf.add_page()
+            pdf.set_x(x0)
         draw_row(headers, 'B')
     for r in rows:
         rh = line_h * max(len(w) for w in wrap_all(r, ''))
@@ -187,7 +195,7 @@ def add_table(pdf, headers, rows):
                 draw_row(headers, 'B')
         draw_row(r, '')
 
-    pdf.set_auto_page_break(saved_auto, pdf.b_margin)
+    pdf.set_auto_page_break(saved_auto, saved_bmargin)
     pdf.ln(3)
 
 
