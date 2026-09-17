@@ -28,9 +28,17 @@ Check the room you have first — the full reference file is about 410 KB:
 PRINT MM.INFO(DISK SIZE), MM.INFO$(FREE SPACE)
 ```
 
-If the full file will not fit, use the smaller `helpmin.txt` (about 195 KB),
-which carries every topic with the syntax and a one or two sentence summary.
-Rename it to `help.txt` on the drive.
+Three files are supplied, all with the same 872 topics. Copy whichever one fits
+and rename it to `help.txt` on the drive:
+
+| File | Size | What each topic gives you |
+|---|---|---|
+| `help.txt` | 416 KB | the full description from the manual |
+| `helpmin.txt` | 196 KB | the syntax and a one or two sentence summary |
+| `helptiny.txt` | 83 KB | the syntax only |
+
+`helptiny.txt` is the one to use if you mostly want reminding of an argument
+order and have the manual to hand for everything else.
 
 ## Using HELP
 
@@ -122,8 +130,9 @@ The reference file is generated from the User Manual, so that the two cannot
 drift apart:
 
 ```
-python tools/gen_help.py            # docs/help.txt     - full text
-python tools/gen_help.py --short    # docs/helpmin.txt  - syntax + summary
+python tools/gen_help.py            # docs/help.txt      - full text
+python tools/gen_help.py --short    # docs/helpmin.txt   - syntax + summary
+python tools/gen_help.py --tiny     # docs/helptiny.txt  - syntax only
 python tools/help_lint.py docs/help.txt
 ```
 

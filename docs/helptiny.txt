@@ -1,0 +1,4176 @@
+~HELP
+MMBasic syntax reference.  Type HELP followed by a command, function, option
+or variable name - quotes are not needed:
+
+    HELP PRINT
+    HELP MATH FFT
+    HELP MM.INFO(OPTION)
+
+This file carries the syntax of every entry and nothing else.  The PicoMite
+User Manual describes what each one does.
+
+The name must match a topic exactly, so use the wildcards to explore:
+
+    HELP MATH*        every topic whose name starts with MATH
+    HELP *SPRITE*     every topic with SPRITE anywhere in the name
+
+Nothing is printed when no topic matches - try a wildcard.
+
+Indexes of every topic in this file:
+
+    HELP COMMANDS     HELP FUNCTIONS    HELP OPTIONS
+    HELP VARIABLES    HELP OBSOLETE
+
+~COMMANDS
+MMBasic commands
+
+'                          LONGSTRING TRIM
+*FILE                      LONGSTRING UCASE
+/*                         LOOP
+?                          MANDELBROT
+A:                         MANDELBROT CENTRE
+ADC                        MANDELBROT DRAW
+ADC CLOSE                  MANDELBROT PAN
+ADC FREQUENCY              MANDELBROT RESET
+ADC OPEN                   MANDELBROT ZOOM
+ADC RUN                    MAP
+ADC START                  MAP GREYSCALE
+AND                        MAP MAXIMITE
+ARC                        MAP RESET
+ARRAY ADD                  MAP SET
+ARRAY INSERT               MATH
+ARRAY SET                  MATH ADD
+ARRAY SLICE                MATH AES128
+AS                         MATH CLAMP
+ASTRO                      MATH FFT
+AUTOSAVE                   MATH FFT INVERSE
+BACKLIGHT                  MATH FFT MAGNITUDE
+BEZIER                     MATH FFT PHASE
+BIT                        MATH INSERT
+BITBANG                    MATH INTERPOLATE
+BITSTREAM                  MATH PID INIT
+BLIT                       MATH PID START
+BLIT CLOSE                 MATH PID STOP
+BLIT COMPRESSED            MATH POWER
+BLIT FLASH                 MATH RANDOMIZE
+BLIT FRAMEBUFFER           MATH SCALE
+BLIT MEMORY                MATH SENSORFUSION
+BLIT MEMORY332             MATH SET
+BLIT MERGE                 MATH SHIFT
+BLIT READ                  MATH SINC
+BLIT RESIZE                MATH SLICE
+BLIT WRITE                 MATH WINDOW
+BOX                        MEMORY
+BYTE                       MEMORY COPY
+CALL                       MEMORY COPY FLOAT
+CAMERA                     MEMORY COPY INTEGER
+CAMERA CAPTURE             MEMORY INPUT
+CAMERA CAPTURE JPEG        MEMORY PACK
+CAMERA CHANGE              MEMORY PRINT
+CAMERA CLOSE               MEMORY SET
+CAMERA OPEN                MEMORY SET BYTE
+CAMERA REGISTER            MEMORY SET FLOAT
+CAMERA TEST                MEMORY SET INTEGER
+CAMERA(OV2640)             MEMORY SET SHORT
+CAMERA(OV5640)             MEMORY SET WORD
+CASE                       MEMORY UNPACK
+CASE ELSE                  MID$
+CAT                        MIN
+CHAIN                      MKDIR
+CHDIR                      MOD
+CIRCLE                     MODE
+CLEAR                      MOUSE
+CLICK                      MOUSE CLOSE
+CLOSE                      MOUSE INTERRUPT DISABLE
+CLS                        MOUSE INTERRUPT ENABLE
+CMM2 LOAD                  MOUSE OPEN
+CMM2 RUN                   MOUSE SET
+COLOR                      NEW
+COLOUR                     NEXT
+COLOUR MAP                 NOT
+CONFIGURE                  ON ERROR ABORT
+CONFIGURE LIST             ON KEY
+CONST                      ON PS2
+CONTINUE                   ONESHOT
+CONTINUE DO                ONESHOT DISABLE
+COPY                       ONESHOT R
+COPY A2A                   ONEWIRE
+CPU                        ONEWIRE RESET
+CPU RESTART                OPEN
+CPU SLEEP                  OPERATORS
+CPU SPEED                  OR
+CSUB                       PAUSE
+DATA                       PEEK
+DATE$                      PIN
+DEFINEFONT                 PIO
+DEVICE                     PIO CLEAR
+DEVICE BITSTREAM           PIO CONFIGURE
+DEVICE CAMERA              PIO DMA RX
+DEVICE GAMEPAD             PIO DMA RX OFF
+DEVICE HUMID               PIO EXECUTE
+DEVICE KEYPAD              PIO INIT MACHINE
+DEVICE LCD                 PIO INTERRUPT
+DEVICE MOUSE               PIO PROGRAM
+DEVICE SERIALRX            PIO PROGRAM LINE
+DEVICE SERIALTX            PIO READ
+DEVICE WII                 PIO SET BASE
+DEVICE WS2812              PIO START
+DIM                        PIO STOP
+DO                         PIO SYNC
+DO WHILE                   PIO WRITE
+DRAW3D                     PIO WRITEFIFO
+DRIVE                      PIXEL
+EDIT                       PLAY
+EDIT FILE                  PLAY ARRAY
+ELSE                       PLAY BBC ENVELOPE
+ELSE IF                    PLAY BBC SOUND
+ELSEIF                     PLAY CONTINUE
+END                        PLAY FLAC
+END CSUB                   PLAY HALT
+END DEFINEFONT             PLAY LOAD SOUND
+END FUNCTION               PLAY MIDI
+END IF                     PLAY MIDI CMD
+END SELECT                 PLAY MIDI TEST
+END SUB                    PLAY MIDIFILE
+END TYPE                   PLAY MODFILE
+ENDIF                      PLAY MODSAMPLE
+EPOCH                      PLAY MP3
+ERASE                      PLAY NEXT
+ERROR                      PLAY NOTE OFF
+ESCAPE CODES               PLAY NOTE ON
+EXECUTE                    PLAY PAUSE
+EXIT                       PLAY PREVIOUS
+EXIT DO                    PLAY SAMPLE
+EXIT FOR                   PLAY SOUND
+EXIT FUNCTION              PLAY STREAM
+EXIT SUB                   PLAY TONE
+FILES                      PLAY VOLUME
+FILL                       PLAY WAV
+FLAG                       POKE
+FLAGS                      POKE BYTE
+FLASH                      POKE DISPLAY
+FLASH CHAIN                POKE DISPLAY HRES
+FLASH DISK LOAD            POLYGON
+FLASH ERASE                PORT
+FLASH ERASE ALL            PRINT
+FLASH LIST                 PULSE
+FLASH LOAD                 PWM
+FLASH LOAD IMAGE           PWM SYNC
+FLASH MODBUFF LOAD         RAM
+FLASH OVERWRITE            RAM CHAIN
+FLASH RUN                  RAM ERASE
+FLASH SAVE                 RAM ERASE ALL
+FLASH UF2                  RAM FILE LOAD
+FLUSH                      RAM LIST
+FM                         RAM LOAD
+FONT                       RAM OVERWRITE
+FOR                        RAM RUN
+FRAME                      RAM SAVE
+FRAMEBUFFER                RANDOMIZE
+FRAMEBUFFER CLOSE          RAY
+FRAMEBUFFER COPY           RBOX
+FRAMEBUFFER CREATE         READ
+FRAMEBUFFER LAYER          READ SAVE
+FRAMEBUFFER LAYER TOP      REDIM
+FRAMEBUFFER MERGE          REFRESH
+FRAMEBUFFER SYNC           REM
+FRAMEBUFFER WAIT           RENAME
+FRAMEBUFFER WRITE          RESOLUTION
+FUNCTION                   RESTORE
+GAMEPAD                    RETURN
+GAMEPAD COLOUR             RMDIR
+GAMEPAD CONFIGURE          RTC
+GAMEPAD HAPTIC             RTC GETTIME
+GAMEPAD INTERRUPT DISABLE  RTC SETREG
+GAMEPAD INTERRUPT ENABLE   RTC SETTIME
+GAMEPAD MONITOR            RUN
+GOSUB                      SAVE
+GOTO                       SAVE CONTEXT
+GUI                        SAVE DATA
+GUI BITMAP                 SAVE IMAGE
+GUI CALIBRATE              SAVE PERSISTENT
+GUI CLICK                  SEEK
+GUI CLICK DOWN             SELECT CASE
+GUI CLICK PIN              SERVO
+GUI CURSOR                 SETPIN
+GUI CURSOR COLOUR          SETTICK
+GUI CURSOR HIDE            SLEW
+GUI CURSOR LINK MOUSE      SORT
+GUI CURSOR LOAD            SPI OPEN
+GUI CURSOR OFF             SPI2
+GUI CURSOR ON              SPRITE
+GUI CURSOR SHOW            STAR
+GUI RESET LCDPANEL         STATIC
+GUI TEST LCDPANEL          STEP
+GUI TEST TOUCH             STEPPER
+HELP                       STRUCT
+HUMID                      SUB
+I2C                        SYNC
+I2C CHECK                  TEMPR START
+I2C CLOSE                  TEXT
+I2C OPEN                   THEN
+I2C READ                   TILE
+I2C SLAVE                  TILE HEIGHT
+I2C WRITE                  TILEMAP
+I2C2                       TIME$
+I2CLCD                     TIMER
+I2CLCD CLOSE               TMC22XX
+I2CLCD CREATECHAR          TO
+I2CLCD INIT                TOUCH
+IF                         TRACE
+INC                        TRACE ON
+INPUT                      TRIANGLE
+INTERRUPT                  TRIANGLE RESTORE
+INV                        TRIANGLE SAVE
+IR                         TURTLE
+IR SEND                    TYPE
+IRETURN                    UNTIL
+KEYBOARD                   UPDATE FIRMWARE
+KEYBOARD ON                VAR SAVE
+KEYPAD                     WATCHDOG
+KILL                       WEB
+LCD                        WEB CLOSE TCP CLIENT
+LCD CMD                    WEB CONNECT
+LCD INIT                   WEB MQTT CLOSE
+LET                        WEB MQTT CONNECT
+LIBRARY                    WEB MQTT PUBLISH
+LIBRARY SAVE               WEB MQTT SUBSCRIBE
+LINE                       WEB MQTT UNSUBSCRIBE
+LINE AA                    WEB NTP
+LINE GRAPH                 WEB OPEN TCP CLIENT
+LINE INPUT                 WEB OPEN TCP STREAM
+LINE PLOT                  WEB OPEN TLS CLIENT
+LIST                       WEB OPEN TLS STREAM
+LIST COMMANDS              WEB PING
+LIST PINS                  WEB SCAN
+LIST SYSTEM I2C            WEB TCP CLIENT READ
+LIST VARIABLES             WEB TCP CLIENT REQUEST
+LMID                       WEB TCP CLIENT STREAM
+LOAD                       WEB TCP CLIENT WRITE
+LOAD CONTEXT               WEB TCP INTERRUPT
+LOAD DATA                  WEB TCP READ
+LOAD JPG                   WEB TCP SEND
+LOAD PNG                   WEB TLS
+LOCAL                      WEB TLS CA
+LOCATION                   WEB TLS NOVERIFY
+LONGSTRING                 WEB TRANSMIT CODE
+LONGSTRING AES128          WEB TRANSMIT FILE
+LONGSTRING APPEND          WEB TRANSMIT PAGE
+LONGSTRING BASE64          WEB UDP INTERRUPT
+LONGSTRING CLEAR           WEB UDP SEND
+LONGSTRING CONCAT          WHILE
+LONGSTRING COPY            WII
+LONGSTRING LCASE           WII NUNCHUCK
+LONGSTRING LEFT            WII NUNCHUCK CLOSE
+LONGSTRING LOAD            WII NUNCHUCK OPEN
+LONGSTRING MID             WS2812
+LONGSTRING PRINT           XMODEM
+LONGSTRING REPLACE         XMODEM SEND
+LONGSTRING RESIZE          XOR
+LONGSTRING RIGHT           YMODEM
+LONGSTRING SETBYTE         YMODEM SEND
+
+~FUNCTIONS
+MMBasic functions
+
+ABS                  KEYDOWN              PEEK(VAR)
+ACOS                 LCASE$               PEEK(VARHEADER)
+ASC                  LCOMPARE             PEEK(WP)
+ASIN                 LEFT$                PI
+ATAN2                LEN                  PIN(BOOTSEL)
+ATN                  LGETBYTE             PIN(TEMP)
+BIN$                 LGETSTR$             PIO(.WRAP)
+BIN2STR$             LINPUT               PIO(DMA RX POINTER)
+BOUND                LINSTR               PIO(EXECCTRL)
+CHOICE               LLEN                 PIO(FDEBUG)
+CHR$                 LOC                  PIO(FLEVEL)
+CINT                 LOF                  PIO(FSTAT)
+CLICK(DOWN)          LOG                  PIO(NEXT LINE)
+COS                  MATH(ATAN3)          PIO(PINCTRL)
+CWD$                 MATH(BASE64)         PIO(READFIFO)
+DATETIME$            MATH(CHI)            PIO(SHIFTCTRL)
+DAY$                 MATH(CORREL)         PULSIN
+DEG                  MATH(COSH)           RAD
+DEVICE(GAMEPAD)      MATH(CROSSING)       RGB
+DEVICE(MOUSE)        MATH(DOTPRODUCT)     RIGHT$
+DEVICE(NUNCHUCK)     MATH(LOG10)          RND
+DEVICE(WII)          MATH(MAGNITUDE)      SGN
+DIR$                 MATH(MAX)            SIN
+DISTANCE             MATH(MEAN)           SPACE$
+EOF                  MATH(MEDIAN)         SPI
+EPOCH(DATETIME$)     MATH(MIN)            SQR
+EVAL                 MATH(PID)            STR$
+EXP                  MATH(RAND)           STR2BIN
+FIELD$               MATH(SD)             STRING$
+FIX                  MATH(SINH)           TAB
+FORMAT$              MATH(SUM)            TAN
+GETSCANLINE          MATH(TANH)           TEMPR
+GPS                  MAX                  TOUCH(TAP)
+HEX$                 OCT$                 TOUCH(X)
+INKEY$               PEEK(BP)             TRIM$
+INPUT$               PEEK(BYTE)           UCASE$
+INSTR                PEEK(CFUNADDR)       VAL
+INT                  PEEK(PROGMEM)
+JSON$                PEEK(SP)
+
+~OPTIONS
+OPTION settings
+
+OPTION                         OPTION LCDPANEL USER
+OPTION ANGLE                   OPTION LEGACY ON
+OPTION AUDIO                   OPTION LIST
+OPTION AUDIO I2S               OPTION LOCAL KEYBOARD ON
+OPTION AUDIO SPI               OPTION LOCAL VARIABLES
+OPTION AUDIO VS1053            OPTION LOGGING ON
+OPTION AUTOREFRESH             OPTION MILLISECONDS
+OPTION AUTORUN ON              OPTION MODBUFF
+OPTION BACKLIGHT KBD           OPTION MOUSE
+OPTION BASE                    OPTION MOUSE DISABLE
+OPTION BAUDRATE                OPTION MOUSE SENSITIVITY
+OPTION BREAK                   OPTION NOCHECK
+OPTION CACHE DEBUG ON          OPTION PICO
+OPTION CACHE SUB               OPTION PICO PLUS
+OPTION CASE                    OPTION PIN
+OPTION CDC POLL RATE           OPTION PLATFORM
+OPTION COLOURCODE ON           OPTION POWER
+OPTION CONSOLE                 OPTION PROFILING ON
+OPTION CONTINUATION LINES      OPTION PS2 PINS
+OPTION COUNT                   OPTION PSRAM PIN
+OPTION CPUSPEED                OPTION RESET
+OPTION DEFAULT                 OPTION RESOLUTION
+OPTION DEFAULT COLOURS         OPTION RTC AUTO
+OPTION DEFAULT MODE            OPTION SCREEN KEYBOARD
+OPTION DISK SAVE               OPTION SDCARD
+OPTION DISPLAY                 OPTION SDCARD COMBINED CS
+OPTION ESCAPE                  OPTION SERIAL CONSOLE
+OPTION EXPLICIT                OPTION SERIAL CONSOLE DISABLE
+OPTION FAST AUDIO              OPTION SYSTEM I2C
+OPTION GPS                     OPTION SYSTEM SPI
+OPTION GUI CONTROLS            OPTION TAB
+OPTION HDMI PINS               OPTION TCP SERVER PORT
+OPTION HEARTBEAT               OPTION TELNET CONSOLE
+OPTION KEYBOARD                OPTION TFTP
+OPTION KEYBOARD I2C            OPTION TOUCH
+OPTION KEYBOARD PINS           OPTION TOUCH FT6336
+OPTION KEYBOARD REPEAT         OPTION TRACECACHE ON
+OPTION LCD SPI                 OPTION UDP SERVER PORT
+OPTION LCD320                  OPTION VCC
+OPTION LCDPANEL                OPTION VGA PINS
+OPTION LCDPANEL CONSOLE        OPTION WEB MESSAGES
+OPTION LCDPANEL NOCONSOLE      OPTION WIFI
+
+~VARIABLES
+Predefined read-only variables
+
+MM.ADDRESS$                MM.INFO$(VERSION)
+MM.CMDLINE$                MM.INFO$(WRITEBUFF)
+MM.CODE                    MM.INFO(ADC DMA)
+MM.DEVICE$                 MM.INFO(ADC)
+MM.DISPLAY                 MM.INFO(AUTORUN)
+MM.ERRNO                   MM.INFO(BATTERY)
+MM.FLAGS                   MM.INFO(BCOLOUR)
+MM.FONTHEIGHT              MM.INFO(BIOS)
+MM.HEIGHT                  MM.INFO(BOOT COUNT)
+MM.HPOS                    MM.INFO(BOOT)
+MM.HRES                    MM.INFO(CALLTABLE)
+MM.I2C                     MM.INFO(CHARGING)
+MM.INFO                    MM.INFO(CPUSPEED)
+MM.INFO$(ADC DMA)          MM.INFO(CURRENT)
+MM.INFO$(ADC)              MM.INFO(DISK SIZE)
+MM.INFO$(AUTORUN)          MM.INFO(DRIVE)
+MM.INFO$(BATTERY)          MM.INFO(EXISTS DIR)
+MM.INFO$(BCOLOUR)          MM.INFO(EXISTS FILE)
+MM.INFO$(BIOS)             MM.INFO(FCOLOUR)
+MM.INFO$(BOOT COUNT)       MM.INFO(FILESIZE)
+MM.INFO$(BOOT)             MM.INFO(FLASH ADDRESS)
+MM.INFO$(CALLTABLE)        MM.INFO(FLASH)
+MM.INFO$(CHARGING)         MM.INFO(FLASHTOP)
+MM.INFO$(CPUSPEED)         MM.INFO(FONT ADDRESS)
+MM.INFO$(CURRENT)          MM.INFO(FONT POINTER)
+MM.INFO$(DISK SIZE)        MM.INFO(FONT)
+MM.INFO$(DRIVE)            MM.INFO(FONTHEIGHT)
+MM.INFO$(EXISTS DIR)       MM.INFO(FREE SPACE)
+MM.INFO$(EXISTS FILE)      MM.INFO(HEAP)
+MM.INFO$(FCOLOUR)          MM.INFO(HEAPEND)
+MM.INFO$(FILESIZE)         MM.INFO(HPOS)
+MM.INFO$(FLASH ADDRESS)    MM.INFO(ID)
+MM.INFO$(FLASH)            MM.INFO(IP ADDRESS)
+MM.INFO$(FLASHTOP)         MM.INFO(KEYBOARD)
+MM.INFO$(FONT ADDRESS)     MM.INFO(LCD320)
+MM.INFO$(FONT POINTER)     MM.INFO(LCDPANEL)
+MM.INFO$(FONT)             MM.INFO(LINE)
+MM.INFO$(FONTHEIGHT)       MM.INFO(MAX CONNECTIONS)
+MM.INFO$(FREE SPACE)       MM.INFO(MAX GP)
+MM.INFO$(HEAP)             MM.INFO(MAX VARS)
+MM.INFO$(HEAPEND)          MM.INFO(MODBUFF ADDRESS)
+MM.INFO$(HPOS)             MM.INFO(MODIFIED)
+MM.INFO$(ID)               MM.INFO(OPTION)
+MM.INFO$(IP ADDRESS)       MM.INFO(PATH)
+MM.INFO$(KEYBOARD)         MM.INFO(PIN)
+MM.INFO$(LCD320)           MM.INFO(PINNO)
+MM.INFO$(LCDPANEL)         MM.INFO(PIO RX DMA)
+MM.INFO$(LINE)             MM.INFO(PIO TX DMA)
+MM.INFO$(MAX CONNECTIONS)  MM.INFO(PLATFORM)
+MM.INFO$(MAX GP)           MM.INFO(PROGRAM)
+MM.INFO$(MAX VARS)         MM.INFO(PS2)
+MM.INFO$(MODBUFF ADDRESS)  MM.INFO(PSRAM SIZE)
+MM.INFO$(MODIFIED)         MM.INFO(PWM COUNT)
+MM.INFO$(OPTION)           MM.INFO(PWM DUTY)
+MM.INFO$(PATH)             MM.INFO(PWM SLICE)
+MM.INFO$(PIN)              MM.INFO(SCREENBUFF)
+MM.INFO$(PINNO)            MM.INFO(SCROLL)
+MM.INFO$(PIO RX DMA)       MM.INFO(SDCARD)
+MM.INFO$(PIO TX DMA)       MM.INFO(SOUND)
+MM.INFO$(PLATFORM)         MM.INFO(SPI SPEED)
+MM.INFO$(PROGRAM)          MM.INFO(STACK)
+MM.INFO$(PS2)              MM.INFO(SYSTEM HEAP)
+MM.INFO$(PSRAM SIZE)       MM.INFO(SYSTEM I2C)
+MM.INFO$(PWM COUNT)        MM.INFO(SYSTICK)
+MM.INFO$(PWM DUTY)         MM.INFO(TCP PORT)
+MM.INFO$(PWM SLICE)        MM.INFO(TCP REQUEST)
+MM.INFO$(SCREENBUFF)       MM.INFO(TCPIP STATUS)
+MM.INFO$(SCROLL)           MM.INFO(TELNET)
+MM.INFO$(SDCARD)           MM.INFO(TILE HEIGHT)
+MM.INFO$(SOUND)            MM.INFO(TOUCH)
+MM.INFO$(SPI SPEED)        MM.INFO(TRACK)
+MM.INFO$(STACK)            MM.INFO(UPTIME)
+MM.INFO$(SYSTEM HEAP)      MM.INFO(USB PID)
+MM.INFO$(SYSTEM I2C)       MM.INFO(USB VID)
+MM.INFO$(SYSTICK)          MM.INFO(USB)
+MM.INFO$(TCP PORT)         MM.INFO(VALID CPUSPEED)
+MM.INFO$(TCP REQUEST)      MM.INFO(VARCNT)
+MM.INFO$(TCPIP STATUS)     MM.INFO(VERSION)
+MM.INFO$(TELNET)           MM.INFO(WRITEBUFF)
+MM.INFO$(TILE HEIGHT)      MM.MESSAGE$
+MM.INFO$(TOUCH)            MM.ONEWIRE
+MM.INFO$(TRACK)            MM.PERSISTENT
+MM.INFO$(UPTIME)           MM.PS2
+MM.INFO$(USB PID)          MM.SUPPLY
+MM.INFO$(USB VID)          MM.TOPIC$
+MM.INFO$(USB)              MM.USB
+MM.INFO$(VALID CPUSPEED)   MM.VER
+MM.INFO$(VARCNT)           MM.WATCHDOG
+
+~OBSOLETE
+Obsolete commands and functions - do not use in new programs
+
+ON   POS
+
+~'
+ ' (single quotation mark)
+
+~*FILE
+*file
+
+~/*
+/*
+*/
+
+~?
+ ? (question mark)
+
+~A:
+A: , B: or C:
+
+~ABS
+ABS( number )
+
+~ACOS
+ACOS( number )
+
+~ADC
+ADC
+
+~ADC CLOSE
+ADC CLOSE
+
+~ADC FREQUENCY
+ADC FREQUENCY freq
+
+~ADC OPEN
+ADC OPEN freq, n_channels [,interrupt]
+
+~ADC RUN
+ADC RUN array1%(),array2%)
+
+~ADC START
+ADC START array1!() [,array2!()] [,array3!()] [,array4!()] [,C1min] [,C1max]
+[,C2min] [,C2max] [,C3min] [,C3max] [,C4min] [,C4max]
+
+~AND
+AND
+
+Described with the rest of its family:  HELP OPERATORS
+
+~ARC
+ARC x, y, r1, [r2], a1, a2 [, c]
+
+~ARRAY ADD
+ARRAY ADD in(), value ,out()
+
+~ARRAY INSERT
+ARRAY INSERT targetarray(), [d1] [,d2] [,d3] [,d4] [,d5] , sourcearray()
+
+~ARRAY SET
+ARRAY SET value, array()
+
+~ARRAY SLICE
+ARRAY SLICE sourcearray(), [d1] [,d2] [,d3] [,d4] [,d5] destinationarray()
+
+~AS
+AS
+
+Described with the rest of its family:  HELP DIM
+
+~ASC
+ASC( string$ )
+
+~ASIN
+ASIN( number )
+
+~ASTRO
+ASTRO
+
+~ATAN2
+ATAN2( y, x )
+
+~ATN
+ATN( number )
+
+~AUTOSAVE
+AUTOSAVE
+or
+AUTOSAVE CRUNCH
+or
+AUTOSAVE APPEND
+or
+AUTOSAVE N
+
+~BACKLIGHT
+BACKLIGHT n [,DEFAULT]
+BACKLIGHT n [,FreqInHz]
+
+~BEZIER
+BEZIER x%(),y%() [,n] [,colour]
+
+~BIN$
+BIN$( number [, chars])
+
+~BIN2STR$
+BIN2STR$(type, value [,BIG])
+
+~BIT
+BIT(var%, bitno) = value
+BIT(var%, bitno)
+
+~BITBANG
+BITBANG
+BITBANG
+
+~BITSTREAM
+BITSTREAM
+BITSTREAM pin1, count1, array1() [, mode1] [,pin2, count2, array2()] [,mode2]
+[,logic]
+
+~BLIT
+BLIT
+BLIT LOAD[BMP] [#]b, fname$ [,x] [,y] [,w] [,h]
+BLIT x1, y1, x2, y2, w, h
+
+~BLIT CLOSE
+BLIT CLOSE [#]b
+
+~BLIT COMPRESSED
+BLIT COMPRESSED address%, x, y [,col]
+
+~BLIT FLASH
+BLIT FLASH from, to, xin, yin, xout, yout, width, height [,colour]
+
+~BLIT FRAMEBUFFER
+BLIT FRAMEBUFFER from, to, xin, yin, xout, yout, width, height [,colour]
+
+~BLIT MEMORY
+BLIT MEMORY address, x, y [,col]
+
+~BLIT MEMORY332
+BLIT MEMORY332 address, x, y [,col]
+
+~BLIT MERGE
+BLIT MERGE colour, x, y, w, h
+
+~BLIT READ
+BLIT READ [#]b, x, y, w, h
+
+~BLIT RESIZE
+BLIT RESIZE src, dst, sx, sy, sw, sh, dx, dy, dw, dh [,transparent]
+
+~BLIT WRITE
+BLIT WRITE [#]b, x, y [,mode]
+
+~BOUND
+BOUND(array() [,dimension]
+
+~BOX
+BOX  x,  y,  w,  h  [, lw]  [,c] [,fill]
+
+~BYTE
+BYTE(var$, byteno)=value
+BYTE(var$, byteno)
+
+~CALL
+CALL usersubname$ [,usersubparameters,..]
+CALL(userfunname$,
+[,userfunparameters,..])
+
+~CAMERA
+CAMERA
+
+~CAMERA CAPTURE
+CAMERA CAPTURE [scale, [x , y]]
+CAMERA CAPTURE [scale [, x, y]]
+CAMERA CAPTURE [scale [, x, y]]
+
+~CAMERA CAPTURE JPEG
+CAMERA CAPTURE JPEG fname$ [, resolution [, quality]]
+CAMERA CAPTURE JPEG fname$ [, resolution [, quality]]
+
+~CAMERA CHANGE
+CAMERA CHANGE image%(),change! [,scale [,x ,y]]
+CAMERA CHANGE image%(), change! [, scale [, x, y]]
+CAMERA CHANGE image%(), change! [, scale [, x, y]]
+
+~CAMERA CLOSE
+CAMERA CLOSE
+
+~CAMERA OPEN
+CAMERA OPEN XLKpin, PLKpin, HSpin, VSCpin, RETpin, D0pin [, QVGA]
+CAMERA OPEN OV2640, PWDNpin, DCLKpin, HSpin, VSpin, RETpin, D0pin
+CAMERA OPEN OV5640, PWDNpin, DCLKpin, HSpin, VSpin, RETpin, D0pin
+
+~CAMERA REGISTER
+CAMERA REGISTER reg%, data%
+
+~CAMERA TEST
+CAMERA TEST tnum
+
+~CAMERA(OV2640)
+Camera (OV2640)
+
+~CAMERA(OV5640)
+Camera (OV5640)
+
+~CASE
+CASE
+
+Described with the rest of its family:  HELP SELECT CASE
+
+~CASE ELSE
+CASE ELSE
+
+Described with the rest of its family:  HELP SELECT CASE
+
+~CAT
+CAT S$, N$
+
+~CHAIN
+CHAIN fname$ [cmdline$]
+
+~CHDIR
+CHDIR dir$
+
+~CHOICE
+CHOICE(condition, ExpressionIfTrue, ExpressionIfFalse)
+
+~CHR$
+CHR$( number )
+
+~CINT
+CINT( number )
+
+~CIRCLE
+CIRCLE  x,  y,  r  [,lw]  [, a]  [, c]  [, fill]
+
+~CLEAR
+CLEAR
+
+~CLICK
+CLICK is the first word of several entries:
+
+CLICK(DOWN)
+
+List them all with:  HELP CLICK*
+
+~CLICK(DOWN)
+CLICK(DOWN)
+or
+CLICK(UP)
+or
+CLICK(X)
+or
+CLICK(Y)
+or
+CLICK(REF)
+or
+CLICK(LASTREF)
+or
+CLICK(LASTX)
+or
+CLICK(LASTY)
+
+~CLOSE
+CLOSE [#]fnbr [,[#]fnbr] ...
+
+~CLS
+CLS [colour]
+
+~CMM2 LOAD
+CMM2 LOAD
+or
+CMM2 RUN
+
+~CMM2 RUN
+CMM2 RUN
+
+Described with the rest of its family:  HELP CMM2 LOAD
+
+~COLOR
+COLOR
+
+Described with the rest of its family:  HELP COLOUR
+
+~COLOUR
+COLOUR fore [, back] or COLOR fore [, back]
+
+~COLOUR MAP
+COLOUR MAP inarray%(), outarray%() [,colourmap%()]
+
+~CONFIGURE
+CONFIGURE cfg
+
+~CONFIGURE LIST
+CONFIGURE LIST
+
+~CONST
+CONST id = expression   [, id = expression] ... etc
+
+~CONTINUE
+CONTINUE
+
+~CONTINUE DO
+CONTINUE DO
+or
+CONTINUE FOR
+
+~COPY
+COPY fname1$ TO fname2$
+COPY fname$ TO dirname$
+
+~COPY A2A
+COPY A2A fname1$, fname2$ COPY A2B fname1$, fname2$ COPY B2A fname1$, fname2$
+COPY B2B fname1$, fname2$
+
+~COS
+COS( number )
+
+~CPU
+CPU is the first word of several entries:
+
+CPU RESTART  CPU SLEEP    CPU SPEED
+
+List them all with:  HELP CPU*
+
+~CPU RESTART
+CPU RESTART
+
+~CPU SLEEP
+CPU SLEEP n
+
+~CPU SPEED
+CPU SPEED n
+
+~CSUB
+CSUB name [type  [, type]  ...]
+  hex [[ hex[...]
+  hex [[ hex[...]
+END CSUB
+
+~CWD$
+CWD$
+
+~DATA
+DATA constant[,constant]..
+
+~DATE$
+DATE$ = "DD-MM-YY[YY]"
+or
+DATE$ = "DD/MM/YY[YY]"
+or
+DATE$ ="YYYY-MM-DD"
+or
+DATE$="YYYY/MM/DD"
+DATE$
+
+~DATETIME$
+DATETIME$(n)
+
+~DAY$
+DAY$(date$)
+
+~DEFINEFONT
+DEFINEFONT #Nbr
+    hex [[ hex[...]
+    hex [[ hex[...]
+END DEFINEFONT
+
+~DEG
+DEG( radians )
+
+~DEVICE
+DEVICE is the first word of several entries:
+
+DEVICE BITSTREAM  DEVICE KEYPAD     DEVICE SERIALTX   DEVICE(MOUSE)
+DEVICE CAMERA     DEVICE LCD        DEVICE WII        DEVICE(NUNCHUCK)
+DEVICE GAMEPAD    DEVICE MOUSE      DEVICE WS2812     DEVICE(WII)
+DEVICE HUMID      DEVICE SERIALRX   DEVICE(GAMEPAD)
+
+List them all with:  HELP DEVICE*
+
+~DEVICE BITSTREAM
+DEVICE BITSTREAM
+
+~DEVICE CAMERA
+DEVICE CAMERA
+DEVICE CAMERA
+
+~DEVICE GAMEPAD
+DEVICE GAMEPAD
+DEVICE GAMEPAD
+
+~DEVICE HUMID
+DEVICE HUMID
+DEVICE HUMID
+
+~DEVICE KEYPAD
+DEVICE KEYPAD
+DEVICE KEYPAD
+
+~DEVICE LCD
+DEVICE LCD
+DEVICE LCD
+
+~DEVICE MOUSE
+DEVICE MOUSE
+DEVICE MOUSE
+
+~DEVICE SERIALRX
+DEVICE SERIALRX pinno, baudrate, istring$, timeout_in_ms, status% [,nbr]
+[,terminators$]
+
+~DEVICE SERIALTX
+DEVICE SERIALTX pinno, baudrate, ostring$
+
+~DEVICE WII
+DEVICE WII
+DEVICE WII
+
+~DEVICE WS2812
+DEVICE WS2812
+DEVICE WS2812
+
+~DEVICE(GAMEPAD)
+DEVICE(GAMEPAD channel, funct)
+
+~DEVICE(MOUSE)
+DEVICE(MOUSE channel, funct)
+
+~DEVICE(NUNCHUCK)
+DEVICE(NUNCHUCK funct)
+
+~DEVICE(WII)
+DEVICE(WII [CLASSIC] funct)
+
+~DIM
+DIM [type] decl [,decl]..
+where 'decl' is:
+var [length] [type] [init]
+'var' is a variable name with optional dimensions
+'length' is used to set the maximum size of the string to 'n' as in LENGTH n
+'type' is one of  FLOAT or  INTEGER or STRING (the type can be prefixed by the
+keyword AS - as in AS FLOAT)
+'init' is the value to initialise the variable and consists of: = <expression>
+For a simple variable one expression is used, for an array a list of comma
+separated expressions surrounded by brackets is used.
+Examples:
+DIM nbr(50)
+DIM INTEGER nbr(50)
+DIM name AS STRING
+DIM a, b$, nbr(100), strn$(20)
+DIM a(5,5,5), b(1000)
+DIM strn$(200) LENGTH 20
+DIM STRING strn(200) LENGTH 20
+DIM a = 1234, b = 345
+DIM STRING strn = "text"
+DIM x%(3) = (11, 22, 33, 44)
+
+~DIR$
+DIR$( fspec, type ) or DIR$( fspec ) or DIR$(  )
+
+~DISTANCE
+DISTANCE( trigger, echo )
+or
+DISTANCE( trig-echo )
+
+~DO
+DO     <statements>  LOOP
+DO    <statements>  LOOP UNTIL expression
+DO    <statements>  LOOP WHILE expression
+
+~DO WHILE
+DO WHILE expression     <statements>  LOOP
+
+~DRAW3D
+DRAW3D
+Draw3D(arg)
+
+~DRIVE
+DRIVE drive$
+
+~EDIT
+EDIT
+or
+EDIT fname$
+or
+EDIT FILE fname$
+
+~EDIT FILE
+EDIT FILE
+
+Described with the rest of its family:  HELP EDIT
+
+~ELSE
+ELSE
+
+~ELSE IF
+ELSE IF
+
+Described with the rest of its family:  HELP ELSEIF
+
+~ELSEIF
+ELSEIF expression THEN
+or
+ELSE IF expression THEN
+
+~END
+END [noend]
+or
+END cmd$
+
+~END CSUB
+END CSUB
+
+~END DEFINEFONT
+END DEFINEFONT
+
+Described with the rest of its family:  HELP DEFINEFONT
+
+~END FUNCTION
+END FUNCTION
+
+~END IF
+END IF
+
+Described with the rest of its family:  HELP ENDIF
+
+~END SELECT
+END SELECT
+
+Described with the rest of its family:  HELP SELECT CASE
+
+~END SUB
+END SUB
+
+~END TYPE
+END TYPE
+
+~ENDIF
+ENDIF
+or
+END IF
+
+~EOF
+EOF( [#]fnbr )
+
+~EPOCH
+EPOCH is the first word of several entries:
+
+EPOCH(DATETIME$)
+
+List them all with:  HELP EPOCH*
+
+~EPOCH(DATETIME$)
+EPOCH(DATETIME$)
+
+~ERASE
+ERASE variable [,variable]..
+
+~ERROR
+ERROR [error_msg$]
+
+~ESCAPE CODES
+Escape sequences inside a string constant (OPTION ESCAPE must be set)
+
+  \a                    Alert (Beep, Bell)
+  \b                    Backspace
+  \e                    Escape character
+  \f                    Formfeed Page Break
+  \n                    Newline (Line Feed)
+  \r                    Carriage Return
+  \q                    Quote symbol
+  \t                    Horizontal Tab
+  \v                    Vertical Tab
+  \\                    Backslash
+  \nnn                  The byte whose value is given by nnn interpreted as a
+                        decimal number
+  \&hh                  The byte whose value is given by hh... interpreted as
+                        a hexadecimal number
+
+~EVAL
+EVAL( string$ )
+
+~EXECUTE
+EXECUTE command$
+
+~EXIT
+EXIT is the first word of several entries:
+
+EXIT DO
+
+List them all with:  HELP EXIT*
+
+~EXIT DO
+EXIT DO
+EXIT FOR
+EXIT FUNCTION
+EXIT SUB
+
+~EXIT FOR
+EXIT FOR
+
+Described with the rest of its family:  HELP EXIT DO
+
+~EXIT FUNCTION
+EXIT FUNCTION
+
+Described with the rest of its family:  HELP EXIT DO
+
+~EXIT SUB
+EXIT SUB
+
+Described with the rest of its family:  HELP EXIT DO
+
+~EXP
+EXP( number )
+
+~FIELD$
+FIELD$( string1, nbr, string2 [, string3] )
+
+~FILES
+FILES [fspec$] [,sort]
+
+~FILL
+FILL x, y, fillcolour [,bordercolour]
+
+~FIX
+FIX( number )
+
+~FLAG
+FLAG(n%)=value
+FLAG(n%)
+
+~FLAGS
+FLAGS=value%
+
+~FLASH
+FLASH
+
+~FLASH CHAIN
+FLASH CHAIN n
+
+~FLASH DISK LOAD
+FLASH DISK LOAD n, fname$ [,O[VERWRITE]]
+
+~FLASH ERASE
+FLASH ERASE n
+
+~FLASH ERASE ALL
+FLASH ERASE ALL
+
+~FLASH LIST
+FLASH LIST
+FLASH LIST n [,all]
+
+~FLASH LOAD
+FLASH LOAD n
+
+~FLASH LOAD IMAGE
+FLASH LOAD IMAGE n, filename$ [,O/OVERWRITE]
+
+~FLASH MODBUFF LOAD
+FLASH MODBUFF LOAD fname$
+
+~FLASH OVERWRITE
+FLASH OVERWRITE n
+
+~FLASH RUN
+FLASH RUN n
+
+~FLASH SAVE
+FLASH SAVE n
+
+~FLASH UF2
+FLASH UF2 fname$
+
+~FLUSH
+FLUSH [#]fnbr
+
+~FM
+FM
+
+~FONT
+FONT [#]font-number, scaling
+
+~FOR
+FOR counter = start TO finish [STEP increment]
+
+~FORMAT$
+FORMAT$( nbr [, fmt$] )
+
+~FRAME
+FRAME
+
+~FRAMEBUFFER
+FRAMEBUFFER
+FRAMEBUFFER
+
+~FRAMEBUFFER CLOSE
+FRAMEBUFFER CLOSE [which]
+FRAMEBUFFER CLOSE [which]
+
+~FRAMEBUFFER COPY
+FRAMEBUFFER COPY from, to [,b]
+FRAMEBUFFER COPY from, to [,b]
+
+~FRAMEBUFFER CREATE
+FRAMEBUFFER CREATE
+FRAMEBUFFER CREATE
+FRAMEBUFFER CREATE  2
+
+~FRAMEBUFFER LAYER
+FRAMEBUFFER LAYER
+FRAMEBUFFER LAYER [colour]
+
+~FRAMEBUFFER LAYER TOP
+FRAMEBUFFER LAYER TOP [colour]
+
+~FRAMEBUFFER MERGE
+FRAMEBUFFER MERGE [colour] [,mode] [,updaterate]
+
+~FRAMEBUFFER SYNC
+FRAMEBUFFER SYNC
+
+~FRAMEBUFFER WAIT
+FRAMEBUFFER WAIT
+FRAMEBUFFER WAIT
+
+~FRAMEBUFFER WRITE
+FRAMEBUFFER WRITE where/where$
+FRAMEBUFFER WRITE where/where$
+
+~FUNCTION
+FUNCTION xxx (arg1 [,arg2, ...]) [AS <type>}    <statements>    <statements>    xxx = <return value> END FUNCTION
+
+~GAMEPAD
+GAMEPAD is the first word of several entries:
+
+GAMEPAD COLOUR             GAMEPAD INTERRUPT DISABLE
+GAMEPAD CONFIGURE          GAMEPAD INTERRUPT ENABLE
+GAMEPAD HAPTIC             GAMEPAD MONITOR
+
+List them all with:  HELP GAMEPAD*
+
+~GAMEPAD COLOUR
+GAMEPAD COLOUR channel, colour
+
+~GAMEPAD CONFIGURE
+GAMEPAD CONFIGURE
+vid,pid,i0,c0,i1,c1,i2,c2,i3,c3,i4,c4,i5,c5,i6,c6,i7,c7,i8,c8,i9,c9,i10,c10,i11,c11,i12,c12,i13,c13,i14,c14,i15,c15
+
+~GAMEPAD HAPTIC
+GAMEPAD HAPTIC channel left, right
+
+~GAMEPAD INTERRUPT DISABLE
+GAMEPAD INTERRUPT DISABLE channel
+
+~GAMEPAD INTERRUPT ENABLE
+GAMEPAD INTERRUPT ENABLE channel, int [,mask]
+
+~GAMEPAD MONITOR
+GAMEPAD MONITOR or GAMEPAD MONITOR SILENT
+
+~GETSCANLINE
+GETSCANLINE
+
+~GOSUB
+GOSUB target
+GOSUB target
+
+~GOTO
+GOTO target
+
+~GPS
+GPS()
+
+~GUI
+GUI is the first word of several entries:
+
+GUI BITMAP             GUI CURSOR COLOUR      GUI CURSOR SHOW
+GUI CALIBRATE          GUI CURSOR HIDE        GUI RESET LCDPANEL
+GUI CLICK              GUI CURSOR LINK MOUSE  GUI TEST LCDPANEL
+GUI CLICK DOWN         GUI CURSOR LOAD        GUI TEST TOUCH
+GUI CLICK PIN          GUI CURSOR OFF
+GUI CURSOR             GUI CURSOR ON
+
+List them all with:  HELP GUI*
+
+~GUI BITMAP
+GUI BITMAP  x,  y,  bits  [, width]  [, height]  [, scale]  [, c]  [, bc]
+
+~GUI CALIBRATE
+GUI CALIBRATE
+or
+GUI CALIBRATE a,b,c,d,d
+
+~GUI CLICK
+GUI CLICK
+GUI CLICK x, y
+GUI CLICK DOWN
+GUI CLICK UP
+GUI CLICK PIN pin [,INV]
+GUI CLICK PIN OFF
+
+~GUI CLICK DOWN
+GUI CLICK DOWN
+GUI CLICK UP
+
+Described with the rest of its family:  HELP GUI CLICK
+
+~GUI CLICK PIN
+GUI CLICK PIN pin [,INV]
+GUI CLICK PIN OFF
+
+Described with the rest of its family:  HELP GUI CLICK
+
+~GUI CURSOR
+GUI CURSOR ON [n [,x, y [,colour]]]
+GUI CURSOR x, y
+GUI CURSOR OFF
+GUI CURSOR HIDE
+GUI CURSOR SHOW
+GUI CURSOR COLOUR colour
+GUI CURSOR LOAD fname$
+GUI CURSOR LINK MOUSE
+GUI CURSOR UNLINK MOUSE
+
+~GUI CURSOR COLOUR
+GUI CURSOR COLOUR colour
+
+Described with the rest of its family:  HELP GUI CURSOR
+
+~GUI CURSOR HIDE
+GUI CURSOR HIDE
+
+Described with the rest of its family:  HELP GUI CURSOR
+
+~GUI CURSOR LINK MOUSE
+GUI CURSOR LINK MOUSE
+GUI CURSOR UNLINK MOUSE
+
+Described with the rest of its family:  HELP GUI CURSOR
+
+~GUI CURSOR LOAD
+GUI CURSOR LOAD fname$
+
+Described with the rest of its family:  HELP GUI CURSOR
+
+~GUI CURSOR OFF
+GUI CURSOR OFF
+
+Described with the rest of its family:  HELP GUI CURSOR
+
+~GUI CURSOR ON
+GUI CURSOR ON [n [,x, y [,colour]]]
+
+Described with the rest of its family:  HELP GUI CURSOR
+
+~GUI CURSOR SHOW
+GUI CURSOR SHOW
+
+Described with the rest of its family:  HELP GUI CURSOR
+
+~GUI RESET LCDPANEL
+GUI RESET LCDPANEL
+
+~GUI TEST LCDPANEL
+GUI TEST LCDPANEL
+
+~GUI TEST TOUCH
+GUI TEST TOUCH
+
+~HEX$
+HEX$( number [, chars])
+
+~HUMID
+HUMID pin, tvar, hvar [,DHT11]
+
+~I2C
+I2C
+
+~I2C CHECK
+I2C CHECK addr
+
+~I2C CLOSE
+I2C CLOSE
+
+~I2C OPEN
+I2C OPEN speed, timeout
+
+~I2C READ
+I2C READ addr, option, rcvlen, rcvbuf [,rcvbuf ..]
+
+~I2C SLAVE
+I2C SLAVE
+
+~I2C WRITE
+I2C WRITE addr, option, sendlen, senddata [,senddata ..]
+
+~I2C2
+I2C2
+
+~I2CLCD
+I2CLCD
+I2CLCD INIT address
+I2CLCD CLOSE
+ I2CLCD CLEAR
+ I2CLCD BACKLIGHT state
+ I2CLCD CURSOR state
+[, BLINK]
+ I2CLCD CREATECHAR code, d0, d1, d2, d3, d4, d5, d6, d7
+ I2CLCD CMD byte [, byte ...]
+ I2CLCD DATA byte [, byte ...]
+ I2CLCD line, position, string$
+ I2CLCD line, Cn, string$
+
+~I2CLCD CLOSE
+I2CLCD CLOSE
+ I2CLCD CLEAR
+ I2CLCD BACKLIGHT state
+ I2CLCD CURSOR state
+[, BLINK]
+
+Described with the rest of its family:  HELP I2CLCD
+
+~I2CLCD CREATECHAR
+ I2CLCD CREATECHAR code, d0, d1, d2, d3, d4, d5, d6, d7
+ I2CLCD CMD byte [, byte ...]
+ I2CLCD DATA byte [, byte ...]
+ I2CLCD line, position, string$
+ I2CLCD line, Cn, string$
+
+Described with the rest of its family:  HELP I2CLCD
+
+~I2CLCD INIT
+I2CLCD INIT address
+
+Described with the rest of its family:  HELP I2CLCD
+
+~IF
+IF expr THEN stmt [: stmt]
+or
+IF expr THEN stmt ELSE stmt
+IF expression THEN     <statements> [ELSEIF expression THEN    <statements>] [ELSE    <statements>] ENDIF
+IF condition THEN linenbr
+
+~INC
+INC var [,increment]
+
+~INKEY$
+INKEY$
+
+~INPUT
+INPUT ["prompt$";] var1 [,var2 [, var3 [, etc]]]
+INPUT #nbr, list of variables
+
+~INPUT$
+INPUT$(nbr,  [#]fnbr)
+
+~INSTR
+INSTR( [start-position,] string-searched$, string-pattern$ [,size] )
+
+~INT
+INT( number )
+
+~INTERRUPT
+INTERRUPT [myint]
+
+~INV
+INV
+
+Described with the rest of its family:  HELP OPERATORS
+
+~IR
+IR dev, key , int
+or
+IR CLOSE
+
+~IR SEND
+IR SEND pin, dev, key
+
+~IRETURN
+IRETURN
+IRETURN
+
+~JSON$
+JSON$(array%(), string$)
+
+~KEYBOARD
+KEYBOARD is the first word of several entries:
+
+KEYBOARD ON
+
+List them all with:  HELP KEYBOARD*
+
+~KEYBOARD ON
+KEYBOARD ON
+or
+KEYBOARD OFF
+
+~KEYDOWN
+KEYDOWN(n)
+
+~KEYPAD
+KEYPAD  var, int, r1, r2, r3, r4, c1, c2, c3 [, c4]
+or
+KEYPAD  CLOSE
+KEYPAD keymap!(), var!,int, startcolpin, nocols, startrowpin, norows
+
+~KILL
+KILL file$ [,all]
+
+~LCASE$
+LCASE$( string$ )
+
+~LCD
+LCD is the first word of several entries:
+
+LCD CMD   LCD INIT
+
+List them all with:  HELP LCD*
+
+~LCD CMD
+LCD CMD d1 [, d2 [, etc]]
+or
+LCD DATA d1 [, d2 [, etc]]
+
+~LCD INIT
+LCD INIT d4, d5, d6, d7, rs, en
+or
+LCD line, pos, text$
+or
+LCD CLEAR
+or
+LCD CLOSE
+
+~LCOMPARE
+LCOMPARE(array1%(), array2%())
+
+~LEFT$
+LEFT$( string$, nbr )
+
+~LEN
+LEN( string$ )
+
+~LET
+LET variable = expression
+
+~LGETBYTE
+LGETBYTE(array%(), n)
+
+~LGETSTR$
+LGETSTR$(array%(), start, length)
+
+~LIBRARY
+LIBRARY is the first word of several entries:
+
+LIBRARY SAVE
+
+List them all with:  HELP LIBRARY*
+
+~LIBRARY SAVE
+LIBRARY SAVE
+or
+LIBRARY DELETE
+or
+LIBRARY LIST
+or
+LIBRARY LIST ALL
+or
+LIBRARY DISK SAVE fname$
+or
+LIBRARY DISK LOAD fname$
+or
+LIBRARY LOAD fname$ [, O]
+
+~LINE
+LINE  x1, y1, x2, y2 [,[-] LW [, C]]
+
+~LINE AA
+LINE  AA x1, y1, x2, y2 [, LW [, C]]
+
+~LINE GRAPH
+LINE GRAPH x(), y(), colour
+
+~LINE INPUT
+LINE INPUT [prompt$,] stringvariable$
+LINE INPUT #nbr, stringvariable$
+
+~LINE PLOT
+LINE PLOT ydata() [,nbr] [,xstart] [,xinc] [,ystart] [,yinc] [,colour]
+
+~LINPUT
+LINPUT(array%(),fnbr,nbr)
+
+~LINSTR
+LINSTR(array%(), search$ [,start] [,size]))
+
+~LIST
+LIST [fname$]
+or
+LIST ALL [fname$]
+
+~LIST COMMANDS
+LIST COMMANDS
+or
+LIST FUNCTIONS
+
+~LIST PINS
+LIST PINS
+
+~LIST SYSTEM I2C
+LIST SYSTEM I2C
+
+~LIST VARIABLES
+LIST VARIABLES [s%()]
+
+~LLEN
+LLEN(array%())
+
+~LMID
+LMID(array%(),start [,num])=string$
+
+~LOAD
+LOAD file$ [,C] [,R]
+LOAD IMAGE/BMP fname$ [,x] [,y] [,mode] [,ximage] [,yimage]
+
+~LOAD CONTEXT
+LOAD CONTEXT [KEEP]
+
+~LOAD DATA
+LOAD DATA fname$, address
+
+~LOAD JPG
+LOAD JPG file$ [, x] [, y] [,mode] [,ximage] [,yimage] [,scale]
+
+~LOAD PNG
+LOAD PNG fname$ [, x] [, y] [,transparent] [,alphacut]
+
+~LOC
+LOC( [#]fnbr )
+
+~LOCAL
+LOCAL variable [, variables]
+See DIM for the full syntax.
+
+~LOCATION
+LOCATION
+
+~LOF
+LOF( [#]fnbr )
+
+~LOG
+LOG( number )
+
+~LONGSTRING
+LONGSTRING
+
+~LONGSTRING AES128
+LONGSTRING AES128 ENCRYPT/DECRYPT CBC/ECB/CTR key$/key[!/%](), in%(), out%()
+[,iv$/iv[!/%]()]
+
+~LONGSTRING APPEND
+LONGSTRING APPEND array%(), string$
+
+~LONGSTRING BASE64
+LONGSTRING BASE64 ENCODE/DECODE in%(), out%()
+
+~LONGSTRING CLEAR
+LONGSTRING CLEAR array%()
+
+~LONGSTRING CONCAT
+LONGSTRING CONCAT dest%(), src%()
+
+~LONGSTRING COPY
+LONGSTRING COPY dest%(), src%()
+
+~LONGSTRING LCASE
+LONGSTRING LCASE array%()
+
+~LONGSTRING LEFT
+LONGSTRING LEFT dest%(), src%(), nbr
+
+~LONGSTRING LOAD
+LONGSTRING LOAD array%(), nbr, string$
+
+~LONGSTRING MID
+LONGSTRING MID dest%(), src%(), start, nbr
+
+~LONGSTRING PRINT
+LONGSTRING PRINT [#n,] src%() [;]
+
+~LONGSTRING REPLACE
+LONGSTRING REPLACE array%() , string$, start
+
+~LONGSTRING RESIZE
+LONGSTRING RESIZE addr%(), nbr
+
+~LONGSTRING RIGHT
+LONGSTRING RIGHT dest%(), src%(), nbr
+
+~LONGSTRING SETBYTE
+LONGSTRING SETBYTE addr%(), nbr, data
+
+~LONGSTRING TRIM
+LONGSTRING TRIM array%(), nbr
+
+~LONGSTRING UCASE
+LONGSTRING UCASE array%()
+
+~LOOP
+LOOP [UNTIL expression]
+
+~MANDELBROT
+MANDELBROT [maxiter]
+MANDELBROT DRAW [maxiter]
+MANDELBROT PAN dx, dy
+MANDELBROT ZOOM factor
+MANDELBROT CENTRE x, y
+MANDELBROT RESET
+
+~MANDELBROT CENTRE
+MANDELBROT CENTRE x, y
+
+Described with the rest of its family:  HELP MANDELBROT
+
+~MANDELBROT DRAW
+MANDELBROT DRAW [maxiter]
+
+Described with the rest of its family:  HELP MANDELBROT
+
+~MANDELBROT PAN
+MANDELBROT PAN dx, dy
+
+Described with the rest of its family:  HELP MANDELBROT
+
+~MANDELBROT RESET
+MANDELBROT RESET
+
+Described with the rest of its family:  HELP MANDELBROT
+
+~MANDELBROT ZOOM
+MANDELBROT ZOOM factor
+
+Described with the rest of its family:  HELP MANDELBROT
+
+~MAP
+MAP
+MAP( n ) = rgb%
+MAP
+MAP( n ) = rgb%
+MAP
+MAP( n ) = rgb%
+MAP( n )
+
+~MAP GREYSCALE
+MAP GREYSCALE
+
+~MAP MAXIMITE
+MAP MAXIMITE
+MAP MAXIMITE
+
+~MAP RESET
+MAP RESET
+MAP RESET
+MAP RESET
+
+~MAP SET
+MAP SET
+MAP SET
+MAP SET
+
+~MATH
+MATH
+MATH RANDOMIZE [n]
+Simple array arithmetic
+MATH SET nbr, array()
+MATH SCALE in(), scale ,out()
+MATH ADD in(), num ,out()
+MATH INTERPOLATE in1(), in2(), ratio, out()
+MATH WINDOW in(), minout, maxout, out() [,minin!, maxin!]
+MATH CLAMP in(), lo, hi, out()
+MATH SLICE sourcearray(), [d1] [,d2] [,d3] [,d4] [,d5] , destinationarray()
+MATH INSERT targetarray(), [d1] [,d2] [,d3] [,d4] [,d5] , sourcearray()
+MATH POWER inarray(), power, outarray()
+MATH SHIFT inarray%(), nbr, outarray%() [,U]
+Matrix arithmetic
+MATH M_INVERSE array!(), inversearray!()
+MATH M_PRINT array()
+MATH M_TRANSPOSE in(), out()
+MATH M_MULT in1(), in2(), out()
+Vector arithmetic
+MATH V_PRINT array() [,hex]
+MATH V_NORMALISE inV(), outV()
+MATH V_MULT matrix(), inV(), outV()
+MATH V_CROSS inV1(), inV2(), outV()
+MATH V_ROTATE  x, y, a, xin(), yin(), xout(), yout()
+Quaternion arithmetic
+MATH Q_INVERT inQ(), outQ()
+MATH Q_VECTOR x, y, z,  outVQ()
+MATH Q_CREATE theta, x, y, z, outRQ()
+MATH Q_EULER yaw, pitch, roll, outRQ()
+MATH Q_MULT inQ1(), inQ2(), outQ()
+MATH Q_ROTATE , RQ(), inVQ(), outVQ()
+MATH C_ADD array1(), array2(), array3()
+MATH C_SUB array1(), array2(), array3()
+MATH C_MUL array1(), array2(), array3()
+MATH C_DIV array1(), array2(), array3()
+MATH C_AND array1(), array2(), array3()
+MATH C_OR array1(), array2(), array3()
+MATH C_XOR array1(), array2(), array3()
+MATH
+Simple functions
+MATH(ATAN3 x,y)
+MATH(COSH a)
+MATH(LOG10 a)
+MATH(SINH a)
+MATH(TANH a)
+MATH(CRCn data [,length]
+[,polynome] [,startmask]
+[,endmask] [,reverseIn]
+[,reverseOut]
+MATH(RAND)
+Simple Statistics
+MATH(CHI a())
+MATH(CHI_p a())
+MATH(CROSSING array() [,level] [,direction] [,confirm])
+MATH(CORREL  a(), a())
+MATH(MAX a() [,index%])
+MATH(MEAN a())
+MATH(MEDIAN a())
+MATH(MIN a(), [index%])
+MATH(SD a())
+MATH(SUM a())
+Vector Arithmetic
+MATH(MAGNITUDE v())
+MATH(DOTPRODUCT v1(), v2())
+Matrix Arithmetic
+MATH(M_DETERMINANT array!())
+
+~MATH ADD
+MATH ADD in(), num ,out()
+
+Described with the rest of its family:  HELP MATH
+
+~MATH AES128
+MATH AES128 ENCRYPT/DECRYPT CBC/ECB/CTR key$/key(), in$/in(), out$/out()
+[,iv$/iv()]
+
+~MATH CLAMP
+MATH CLAMP in(), lo, hi, out()
+
+Described with the rest of its family:  HELP MATH
+
+~MATH FFT
+MATH FFT signalarray!(), FFTarray!()
+
+~MATH FFT INVERSE
+MATH FFT INVERSE FFTarray!(), signalarray!()
+
+~MATH FFT MAGNITUDE
+MATH FFT MAGNITUDE signalarray!(),magnitudearray!()
+
+~MATH FFT PHASE
+MATH FFT PHASE signalarray!(), phasearray!()
+
+~MATH INSERT
+MATH INSERT targetarray(), [d1] [,d2] [,d3] [,d4] [,d5] , sourcearray()
+
+Described with the rest of its family:  HELP MATH
+
+~MATH INTERPOLATE
+MATH INTERPOLATE in1(), in2(), ratio, out()
+
+Described with the rest of its family:  HELP MATH
+
+~MATH PID INIT
+MATH PID INIT channel, pid_params!(), callback
+
+~MATH PID START
+MATH PID START channel
+
+~MATH PID STOP
+MATH PID STOP channel
+
+~MATH POWER
+MATH POWER inarray(), power, outarray()
+
+Described with the rest of its family:  HELP MATH
+
+~MATH RANDOMIZE
+MATH RANDOMIZE [n]
+
+Described with the rest of its family:  HELP MATH
+
+~MATH SCALE
+MATH SCALE in(), scale ,out()
+
+Described with the rest of its family:  HELP MATH
+
+~MATH SENSORFUSION
+MATH SENSORFUSION type ax, ay, az, gx, gy, gz, [mx, my, mz, ] pitch, roll, yaw
+[,p1] [,p2]
+
+~MATH SET
+MATH SET nbr, array()
+
+Described with the rest of its family:  HELP MATH
+
+~MATH SHIFT
+MATH SHIFT inarray%(), nbr, outarray%() [,U]
+
+Described with the rest of its family:  HELP MATH
+
+~MATH SINC
+MATH SINC x_in(), y_in(), n , m, window, freq, x_out(), y_out()
+MATH SINC x_in(), y_in(), n, window, freq, x_out(), y_out()
+
+~MATH SLICE
+MATH SLICE sourcearray(), [d1] [,d2] [,d3] [,d4] [,d5] , destinationarray()
+
+Described with the rest of its family:  HELP MATH
+
+~MATH WINDOW
+MATH WINDOW in(), minout, maxout, out() [,minin!, maxin!]
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(ATAN3)
+MATH(ATAN3 x,y)
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(BASE64)
+MATH(BASE64 ENCODE/DECODE in$/in(), out$/out())
+
+~MATH(CHI)
+MATH(CHI a())
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(CORREL)
+MATH(CORREL  a(), a())
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(COSH)
+MATH(COSH a)
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(CROSSING)
+MATH(CROSSING array() [,level] [,direction] [,confirm])
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(DOTPRODUCT)
+MATH(DOTPRODUCT v1(), v2())
+Creation
+complex% = MATH(C_CPLX r!, i!)
+complex% = MATH(C_POLAR radius!, angle!)
+Floating returns
+real! = MATH(C_REAL complex%) imag! = MATH(C_IMAG complex%) arg! = MATH(C_ARG
+complex%)
+mod! = MATH(C_MOD complex%) phase! = MATH(C_PHASE complex%)
+Unary functions
+complex1% = MATH(C_CONJ complex2%) complex1% = MATH(C_SIN complex2%) complex1%
+= MATH(C_COS complex2%) complex1% = MATH(C_TAN complex2%) complex1% =
+MATH(C_ASIN complex2%) complex1% = MATH(C_ACOS complex2%) complex1% =
+MATH(C_ATAN complex2%) complex1% = MATH(C_SINH complex2%) complex1% =
+MATH(C_COSH complex2%) complex1% = MATH(C_TANH complex2%) complex1% =
+MATH(C_ASINH complex2%) complex1% = MATH(C_ACOSH complex2%) complex1% =
+MATH(C_ATANH complex2%) complex1% = MATH(C_PROJ complex2%)
+Basic Arithmetic
+complex1% = MATH(C_ADD complex2%,complex3%) complex1% = MATH(C_SUB
+complex2%,complex3%) complex1% = MATH(C_MUL complex2%,complex3%) complex1% =
+MATH(C_DIV complex2%,complex3%) complex1% = MATH(C_POW complex2%,complex3%)
+complex1% = MATH(C_AND complex2%,complex3%) complex1% = MATH(C_OR
+complex2%,complex3%) complex1% = MATH(C_XOR complex2%,complex3%)
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(LOG10)
+MATH(LOG10 a)
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(MAGNITUDE)
+MATH(MAGNITUDE v())
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(MAX)
+MATH(MAX a() [,index%])
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(MEAN)
+MATH(MEAN a())
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(MEDIAN)
+MATH(MEDIAN a())
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(MIN)
+MATH(MIN a(), [index%])
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(PID)
+MATH(PID channel, setpoint!, measurement))
+
+~MATH(RAND)
+MATH(RAND)
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(SD)
+MATH(SD a())
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(SINH)
+MATH(SINH a)
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(SUM)
+MATH(SUM a())
+
+Described with the rest of its family:  HELP MATH
+
+~MATH(TANH)
+MATH(TANH a)
+
+Described with the rest of its family:  HELP MATH
+
+~MAX
+MAX( arg1 [, arg2 [, ...]] )
+or
+MIN( arg1 [, arg2 [, ...]] )
+
+~MEMORY
+MEMORY
+MEMORY PRINT #]fnbr , nbr, address%/array()
+MEMORY INPUT [#]fnbr , nbr, address%/array()
+MEMORY PACK source%()/sourceaddress%, dest%()/destaddress%, number, size
+MEMORY UNPACK source%()/sourceaddress%, dest%()/destaddress%, number, size
+
+~MEMORY COPY
+MEMORY COPY sourceaddress, destinationaddress, numberofbytes
+[,sourceincrement][,destinationincrement]
+MEMORY COPY INTEGER sourceaddress, destinationaddress, numberofintegers
+[,sourceincrement][,destinationincrement]
+MEMORY COPY FLOAT sourceaddress, destinationaddress, numberoffloats
+[,sourceincrement][,destinationincrement]
+
+~MEMORY COPY FLOAT
+MEMORY COPY FLOAT sourceaddress, destinationaddress, numberoffloats
+[,sourceincrement][,destinationincrement]
+
+Described with the rest of its family:  HELP MEMORY COPY
+
+~MEMORY COPY INTEGER
+MEMORY COPY INTEGER sourceaddress, destinationaddress, numberofintegers
+[,sourceincrement][,destinationincrement]
+
+Described with the rest of its family:  HELP MEMORY COPY
+
+~MEMORY INPUT
+MEMORY INPUT [#]fnbr , nbr, address%/array()
+
+Described with the rest of its family:  HELP MEMORY
+
+~MEMORY PACK
+MEMORY PACK source%()/sourceaddress%, dest%()/destaddress%, number, size
+
+Described with the rest of its family:  HELP MEMORY
+
+~MEMORY PRINT
+MEMORY PRINT #]fnbr , nbr, address%/array()
+
+Described with the rest of its family:  HELP MEMORY
+
+~MEMORY SET
+MEMORY SET address, byte, numberofbytes
+MEMORY SET BYTE address, byte, numberofbytes
+MEMORY SET SHORT address, short, numberofshorts
+MEMORY SET WORD address, word, numberofwords
+MEMORY SET INTEGER address, integervalue ,numberofintegers [,increment]
+MEMORY SET FLOAT address, floatingvalue ,numberofloats [,increment]
+
+~MEMORY SET BYTE
+MEMORY SET BYTE address, byte, numberofbytes
+
+Described with the rest of its family:  HELP MEMORY SET
+
+~MEMORY SET FLOAT
+MEMORY SET FLOAT address, floatingvalue ,numberofloats [,increment]
+
+Described with the rest of its family:  HELP MEMORY SET
+
+~MEMORY SET INTEGER
+MEMORY SET INTEGER address, integervalue ,numberofintegers [,increment]
+
+Described with the rest of its family:  HELP MEMORY SET
+
+~MEMORY SET SHORT
+MEMORY SET SHORT address, short, numberofshorts
+
+Described with the rest of its family:  HELP MEMORY SET
+
+~MEMORY SET WORD
+MEMORY SET WORD address, word, numberofwords
+
+Described with the rest of its family:  HELP MEMORY SET
+
+~MEMORY UNPACK
+MEMORY UNPACK source%()/sourceaddress%, dest%()/destaddress%, number, size
+
+Described with the rest of its family:  HELP MEMORY
+
+~MID$
+MID$( str$, start, num) = str2$
+MID$( string$, start )
+or
+MID$( string$, start, nbr )
+
+~MIN
+MIN
+
+Described with the rest of its family:  HELP MAX
+
+~MKDIR
+MKDIR dir$
+
+~MM.ADDRESS$
+MM.ADDRESS$
+
+~MM.CMDLINE$
+MM.CMDLINE$
+
+~MM.CODE
+MM.CODE
+
+~MM.DEVICE$
+MM.DEVICE$
+
+~MM.DISPLAY
+MM.DISPLAY
+
+~MM.ERRNO
+MM.ERRNO
+MM.ERRMSG$
+MM.ERRLINE
+
+~MM.FLAGS
+MM.FLAGS
+
+~MM.FONTHEIGHT
+MM.FONTHEIGHT
+MM.FONTWIDTH
+
+~MM.HEIGHT
+MM.HEIGHT
+MM.WIDTH
+
+~MM.HPOS
+MM.HPOS
+MM.VPOS
+
+~MM.HRES
+MM.HRES
+MM.VRES
+
+~MM.I2C
+MM.I2C
+
+~MM.INFO
+MM.INFO()
+MM.INFO$()
+
+~MM.INFO$(ADC DMA)
+MM.INFO$(ADC DMA)
+
+Described with the rest of its family:  HELP MM.INFO(ADC DMA)
+
+~MM.INFO$(ADC)
+MM.INFO$(ADC)
+
+Described with the rest of its family:  HELP MM.INFO(ADC)
+
+~MM.INFO$(AUTORUN)
+MM.INFO$(AUTORUN)
+
+~MM.INFO$(BATTERY)
+MM.INFO$(BATTERY)
+
+Described with the rest of its family:  HELP MM.INFO(BATTERY)
+
+~MM.INFO$(BCOLOUR)
+MM.INFO$(BCOLOUR)
+
+Described with the rest of its family:  HELP MM.INFO(BCOLOUR)
+
+~MM.INFO$(BIOS)
+MM.INFO$(BIOS)
+
+Described with the rest of its family:  HELP MM.INFO(BIOS)
+
+~MM.INFO$(BOOT COUNT)
+MM.INFO$(BOOT COUNT)
+
+Described with the rest of its family:  HELP MM.INFO(BOOT COUNT)
+
+~MM.INFO$(BOOT)
+MM.INFO$(BOOT)
+
+Described with the rest of its family:  HELP MM.INFO(BOOT)
+
+~MM.INFO$(CALLTABLE)
+MM.INFO$(CALLTABLE)
+
+~MM.INFO$(CHARGING)
+MM.INFO$(CHARGING)
+
+Described with the rest of its family:  HELP MM.INFO(CHARGING)
+
+~MM.INFO$(CPUSPEED)
+MM.INFO$(CPUSPEED)
+
+~MM.INFO$(CURRENT)
+MM.INFO$(CURRENT)
+
+~MM.INFO$(DISK SIZE)
+MM.INFO$(DISK SIZE)
+
+Described with the rest of its family:  HELP MM.INFO(DISK SIZE)
+
+~MM.INFO$(DRIVE)
+MM.INFO$(DRIVE)
+
+~MM.INFO$(EXISTS DIR)
+MM.INFO$(EXISTS DIR)
+
+Described with the rest of its family:  HELP MM.INFO(EXISTS DIR)
+
+~MM.INFO$(EXISTS FILE)
+MM.INFO$(EXISTS FILE)
+
+Described with the rest of its family:  HELP MM.INFO(EXISTS FILE)
+
+~MM.INFO$(FCOLOUR)
+MM.INFO$(FCOLOUR)
+
+Described with the rest of its family:  HELP MM.INFO(FCOLOUR)
+
+~MM.INFO$(FILESIZE)
+MM.INFO$(FILESIZE)
+
+Described with the rest of its family:  HELP MM.INFO(FILESIZE)
+
+~MM.INFO$(FLASH ADDRESS)
+MM.INFO$(FLASH ADDRESS)
+
+Described with the rest of its family:  HELP MM.INFO(FLASH ADDRESS)
+
+~MM.INFO$(FLASH)
+MM.INFO$(FLASH)
+
+Described with the rest of its family:  HELP MM.INFO(FLASH)
+
+~MM.INFO$(FLASHTOP)
+MM.INFO$(FLASHTOP)
+
+Described with the rest of its family:  HELP MM.INFO(FLASHTOP)
+
+~MM.INFO$(FONT ADDRESS)
+MM.INFO$(FONT ADDRESS)
+
+Described with the rest of its family:  HELP MM.INFO(FONT ADDRESS)
+
+~MM.INFO$(FONT POINTER)
+MM.INFO$(FONT POINTER)
+
+Described with the rest of its family:  HELP MM.INFO(FONT POINTER)
+
+~MM.INFO$(FONT)
+MM.INFO$(FONT)
+
+Described with the rest of its family:  HELP MM.INFO(FONT)
+
+~MM.INFO$(FONTHEIGHT)
+MM.INFO$(FONTHEIGHT)
+
+Described with the rest of its family:  HELP MM.INFO(FONTHEIGHT)
+
+~MM.INFO$(FREE SPACE)
+MM.INFO$(FREE SPACE)
+
+Described with the rest of its family:  HELP MM.INFO(FREE SPACE)
+
+~MM.INFO$(HEAP)
+MM.INFO$(HEAP)
+
+Described with the rest of its family:  HELP MM.INFO(HEAP)
+
+~MM.INFO$(HEAPEND)
+MM.INFO$(HEAPEND)
+
+Described with the rest of its family:  HELP MM.INFO(HEAPEND)
+
+~MM.INFO$(HPOS)
+MM.INFO$(HPOS)
+
+Described with the rest of its family:  HELP MM.INFO(HPOS)
+
+~MM.INFO$(ID)
+MM.INFO$(ID)
+
+Described with the rest of its family:  HELP MM.INFO(ID)
+
+~MM.INFO$(IP ADDRESS)
+MM.INFO$(IP ADDRESS)
+
+~MM.INFO$(KEYBOARD)
+MM.INFO$(KEYBOARD)
+
+~MM.INFO$(LCD320)
+MM.INFO$(LCD320)
+
+Described with the rest of its family:  HELP MM.INFO(LCD320)
+
+~MM.INFO$(LCDPANEL)
+MM.INFO$(LCDPANEL)
+
+~MM.INFO$(LINE)
+MM.INFO$(LINE)
+
+~MM.INFO$(MAX CONNECTIONS)
+MM.INFO$(MAX CONNECTIONS)
+
+Described with the rest of its family:  HELP MM.INFO(MAX CONNECTIONS)
+
+~MM.INFO$(MAX GP)
+MM.INFO$(MAX GP)
+
+Described with the rest of its family:  HELP MM.INFO(MAX GP)
+
+~MM.INFO$(MAX VARS)
+MM.INFO$(MAX VARS)
+
+Described with the rest of its family:  HELP MM.INFO(MAX VARS)
+
+~MM.INFO$(MODBUFF ADDRESS)
+MM.INFO$(MODBUFF ADDRESS)
+
+~MM.INFO$(MODIFIED)
+MM.INFO$(MODIFIED file$)
+
+~MM.INFO$(OPTION)
+MM.INFO$(OPTION option)
+
+~MM.INFO$(PATH)
+MM.INFO$(PATH)
+
+~MM.INFO$(PIN)
+MM.INFO$(PIN pinno)
+
+~MM.INFO$(PINNO)
+MM.INFO$(PINNO)
+
+Described with the rest of its family:  HELP MM.INFO(PINNO)
+
+~MM.INFO$(PIO RX DMA)
+MM.INFO$(PIO RX DMA)
+
+Described with the rest of its family:  HELP MM.INFO(PIO RX DMA)
+
+~MM.INFO$(PIO TX DMA)
+MM.INFO$(PIO TX DMA)
+
+Described with the rest of its family:  HELP MM.INFO(PIO TX DMA)
+
+~MM.INFO$(PLATFORM)
+MM.INFO$(PLATFORM)
+
+~MM.INFO$(PROGRAM)
+MM.INFO$(PROGRAM)
+
+Described with the rest of its family:  HELP MM.INFO(PROGRAM)
+
+~MM.INFO$(PS2)
+MM.INFO$(PS2)
+
+Described with the rest of its family:  HELP MM.INFO(PS2)
+
+~MM.INFO$(PSRAM SIZE)
+MM.INFO$(PSRAM SIZE)
+
+Described with the rest of its family:  HELP MM.INFO(PSRAM SIZE)
+
+~MM.INFO$(PWM COUNT)
+MM.INFO$(PWM COUNT)
+
+Described with the rest of its family:  HELP MM.INFO(PWM COUNT)
+
+~MM.INFO$(PWM DUTY)
+MM.INFO$(PWM DUTY)
+
+Described with the rest of its family:  HELP MM.INFO(PWM DUTY)
+
+~MM.INFO$(PWM SLICE)
+MM.INFO$(PWM SLICE)
+
+Described with the rest of its family:  HELP MM.INFO(PWM SLICE)
+
+~MM.INFO$(SCREENBUFF)
+MM.INFO$(SCREENBUFF)
+
+Described with the rest of its family:  HELP MM.INFO(SCREENBUFF)
+
+~MM.INFO$(SCROLL)
+MM.INFO$(SCROLL)
+
+Described with the rest of its family:  HELP MM.INFO(SCROLL)
+
+~MM.INFO$(SDCARD)
+MM.INFO$(SDCARD)
+
+~MM.INFO$(SOUND)
+MM.INFO$(SOUND)
+
+~MM.INFO$(SPI SPEED)
+MM.INFO$(SPI SPEED)
+
+Described with the rest of its family:  HELP MM.INFO(SPI SPEED)
+
+~MM.INFO$(STACK)
+MM.INFO$(STACK)
+
+Described with the rest of its family:  HELP MM.INFO(STACK)
+
+~MM.INFO$(SYSTEM HEAP)
+MM.INFO$(SYSTEM HEAP)
+
+Described with the rest of its family:  HELP MM.INFO(SYSTEM HEAP)
+
+~MM.INFO$(SYSTEM I2C)
+MM.INFO$(SYSTEM I2C)
+MM.INFO(FCOLOUR)
+MM.INFO(BCOLOUR)
+
+~MM.INFO$(SYSTICK)
+MM.INFO$(SYSTICK)
+
+Described with the rest of its family:  HELP MM.INFO(SYSTICK)
+
+~MM.INFO$(TCP PORT)
+MM.INFO$(TCP PORT)
+
+Described with the rest of its family:  HELP MM.INFO(TCP PORT)
+
+~MM.INFO$(TCP REQUEST)
+MM.INFO$(TCP REQUEST)
+
+Described with the rest of its family:  HELP MM.INFO(TCP REQUEST)
+
+~MM.INFO$(TCPIP STATUS)
+MM.INFO$(TCPIP STATUS)
+
+Described with the rest of its family:  HELP MM.INFO(TCPIP STATUS)
+
+~MM.INFO$(TELNET)
+MM.INFO$(TELNET)
+
+Described with the rest of its family:  HELP MM.INFO(TELNET)
+
+~MM.INFO$(TILE HEIGHT)
+MM.INFO$(TILE HEIGHT)
+
+Described with the rest of its family:  HELP MM.INFO(TILE HEIGHT)
+
+~MM.INFO$(TOUCH)
+MM.INFO$(TOUCH)
+
+~MM.INFO$(TRACK)
+MM.INFO$(TRACK)
+
+Described with the rest of its family:  HELP MM.INFO(TRACK)
+
+~MM.INFO$(UPTIME)
+MM.INFO$(UPTIME)
+
+Described with the rest of its family:  HELP MM.INFO(UPTIME)
+
+~MM.INFO$(USB PID)
+MM.INFO$(USB PID)
+
+Described with the rest of its family:  HELP MM.INFO(USB PID)
+
+~MM.INFO$(USB VID)
+MM.INFO$(USB VID)
+
+Described with the rest of its family:  HELP MM.INFO(USB VID)
+
+~MM.INFO$(USB)
+MM.INFO$(USB)
+
+Described with the rest of its family:  HELP MM.INFO(USB)
+
+~MM.INFO$(VALID CPUSPEED)
+MM.INFO$(VALID CPUSPEED)
+
+Described with the rest of its family:  HELP MM.INFO(VALID CPUSPEED)
+
+~MM.INFO$(VARCNT)
+MM.INFO$(VARCNT)
+
+Described with the rest of its family:  HELP MM.INFO(VARCNT)
+
+~MM.INFO$(VERSION)
+MM.INFO$(VERSION)
+
+Described with the rest of its family:  HELP MM.INFO(VERSION)
+
+~MM.INFO$(WRITEBUFF)
+MM.INFO$(WRITEBUFF)
+
+Described with the rest of its family:  HELP MM.INFO(WRITEBUFF)
+
+~MM.INFO(ADC DMA)
+MM.INFO(ADC DMA)
+
+~MM.INFO(ADC)
+MM.INFO(ADC)
+
+~MM.INFO(AUTORUN)
+MM.INFO(AUTORUN)
+
+Described with the rest of its family:  HELP MM.INFO$(AUTORUN)
+
+~MM.INFO(BATTERY)
+MM.INFO(BATTERY)
+
+~MM.INFO(BCOLOUR)
+MM.INFO(BCOLOUR)
+
+Described with the rest of its family:  HELP MM.INFO$(SYSTEM I2C)
+
+~MM.INFO(BIOS)
+MM.INFO(BIOS)
+
+~MM.INFO(BOOT COUNT)
+MM.INFO(BOOT COUNT)
+
+~MM.INFO(BOOT)
+MM.INFO(BOOT)
+
+~MM.INFO(CALLTABLE)
+MM.INFO(CALLTABLE)
+
+Described with the rest of its family:  HELP MM.INFO$(CALLTABLE)
+
+~MM.INFO(CHARGING)
+MM.INFO(CHARGING)
+
+~MM.INFO(CPUSPEED)
+MM.INFO(CPUSPEED)
+
+Described with the rest of its family:  HELP MM.INFO$(CPUSPEED)
+
+~MM.INFO(CURRENT)
+MM.INFO(CURRENT)
+
+Described with the rest of its family:  HELP MM.INFO$(CURRENT)
+
+~MM.INFO(DISK SIZE)
+MM.INFO(DISK SIZE)
+
+~MM.INFO(DRIVE)
+MM.INFO(DRIVE)
+
+Described with the rest of its family:  HELP MM.INFO$(DRIVE)
+
+~MM.INFO(EXISTS DIR)
+MM.INFO(EXISTS DIR dirname$)
+
+~MM.INFO(EXISTS FILE)
+MM.INFO(EXISTS FILE fname$)
+
+~MM.INFO(FCOLOUR)
+MM.INFO(FCOLOUR)
+
+Described with the rest of its family:  HELP MM.INFO$(SYSTEM I2C)
+
+~MM.INFO(FILESIZE)
+MM.INFO(FILESIZE file$)
+
+~MM.INFO(FLASH ADDRESS)
+MM.INFO(FLASH ADDRESS n)
+
+~MM.INFO(FLASH)
+MM.INFO(FLASH)
+
+~MM.INFO(FLASHTOP)
+MM.INFO(FLASHTOP)
+
+~MM.INFO(FONT ADDRESS)
+MM.INFO(FONT ADDRESS n)
+
+~MM.INFO(FONT POINTER)
+MM.INFO(FONT POINTER n)
+
+~MM.INFO(FONT)
+MM.INFO(FONT)
+
+~MM.INFO(FONTHEIGHT)
+MM.INFO(FONTHEIGHT)
+MM.INFO(FONTWIDTH)
+
+~MM.INFO(FREE SPACE)
+MM.INFO(FREE SPACE)
+
+~MM.INFO(HEAP)
+MM.INFO(HEAP)
+
+~MM.INFO(HEAPEND)
+MM.INFO(HEAPEND) MM.INFO(STACKPEAK) MM.INFO(CHEAPMAX) MM.INFO(CHEAPTOTAL)
+MM.INFO(TLSHEAP) MM.INFO(TLSHEAPMAX) MM.INFO(TLSHEAPERR)
+
+~MM.INFO(HPOS)
+MM.INFO(HPOS)
+MM.INFO(VPOS)
+
+~MM.INFO(ID)
+MM.INFO(ID)
+
+~MM.INFO(IP ADDRESS)
+MM.INFO(IP ADDRESS)
+
+Described with the rest of its family:  HELP MM.INFO$(IP ADDRESS)
+
+~MM.INFO(KEYBOARD)
+MM.INFO(KEYBOARD)
+
+Described with the rest of its family:  HELP MM.INFO$(KEYBOARD)
+
+~MM.INFO(LCD320)
+MM.INFO(LCD320)
+
+~MM.INFO(LCDPANEL)
+MM.INFO(LCDPANEL)
+
+Described with the rest of its family:  HELP MM.INFO$(LCDPANEL)
+
+~MM.INFO(LINE)
+MM.INFO(LINE)
+
+Described with the rest of its family:  HELP MM.INFO$(LINE)
+
+~MM.INFO(MAX CONNECTIONS)
+MM.INFO(MAX CONNECTIONS)
+
+~MM.INFO(MAX GP)
+MM.INFO(MAX GP)
+
+~MM.INFO(MAX VARS)
+MM.INFO(MAX VARS)
+
+~MM.INFO(MODBUFF ADDRESS)
+MM.INFO(MODBUFF ADDRESS)
+
+Described with the rest of its family:  HELP MM.INFO$(MODBUFF ADDRESS)
+
+~MM.INFO(MODIFIED)
+MM.INFO(MODIFIED)
+
+Described with the rest of its family:  HELP MM.INFO$(MODIFIED)
+
+~MM.INFO(OPTION)
+MM.INFO(OPTION)
+
+Described with the rest of its family:  HELP MM.INFO$(OPTION)
+
+~MM.INFO(PATH)
+MM.INFO(PATH)
+
+Described with the rest of its family:  HELP MM.INFO$(PATH)
+
+~MM.INFO(PIN)
+MM.INFO(PIN)
+
+Described with the rest of its family:  HELP MM.INFO$(PIN)
+
+~MM.INFO(PINNO)
+MM.INFO(PINNO GPnn)
+
+~MM.INFO(PIO RX DMA)
+MM.INFO(PIO RX DMA)
+
+~MM.INFO(PIO TX DMA)
+MM.INFO(PIO TX DMA)
+
+~MM.INFO(PLATFORM)
+MM.INFO(PLATFORM)
+
+Described with the rest of its family:  HELP MM.INFO$(PLATFORM)
+
+~MM.INFO(PROGRAM)
+MM.INFO(PROGRAM)
+
+~MM.INFO(PS2)
+MM.INFO(PS2)
+
+~MM.INFO(PSRAM SIZE)
+MM.INFO(PSRAM SIZE)
+
+~MM.INFO(PWM COUNT)
+MM.INFO(PWM COUNT)
+
+~MM.INFO(PWM DUTY)
+MM.INFO(PWM DUTY C%, n%)
+
+~MM.INFO(PWM SLICE)
+MM.INFO(PWM SLICE pinno)
+
+~MM.INFO(SCREENBUFF)
+MM.INFO(SCREENBUFF)
+
+~MM.INFO(SCROLL)
+MM.INFO(SCROLL)
+
+~MM.INFO(SDCARD)
+MM.INFO(SDCARD)
+
+Described with the rest of its family:  HELP MM.INFO$(SDCARD)
+
+~MM.INFO(SOUND)
+MM.INFO(SOUND)
+
+Described with the rest of its family:  HELP MM.INFO$(SOUND)
+
+~MM.INFO(SPI SPEED)
+MM.INFO(SPI SPEED
+
+~MM.INFO(STACK)
+MM.INFO(STACK)
+
+~MM.INFO(SYSTEM HEAP)
+MM.INFO(SYSTEM HEAP)
+
+~MM.INFO(SYSTEM I2C)
+MM.INFO(SYSTEM I2C)
+
+Described with the rest of its family:  HELP MM.INFO$(SYSTEM I2C)
+
+~MM.INFO(SYSTICK)
+MM.INFO(SYSTICK)
+
+~MM.INFO(TCP PORT)
+MM.INFO(TCP PORT)
+MM.INFO(UDP PORT)
+
+~MM.INFO(TCP REQUEST)
+MM.INFO(TCP REQUEST n)
+
+~MM.INFO(TCPIP STATUS)
+MM.INFO(TCPIP STATUS)
+MM.INFO(WIFI STATUS)
+
+~MM.INFO(TELNET)
+MM.INFO(TELNET)
+
+~MM.INFO(TILE HEIGHT)
+MM.INFO(TILE HEIGHT)
+
+~MM.INFO(TOUCH)
+MM.INFO(TOUCH)
+
+Described with the rest of its family:  HELP MM.INFO$(TOUCH)
+
+~MM.INFO(TRACK)
+MM.INFO(TRACK)
+
+~MM.INFO(UPTIME)
+MM.INFO(UPTIME)
+
+~MM.INFO(USB PID)
+MM.INFO(USB PID n)
+
+~MM.INFO(USB VID)
+MM.INFO(USB VID n)
+
+~MM.INFO(USB)
+MM.INFO(USB n)
+
+~MM.INFO(VALID CPUSPEED)
+MM.INFO(VALID CPUSPEED speed%)
+
+~MM.INFO(VARCNT)
+MM.INFO(VARCNT)
+
+~MM.INFO(VERSION)
+MM.INFO(VERSION)
+
+~MM.INFO(WRITEBUFF)
+MM.INFO(WRITEBUFF)
+
+~MM.MESSAGE$
+MM.MESSAGE$
+
+~MM.ONEWIRE
+MM.ONEWIRE
+
+~MM.PERSISTENT
+MM.PERSISTENT
+
+~MM.PS2
+MM.PS2
+
+~MM.SUPPLY
+MM.SUPPLY
+
+~MM.TOPIC$
+MM.TOPIC$
+
+~MM.USB
+MM.USB
+
+~MM.VER
+MM.VER
+
+~MM.WATCHDOG
+MM.WATCHDOG
+
+~MOD
+MOD
+
+Described with the rest of its family:  HELP OPERATORS
+
+~MODE
+MODE 1
+or
+MODE 2
+Or
+MODE 3 (RP2350 only)
+MODE n
+MODE 400
+or
+MODE 800
+
+~MOUSE
+MOUSE
+
+~MOUSE CLOSE
+MOUSE CLOSE  channel
+
+~MOUSE INTERRUPT DISABLE
+MOUSE INTERRUPT DISABLE channel
+
+~MOUSE INTERRUPT ENABLE
+MOUSE INTERRUPT ENABLE channel, int
+
+~MOUSE OPEN
+MOUSE OPEN channel, CLKpin, DATApin
+
+~MOUSE SET
+MOUSE SET channel, x-coord, y-coord [, wheel-count]
+
+~NEW
+NEW
+
+~NEXT
+NEXT [counter-variable] [, counter-variable], etc
+
+~NOT
+NOT
+
+Described with the rest of its family:  HELP OPERATORS
+
+~OCT$
+OCT$( number [, chars])
+
+~ON
+ON nbr GOTO | GOSUB target[,target, target,..]
+
+~ON ERROR ABORT
+ON ERROR ABORT
+or
+ON ERROR IGNORE
+or
+ON ERROR SKIP [nn]
+or
+ON ERROR CLEAR
+Or
+ON ERROR RESTART
+
+~ON KEY
+ON KEY target
+or
+ON KEY ASCIIcode, target
+
+~ON PS2
+ON PS2 target
+
+~ONESHOT
+ONESHOT triggerPin, sense, outputPin, prePulseDelay, pulseWidth [,
+quiescentPeriod]
+
+~ONESHOT DISABLE
+ONESHOT DISABLE
+
+~ONESHOT R
+ONESHOT R triggerPin, sense, outputPin, prePulseDelay, pulseWidth [,
+quiescentPeriod]
+
+~ONEWIRE
+ONEWIRE is the first word of several entries:
+
+ONEWIRE RESET
+
+List them all with:  HELP ONEWIRE*
+
+~ONEWIRE RESET
+ONEWIRE RESET pin
+or
+ONEWIRE WRITE pin, flag, length, data [, data...]
+or
+ONEWIRE READ pin, flag, length, data [, data...]
+
+~OPEN
+OPEN fname$ FOR mode AS [#]fnbr
+OPEN comspec$ AS [#]fnbr
+OPEN comspec$ AS GPS
+[,timezone_offset]  [,monitor]
+
+~OPERATORS
+MMBasic operators, highest precedence first
+
+Arithmetic:
+  ^                     Exponentiation (eg, b^n means bn)
+  * / \ MOD             Multiplication, division, integer division and modulus
+                        (remainder)
+  + -                   Addition and subtraction
+
+Bitwise shift:
+  x << y x >> y         These operate in a special way. << means that the
+                        value returned will be the value of x shifted by y
+                        bits to the left while >> means the same only right
+                        shifted. They are integer functions and any bits
+                        shifted off are discarded and any bits introduced are
+                        set to zero.
+
+Logical and comparison:
+  NOT INV               invert the logical value on the right (eg, NOT(a=b) is
+                        a<>b) or bitwise inversion of the value on the right
+                        (eg, a = INV b)
+  <> < > <= =< >= =>    Inequality, less than, greater than, less than or
+                        equal to, less than or equal to (alternative version),
+                        greater than or equal to, greater than or equal to
+                        (alternative version)
+  =                     equality
+  AND OR XOR            Conjunction, disjunction, exclusive or
+
+String:
+  +                     Join two strings
+  <> < > <= =< >= =>    Inequality, less than, greater than, less than or
+                        equal to, less than or equal to (alternative version),
+                        greater than or equal to, greater than or equal to
+                        (alternative version) in order of ascii value.
+  =                     Equality
+
+~OPTION
+OPTION FNKey string$
+OPTION
+
+~OPTION ANGLE
+OPTION ANGLE RADIANS | DEGREES
+
+~OPTION AUDIO
+OPTION AUDIO PWMnApin, PWMnBpin
+or
+OPTION AUDIO DISABLE
+
+~OPTION AUDIO I2S
+OPTION AUDIO I2S BCLKpin, DINpin
+or
+OPTION AUDIO DISABLE
+
+~OPTION AUDIO SPI
+OPTION AUDIO SPI CSpin, CLKpin, MOSIpin
+or
+OPTION AUDIO DISABLE
+
+~OPTION AUDIO VS1053
+OPTION AUDIO VS1053 CLKpin, MOSIpin, MISOpin, XCSpin, XDCSpin, DREQpin,
+XRSTpin
+or
+OPTION AUDIO DISABLE
+
+~OPTION AUTOREFRESH
+OPTION AUTOREFRESH OFF | ON
+
+~OPTION AUTORUN ON
+OPTION AUTORUN ON [,NORESET]
+or
+OPTION AUTORUN n [,NORESET]
+or
+OPTION AUTORUN OFF
+
+~OPTION BACKLIGHT KBD
+OPTION BACKLIGHT KBD n
+OPTION BACKLIGHT LCD n
+
+~OPTION BASE
+OPTION BASE 0  |  1
+
+~OPTION BAUDRATE
+OPTION BAUDRATE nn
+
+~OPTION BREAK
+OPTION BREAK nn
+
+~OPTION CACHE DEBUG ON
+OPTION CACHE DEBUG ON or OPTION CACHE DEBUG OFF
+
+~OPTION CACHE SUB
+OPTION CACHE SUB name [,name...] or OPTION CACHE SUB OFF
+
+~OPTION CASE
+OPTION CASE LOWER | UPPER | TITLE
+
+~OPTION CDC POLL RATE
+OPTION CDC POLL RATE n
+
+~OPTION COLOURCODE ON
+OPTION COLOURCODE ON
+or
+OPTION COLOURCODE OFF
+
+~OPTION CONSOLE
+OPTION CONSOLE output
+
+~OPTION CONTINUATION LINES
+OPTION CONTINUATION LINES ON/OFF
+
+~OPTION COUNT
+OPTION COUNT pin1, pin2, pin3, pin4
+
+~OPTION CPUSPEED
+OPTION CPUSPEED speed
+
+~OPTION DEFAULT
+OPTION DEFAULT FLOAT | INTEGER | STRING | NONE
+
+~OPTION DEFAULT COLOURS
+OPTION DEFAULT COLOURS foreground [,background]
+
+~OPTION DEFAULT MODE
+OPTION DEFAULT MODE n
+
+~OPTION DISK SAVE
+OPTION DISK SAVE fname$ OPTION DISK LOAD fname$
+
+~OPTION DISPLAY
+OPTION DISPLAY lines [,chars]
+
+~OPTION ESCAPE
+OPTION ESCAPE
+
+~OPTION EXPLICIT
+OPTION EXPLICIT
+
+~OPTION FAST AUDIO
+OPTION FAST AUDIO ON|OFF
+
+~OPTION GPS
+OPTION GPS
+
+~OPTION GUI CONTROLS
+OPTION GUI CONTROLS n
+
+~OPTION HDMI PINS
+OPTION HDMI PINS clockpositivepin, d0positivepin, d1positivepin, d2positivepin
+
+~OPTION HEARTBEAT
+OPTION HEARTBEAT ON/OFF [HEARTBEATpin]
+
+~OPTION KEYBOARD
+OPTION KEYBOARD nn [,capslock] [,numlock] [,repeatstart] [,repeatrate]
+or
+OPTION KEYBOARD DISABLE
+OPTION KEYBOARD nn
+
+~OPTION KEYBOARD I2C
+OPTION KEYBOARD I2C
+
+~OPTION KEYBOARD PINS
+OPTION KEYBOARD PINS clockpin, datapin
+
+~OPTION KEYBOARD REPEAT
+OPTION KEYBOARD REPEAT repeatstart , repeatrate
+
+~OPTION LCD SPI
+OPTION LCD SPI clkpin, mosipin, misopin
+or
+OPTION LCD SPI DISABLE
+
+~OPTION LCD320
+OPTION LCD320 ON/OFF
+
+~OPTION LCDPANEL
+OPTION LCDPANEL
+OPTION LCDPANEL VIRTUAL_C
+or
+OPTION LCDPANEL VIRTUAL_M
+OPTION LCDPANEL options
+or
+OPTION LCDPANEL DISABLE
+OPTION LCDPANEL CONSOLE [font [, fc [,bc]]
+or
+OPTION LCDPANEL NOCONSOLE
+
+~OPTION LCDPANEL CONSOLE
+OPTION LCDPANEL CONSOLE [font [, fc [, bc [, blight]]] [,NOSCROLL]
+or
+OPTION LCDPANEL NOCONSOLE
+OPTION LCDPANEL CONSOLE [font [, fc [,bc]]
+
+~OPTION LCDPANEL NOCONSOLE
+OPTION LCDPANEL NOCONSOLE
+
+Described with the rest of its family:  HELP OPTION LCDPANEL
+
+~OPTION LCDPANEL USER
+OPTION LCDPANEL USER hres, vres
+
+~OPTION LEGACY ON
+OPTION LEGACY ON
+or
+OPTION LEGACY OFF
+
+~OPTION LIST
+OPTION LIST
+
+~OPTION LOCAL KEYBOARD ON
+OPTION LOCAL KEYBOARD ON or OPTION LOCAL KEYBOARD OFF
+
+~OPTION LOCAL VARIABLES
+OPTION LOCAL VARIABLES n
+
+~OPTION LOGGING ON
+OPTION LOGGING ON
+or
+OPTION LOGGING OFF
+
+~OPTION MILLISECONDS
+OPTION MILLISECONDS ON|OFF
+
+~OPTION MODBUFF
+OPTION MODBUFF ENABLE/DISABLE [sizeinK]
+
+~OPTION MOUSE
+OPTION MOUSE CLKpin, DATApin
+
+~OPTION MOUSE DISABLE
+OPTION MOUSE DISABLE
+
+~OPTION MOUSE SENSITIVITY
+OPTION MOUSE SENSITIVITY f!
+
+~OPTION NOCHECK
+OPTION NOCHECK ON/OFF
+
+~OPTION PICO
+OPTION PICO ON/OFF
+
+~OPTION PICO PLUS
+OPTION PICO PLUS 2 ON
+or
+OPTION PICO PLUS 2 OFF
+
+~OPTION PIN
+OPTION PIN nbr
+
+~OPTION PLATFORM
+OPTION PLATFORM name$
+
+~OPTION POWER
+OPTION POWER PFM | PWM
+
+~OPTION PROFILING ON
+OPTION PROFILING ON
+or
+OPTION PROFILING OFF
+
+~OPTION PS2 PINS
+OPTION PS2 PINS clockpin, datapin
+
+~OPTION PSRAM PIN
+OPTION PSRAM PIN n
+or
+OPTION PSRAM PIN DISABLE
+
+~OPTION RESET
+OPTION RESET
+OPTION RESET cfg
+or
+OPTION RESET LIST
+
+~OPTION RESOLUTION
+OPTION RESOLUTION nn [,cpuspeedinKhz]
+
+~OPTION RTC AUTO
+OPTION RTC AUTO ENABLE | DISABLE
+
+~OPTION SCREEN KEYBOARD
+OPTION SCREEN KEYBOARD nn [, M]
+
+~OPTION SDCARD
+OPTION SDCARD CSpin [,CLKpin, MOSIpin, MISOpin]
+or
+OPTION SDCARD DISABLE
+
+~OPTION SDCARD COMBINED CS
+OPTION SDCARD COMBINED CS
+
+~OPTION SERIAL CONSOLE
+OPTION SERIAL CONSOLE uartapin, uartbpin [,B]
+OPTION SERIAL CONSOLE DISABLE
+
+~OPTION SERIAL CONSOLE DISABLE
+OPTION SERIAL CONSOLE DISABLE
+
+Described with the rest of its family:  HELP OPTION SERIAL CONSOLE
+
+~OPTION SYSTEM I2C
+OPTION SYSTEM I2C sdapin, sclpin [,SLOW/FAST]
+
+~OPTION SYSTEM SPI
+OPTION SYSTEM SPI CLKpin, MOSIpin, MISOpin
+or
+OPTION SYSTEM SPI DISABLE
+
+~OPTION TAB
+OPTION TAB 2 | 3 | 4 | 8
+
+~OPTION TCP SERVER PORT
+OPTION TCP SERVER PORT n
+
+~OPTION TELNET CONSOLE
+OPTION TELNET CONSOLE OFF|ONLY|ON
+
+~OPTION TFTP
+OPTION TFTP OFF|ON
+
+~OPTION TOUCH
+OPTION TOUCH T_CS pin, T_IRQ pin [, Beep]
+or
+OPTION TOUCH DISABLE
+
+~OPTION TOUCH FT6336
+OPTION TOUCH FT6336 IRQpin, RESETpin [,BEEPpin] [,sensitivity]
+or
+OPTION TOUCH GT911 IRQpin, RESETpin [,BEEPpin] [,sensitivity]
+
+~OPTION TRACECACHE ON
+OPTION TRACECACHE ON [size [,flags]]
+or
+OPTION TRACECACHE OFF
+
+~OPTION UDP SERVER PORT
+OPTION UDP SERVER PORT n
+
+~OPTION VCC
+OPTION VCC voltage
+
+~OPTION VGA PINS
+OPTION VGA PINS HSYNCpin, BLUEpin
+
+~OPTION WEB MESSAGES
+OPTION WEB MESSAGES ON/OFF
+
+~OPTION WIFI
+OPTION WIFI ssid$, passwd$ [,name$] [, country$]
+Or
+OPTION WIFI ssid$, passwd$ [, name$] [, ipaddress$, mask$, gateway$] [,
+country$]
+
+~OR
+OR
+
+Described with the rest of its family:  HELP OPERATORS
+
+~PAUSE
+PAUSE delay
+
+~PEEK
+PEEK is the first word of several entries:
+
+PEEK(BP)         PEEK(CFUNADDR)   PEEK(SP)         PEEK(VARHEADER)
+PEEK(BYTE)       PEEK(PROGMEM)    PEEK(VAR)        PEEK(WP)
+
+List them all with:  HELP PEEK*
+
+~PEEK(BP)
+PEEK(BP n%)
+
+~PEEK(BYTE)
+PEEK(BYTE addr%)
+or
+PEEK(SHORT addr%)
+or
+PEEK(WORD addr%)
+or
+PEEK(INTEGER addr%)
+or
+PEEK(FLOAT addr%)
+or
+PEEK(VARADDR var)
+or
+
+~PEEK(CFUNADDR)
+PEEK(CFUNADDR cfun)
+or
+
+~PEEK(PROGMEM)
+PEEK( PROGMEM, +/-offset)
+
+~PEEK(SP)
+PEEK(SP n%)
+
+~PEEK(VAR)
+PEEK(VAR var, +/-offset)
+or
+PEEK( VARTBL, +/-offset)
+or
+
+~PEEK(VARHEADER)
+PEEK(VARHEADER var)
+or
+
+~PEEK(WP)
+PEEK(WP n%)
+
+~PI
+PI
+
+~PIN
+PIN( pin ) = value
+PIN( pin )
+
+~PIN(BOOTSEL)
+PIN( BOOTSEL )
+
+~PIN(TEMP)
+PIN( TEMP )
+
+~PIO
+PIO
+PIO assemble pio,linedata$
+
+~PIO CLEAR
+PIO CLEAR pio
+
+~PIO CONFIGURE
+PIO CONFIGURE pio, sm, clock [,startaddress] [,sidesetbase] [,sidesetno]
+[,sidesetout] [,setbase] [,setno] [,setout] [,outbase] [,outno] [,outout]
+[,inbase] [,jmppin] [,wraptarget] [,wrap] [,sideenable] [,sidepindir]
+[,pushthreshold] [,pullthreshold] [,autopush] [,autopull] [,inshiftdir]
+[,outshiftdir] [,joinrxfifo] [,jointxfifo] [,joinrxfifoget] [,joinrxfifoput]
+
+~PIO DMA RX
+PIO DMA RX pio, sm, nbr, data%() [,completioninterrupt] [,transfersize]
+[,loopbackcount]
+PIO DMA TX pio, sm, nbr, data%() [,completioninterrupt] [,transfersize]
+[,loopbackcount]
+
+~PIO DMA RX OFF
+PIO DMA RX OFF
+PIO DMA TX OFF
+
+~PIO EXECUTE
+PIO EXECUTE pio, state_machine, instruction%
+
+~PIO INIT MACHINE
+PIO INIT MACHINE pio%,
+statemachine%, clockspeed
+[,pinctrl] [,execctrl] [,shiftctrl]
+[,startinstruction] [,sideout [,setout] [,outout]
+
+~PIO INTERRUPT
+PIO INTERRUPT pio, sm [,RXinterrupt] [,TXinterrupt]
+
+~PIO PROGRAM
+PIO PROGRAM pio
+PIO PROGRAM pio,array%()
+PIO PROGRAM LINE pio, line, instruction
+
+~PIO PROGRAM LINE
+PIO PROGRAM LINE pio, line, instruction
+
+Described with the rest of its family:  HELP PIO PROGRAM
+
+~PIO READ
+PIO READ pio, state_machine, count, data%[()]
+
+~PIO SET BASE
+PIO SET BASE 0/16
+
+~PIO START
+PIO START pio, statemachine
+
+~PIO STOP
+PIO STOP pio, statemachine
+
+~PIO SYNC
+PIO SYNC pio, statemachines, [,prevstatemachines] [,nextstatemachines]
+
+~PIO WRITE
+PIO WRITE pio, state_machine, count, data0 [,data1..]
+
+~PIO WRITEFIFO
+PIO WRITEFIFO a,b,c,d
+
+~PIO(.WRAP)
+PIO(.WRAP)
+PIO(.WRAP TARGET)
+
+~PIO(DMA RX POINTER)
+PIO(DMA RX POINTER)
+PIO(DMA TX POINTER)
+
+~PIO(EXECCTRL)
+PIO (EXECCTRL jmp_pin ,wrap_target, wrap [,side_pindir] [,side_en])
+
+~PIO(FDEBUG)
+PIO (FDEBUG pio)
+
+~PIO(FLEVEL)
+PIO (FLEVEL pio)
+PIO(FLEVEL pio ,sm, DIR)
+
+~PIO(FSTAT)
+PIO (FSTAT pio)
+
+~PIO(NEXT LINE)
+PIO(NEXT LINE)
+
+~PIO(PINCTRL)
+PIO (PINCTRL no_side_set_pins [,no_set_pins] [,no_out_pins] [,IN base]
+ [,side_set_base] [,set_base][, out_base])
+
+~PIO(READFIFO)
+PIO(READFIFO a, b, c)
+
+~PIO(SHIFTCTRL)
+PIO (SHIFTCTRL push_threshold [,pull_threshold] [,autopush] [,autopull]
+[,in_shiftdir] [,out_shiftdir] [,fjoin_tx] [,fjoin_rx])
+
+~PIXEL
+PIXEL  x,  y  [,c]
+PIXEL( x, y)
+
+~PLAY
+PLAY
+PLAY MP3 file$ [, interrupt]
+PLAY HALT
+PLAY CONTINUE track$
+PLAY MIDIFILE file$ [, interrupt]
+PLAY MIDI
+PLAY MIDI CMD cmd%, data1%, data2%
+PLAY MIDI TEST n
+PLAY NOTE ON channel%, note%, velocity%
+PLAY NOTE OFF channel%, note% [,velocity%]
+PLAY STREAM buffer%(), readpointer%, writepointer%
+
+~PLAY ARRAY
+PLAY ARRAY l%(), r%(), freq [,start] [,end] [,terminationinterrupt]
+
+~PLAY BBC ENVELOPE
+PLAY BBC ENVELOPE n, T, PI1, PI2, PI3, PN1, PN2, PN3, AA, AD, AS, AR, ALA, ALD
+
+~PLAY BBC SOUND
+PLAY BBC SOUND channel, amplitude, pitch, duration
+
+~PLAY CONTINUE
+PLAY CONTINUE track$
+
+Described with the rest of its family:  HELP PLAY
+
+~PLAY FLAC
+PLAY FLAC file$ [, interrupt]
+
+~PLAY HALT
+PLAY HALT
+
+Described with the rest of its family:  HELP PLAY
+
+~PLAY LOAD SOUND
+PLAY LOAD SOUND array%()
+
+~PLAY MIDI
+PLAY MIDI
+
+Described with the rest of its family:  HELP PLAY
+
+~PLAY MIDI CMD
+PLAY MIDI CMD cmd%, data1%, data2%
+
+Described with the rest of its family:  HELP PLAY
+
+~PLAY MIDI TEST
+PLAY MIDI TEST n
+
+Described with the rest of its family:  HELP PLAY
+
+~PLAY MIDIFILE
+PLAY MIDIFILE file$ [, interrupt]
+
+Described with the rest of its family:  HELP PLAY
+
+~PLAY MODFILE
+PLAY MODFILE file$ [,interrupt]
+
+~PLAY MODSAMPLE
+PLAY MODSAMPLE Samplenum, channel [,volume]
+
+~PLAY MP3
+PLAY MP3 file$ [, interrupt]
+
+~PLAY NEXT
+PLAY NEXT
+
+~PLAY NOTE OFF
+PLAY NOTE OFF channel%, note% [,velocity%]
+
+Described with the rest of its family:  HELP PLAY
+
+~PLAY NOTE ON
+PLAY NOTE ON channel%, note%, velocity%
+
+Described with the rest of its family:  HELP PLAY
+
+~PLAY PAUSE
+PLAY PAUSE
+PLAY RESUME
+PLAY STOP
+
+~PLAY PREVIOUS
+PLAY PREVIOUS
+
+~PLAY SAMPLE
+PLAY SAMPLE left%(), right%(), freq, attack, decay, sustain, release [, freqR,
+attackR, decayR, sustainR, releaseR] [, interrupt] or PLAY RELEASE
+
+~PLAY SOUND
+PLAY SOUND soundno, channelno, type [,frequency] [,volume]
+
+~PLAY STREAM
+PLAY STREAM buffer%(), readpointer%, writepointer%
+
+Described with the rest of its family:  HELP PLAY
+
+~PLAY TONE
+PLAY TONE left, right [,dur] [,interrupt]
+
+~PLAY VOLUME
+PLAY VOLUME left, right
+
+~PLAY WAV
+PLAY WAV file$ [, interrupt]
+
+~POKE
+POKE is the first word of several entries:
+
+POKE BYTE          POKE DISPLAY       POKE DISPLAY HRES
+
+List them all with:  HELP POKE*
+
+~POKE BYTE
+POKE BYTE addr%, byte
+or
+POKE SHORT addr%, short%
+or
+POKE WORD addr%, word%
+or
+POKE INTEGER addr%, int%
+or
+POKE FLOAT addr%, float!
+or
+POKE VAR var, offset, byte
+or
+POKE VARTBL, offset, byte
+
+~POKE DISPLAY
+POKE DISPLAY command [,data1] [,data2] [,datan]
+
+~POKE DISPLAY HRES
+POKE DISPLAY HRES n
+POKE DISPLAY VRES n
+
+~POLYGON
+POLYGON n, xarray%(), yarray%() [, bordercolour] [, fillcolour]
+POLYGON n(), xarray%(), yarray%() [, bordercolour()] [, fillcolour()]
+POLYGON n(), xarray%(), yarray%() [, bordercolour] [, fillcolour]
+
+~PORT
+PORT(start, nbr [,start, nbr]...) = value
+PORT(start, nbr [,start, nbr]...)
+
+~POS
+POS
+
+~PRINT
+PRINT expression  [[,; ]expression] ... etc
+PRINT #nbr, expression  [[,; ]expression] ... etc
+PRINT #GPS, expression  [[,; ]expression] ... etc
+PRINT @(x [, y]) expression
+or
+PRINT @(x, [y], m) expression
+
+~PULSE
+PULSE pin, width
+
+~PULSIN
+PULSIN( pin, polarity )
+or
+PULSIN( pin, polarity, t1 )
+or
+PULSIN( pin, polarity, t1, t2 )
+
+~PWM
+PWM channel, frequency, [dutyA] [,dutyB][,phase][,defer]
+PWM channel, OFF
+
+~PWM SYNC
+PWM SYNC s0 [,s1][,s2][,s3][,s4][,s5][,s6][,s7]
+
+~RAD
+RAD( degrees )
+
+~RAM
+RAM
+
+~RAM CHAIN
+RAM CHAIN n
+
+~RAM ERASE
+RAM ERASE n
+
+~RAM ERASE ALL
+RAM ERASE ALL
+
+~RAM FILE LOAD
+RAM FILE LOAD n,
+fname$ [,O[VERWRITE]]
+
+~RAM LIST
+RAM LIST
+RAM LIST n [,all]
+
+~RAM LOAD
+RAM LOAD n
+
+~RAM OVERWRITE
+RAM OVERWRITE n
+
+~RAM RUN
+RAM RUN n
+
+~RAM SAVE
+RAM SAVE n
+
+~RANDOMIZE
+RANDOMIZE nbr
+
+~RAY
+RAY
+
+~RBOX
+RBOX  x,  y,  w,  h  [, r]  [,c] [,fill]
+
+~READ
+READ variable[, variable]..
+
+~READ SAVE
+READ SAVE
+or
+READ RESTORE
+
+~REDIM
+REDIM [PRESERVE] array1(dimensions) [,
+array2(dimensions]...[,arrayn(dimensions]
+
+~REFRESH
+REFRESH
+
+~REM
+REM string
+
+~RENAME
+RENAME old$ AS new$
+
+~RESOLUTION
+RESOLUTION nn [,cpuspeedinKHz]
+
+~RESTORE
+RESTORE [line]
+
+~RETURN
+RETURN
+RETURN
+
+~RGB
+RGB(red, green, blue)
+or
+RGB(shortcut)
+
+~RIGHT$
+RIGHT$( string$, number-of-chars )
+
+~RMDIR
+RMDIR dir$
+
+~RND
+RND( number )
+or
+RND
+
+~RTC
+RTC GETTIME
+RTC SETTIME year, month, day, hour, minute, second
+RTC SETREG reg, value
+RTC GETREG reg, var
+
+~RTC GETTIME
+RTC GETTIME
+
+Described with the rest of its family:  HELP RTC
+
+~RTC SETREG
+RTC SETREG reg, value
+RTC GETREG reg, var
+
+Described with the rest of its family:  HELP RTC
+
+~RTC SETTIME
+RTC SETTIME year, month, day, hour, minute, second
+
+Described with the rest of its family:  HELP RTC
+
+~RUN
+RUN
+or
+RUN [file$] [, cmdline$]
+
+~SAVE
+SAVE file$
+
+~SAVE CONTEXT
+SAVE CONTEXT [CLEAR]
+
+~SAVE DATA
+SAVE DATA fname$, address, nBytes
+
+~SAVE IMAGE
+SAVE IMAGE file$ [,x, y, w, h]
+or
+SAVE COMPRESSED IMAGE file$ [,x, y, w, h]
+
+~SAVE PERSISTENT
+SAVE PERSISTENT n%
+
+~SEEK
+SEEK [#]fnbr, pos
+
+~SELECT CASE
+SELECT CASE value
+  CASE testexp [[, testexp] ...]
+        <statements>         <statements>   CASE test-n [[, test-n] ...]
+        <statements>         <statements>   CASE ELSE
+        <statements>         <statements> END SELECT
+
+~SERVO
+SERVO channel [positionA] [,positionB]
+
+~SETPIN
+SETPIN pin, cfg [, option]
+SETPIN pin, cfg, target [, option]
+SETPIN GP25, DOUT | HEARTBEAT
+SETPIN p1[, p2 [, p3]], device
+SETPIN rx, tx, COM1
+SETPIN rx, tx, COM2
+SETPIN rx, tx, clk, SPI
+SETPIN rx, tx, clk, SPI2
+SETPIN sda, scl, I2C
+SETPIN sda, scl, I2C2
+SETPIN pin, PWM[nx]
+SETPIN pin, IR
+SETPIN pin, PIOn
+SETPIN GP1, FFIN [,gate]
+
+~SETTICK
+SETTICK period, target [, nbr]
+SETTICK PAUSE, target [, nbr]
+or
+SETTICK RESUME, target [, nbr]
+
+~SGN
+SGN( number )
+
+~SIN
+SIN( number )
+
+~SLEW
+SLEW dRA1, dDec1, flipRA, flipDec, dRA2, dDec2, mountRA, mountDec, RAs, DECs,
+LST
+
+~SORT
+SORT array() [,indexarray()] [,flags] [,startposition] [,elementstosort]
+
+~SPACE$
+SPACE$( number )
+
+~SPI
+SPI ( data )
+or
+SPI2 ( data )
+
+~SPI OPEN
+SPI OPEN speed, mode, bits
+or
+SPI READ nbr, data [, data...]
+or
+SPI WRITE nbr, data [, data...]
+or
+SPI CLOSE
+
+~SPI2
+SPI2
+
+~SPRITE
+SPRITE
+SPRITE()
+
+~SQR
+SQR( number )
+
+~STAR
+STAR
+
+~STATIC
+STATIC variable [, variables]
+See DIM for the full syntax.
+
+~STEP
+STEP
+
+Described with the rest of its family:  HELP FOR
+
+~STEPPER
+STEPPER
+
+~STR$
+STR$( number )
+or
+STR$( number, m )
+or
+STR$( number, m, n )
+or
+STR$( number, m, n, c$ )
+
+~STR2BIN
+STR2BIN(type, string$ [,BIG])
+
+~STRING$
+STRING$( nbr,  ascii )
+or
+STRING$( nbr,  string$ )
+
+~STRUCT
+STRUCT
+STRUCT( arg, ...)
+
+~SUB
+SUB xxx (arg1 [,arg2, ...])    <statements>    <statements> END SUB
+
+~SYNC
+SYNC time% [,period]
+or
+SYNC
+
+~TAB
+TAB( number )
+
+~TAN
+TAN( number )
+
+~TEMPR
+TEMPR( pin [,timeout])
+
+~TEMPR START
+TEMPR START pin [, precision] [,timeout]
+
+~TEXT
+TEXT  x,  y,  string$  [,alignment$]  [, font]  [, scale]  [, c]  [, bc]
+
+~THEN
+THEN
+
+Described with the rest of its family:  HELP IF
+
+~TILE
+TILE x, y [,foreground]  [,background] [,nbr_tiles_wide] [,nbr_tiles_high]
+TILE HEIGHT n
+
+~TILE HEIGHT
+TILE HEIGHT n
+
+Described with the rest of its family:  HELP TILE
+
+~TILEMAP
+TILEMAP
+
+~TIME$
+TIME$ = "HH:MM:SS"
+or
+TIME$ = "HH:MM"
+or
+TIME$ = "HH"
+TIME$
+
+~TIMER
+TIMER = msec
+TIMER
+
+~TMC22XX
+TMC22xx pin, chip, address, current, holdpct, microsteps [,rsense]
+[,stealthchop]
+TMC22xx SGTHRS address, value
+TMC22xx TCOOLTHRS address, value
+TMC22xx CLOSE
+
+~TO
+TO
+
+Described with the rest of its family:  HELP FOR
+
+~TOUCH
+TOUCH is the first word of several entries:
+
+TOUCH(TAP)  TOUCH(X)
+
+List them all with:  HELP TOUCH*
+
+~TOUCH(TAP)
+TOUCH(TAP)
+TOUCH(DTAP)
+TOUCH(HOLD)
+TOUCH(SWIPE)
+TOUCH(SWL)
+TOUCH(SWR)
+TOUCH(SWU)
+TOUCH(SWD)
+TOUCH(PINCH)
+TOUCH(EXPAND)
+TOUCH(CONTRACT)
+TOUCH(ROTATE)
+TOUCH(CW)
+TOUCH(CCW)
+TOUCH(TTAP)
+
+~TOUCH(X)
+TOUCH(X)
+or
+TOUCH(Y)
+or
+TOUCH(DOWN)
+or
+TOUCH(UP)
+or
+TOUCH(X2)
+or
+TOUCH(Y2)
+or
+TOUCH(XN n)
+or
+TOUCH(YN n)
+
+~TRACE
+TRACE is the first word of several entries:
+
+TRACE ON
+
+List them all with:  HELP TRACE*
+
+~TRACE ON
+TRACE ON
+or
+TRACE OFF
+or
+TRACE LIST nn
+
+~TRIANGLE
+TRIANGLE X1, Y1, X2, Y2, X3, Y3 [, C [, FILL]]
+
+~TRIANGLE RESTORE
+TRIANGLE RESTORE [#]n
+
+~TRIANGLE SAVE
+TRIANGLE SAVE [#]n, x1,y1,x2,y2,x3,y3
+
+~TRIM$
+TRIM$(source$ [,mask$] [,where/where$])
+
+~TURTLE
+TURTLE
+
+~TYPE
+TYPE struct-name   struct-member1, struct-member2   ...
+END TYPE
+
+~UCASE$
+UCASE$( string$ )
+
+~UNTIL
+UNTIL
+
+Described with the rest of its family:  HELP DO
+
+~UPDATE FIRMWARE
+UPDATE FIRMWARE
+
+~VAL
+VAL( string$ )
+
+~VAR SAVE
+VAR SAVE var [, var]...
+or
+VAR RESTORE
+or
+VAR CLEAR
+
+~WATCHDOG
+WATCHDOG timeout
+or
+WATCHDOG OFF
+or
+WATCHDOG HW timeout
+or
+WATCHDOG HW OFF
+
+~WEB
+WEB
+
+~WEB CLOSE TCP CLIENT
+WEB CLOSE TCP CLIENT
+
+~WEB CONNECT
+WEB CONNECT [ssid$, passwd$, [name$] [,ipaddress$, mask$, gateway$]
+[,country$]]
+
+~WEB MQTT CLOSE
+WEB MQTT CLOSE
+
+~WEB MQTT CONNECT
+WEB MQTT CONNECT addr$, port, user$, passwd$ [, interrupt]
+
+~WEB MQTT PUBLISH
+WEB MQTT PUBLISH topic$, msg$, [,qos] [,retain]
+
+~WEB MQTT SUBSCRIBE
+WEB MQTT SUBSCRIBE topic$ [,qos]
+
+~WEB MQTT UNSUBSCRIBE
+WEB MQTT UNSUBSCRIBE topic$
+
+~WEB NTP
+WEB NTP [timeoffset [, NTPserver$]] [,timeout]]]
+
+~WEB OPEN TCP CLIENT
+WEB OPEN TCP CLIENT address$, port [,timeout]
+
+~WEB OPEN TCP STREAM
+WEB OPEN TCP STREAM address$, port [,timeout]
+
+~WEB OPEN TLS CLIENT
+WEB OPEN TLS CLIENT address$, port [,timeout]
+
+~WEB OPEN TLS STREAM
+WEB OPEN TLS STREAM address$, port [,timeout]
+
+~WEB PING
+WEB PING address$ [, count [, timeout [, avgvar]]]
+
+~WEB SCAN
+WEB SCAN [array%()]
+
+~WEB TCP CLIENT READ
+WEB TCP CLIENT READ buff%() [,timeout]
+
+~WEB TCP CLIENT REQUEST
+WEB TCP CLIENT REQUEST request$, buff%() [,timeout]
+
+~WEB TCP CLIENT STREAM
+WEB TCP CLIENT STREAM command$, buffer%(), readpointer%, writepointer%
+
+~WEB TCP CLIENT WRITE
+WEB TCP CLIENT WRITE data%() [,timeout]
+
+~WEB TCP INTERRUPT
+WEB TCP INTERRUPT InterruptSub
+
+~WEB TCP READ
+WEB TCP READ cb%, buff%()
+
+~WEB TCP SEND
+WEB TCP SEND cb%, data%()
+WEB TCP CLOSE cb%
+
+~WEB TLS
+WEB TLS CA file$
+WEB TLS NOVERIFY
+
+~WEB TLS CA
+WEB TLS CA file$
+
+Described with the rest of its family:  HELP WEB TLS
+
+~WEB TLS NOVERIFY
+WEB TLS NOVERIFY
+
+Described with the rest of its family:  HELP WEB TLS
+
+~WEB TRANSMIT CODE
+WEB TRANSMIT CODE cb%, nnn%
+
+~WEB TRANSMIT FILE
+WEB TRANSMIT FILE cb%, filename$, content-type$
+
+~WEB TRANSMIT PAGE
+WEB TRANSMIT PAGE cb%, filename$ [,buffersize]
+
+~WEB UDP INTERRUPT
+WEB UDP INTERRUPT intname
+
+~WEB UDP SEND
+WEB UDP SEND addr$, port, data$
+
+~WHILE
+WHILE
+
+Described with the rest of its family:  HELP DO
+
+~WII
+WII [CLASSIC] OPEN [,interrupt]
+WII [CLASSIC] CLOSE
+
+~WII NUNCHUCK
+WII NUNCHUCK is the first word of several entries:
+
+WII NUNCHUCK CLOSE  WII NUNCHUCK OPEN
+
+List them all with:  HELP WII NUNCHUCK*
+
+~WII NUNCHUCK CLOSE
+WII NUNCHUCK CLOSE
+
+~WII NUNCHUCK OPEN
+WII NUNCHUCK OPEN [,interrupt]
+
+~WS2812
+WS2812 type, pin, nbr, value%[()]
+
+~XMODEM
+XMODEM is the first word of several entries:
+
+XMODEM SEND
+
+List them all with:  HELP XMODEM*
+
+~XMODEM SEND
+XMODEM SEND
+or
+XMODEM SEND file$
+or
+XMODEM RECEIVE
+or
+XMODEM RECEIVE file$
+or
+XMODEM CRUNCH
+
+~XOR
+XOR
+
+Described with the rest of its family:  HELP OPERATORS
+
+~YMODEM
+YMODEM is the first word of several entries:
+
+YMODEM SEND
+
+List them all with:  HELP YMODEM*
+
+~YMODEM SEND
+YMODEM SEND
+or
+YMODEM SEND file$
+or
+YMODEM RECEIVE
+or
+YMODEM RECEIVE file$
+or
+YMODEM CRUNCH
+

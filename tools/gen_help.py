@@ -276,6 +276,7 @@ class Topic(object):
         self.sections = []        # [(syntax lines, description lines)]
         self.stub_for = None      # name of the topic holding the description
         self.family = None        # names to point at, for a family keyword
+        self.always = False       # keep the body even in the syntax-only build
         self.seealso = []
 
     @property
@@ -447,6 +448,7 @@ def add_extra_topics(doc, by_name):
             lines.append("")
         t = Topic(name, section)
         t.add([], lines)
+        t.always = True          # a reference table, kept even in the tiny build
         by_name[name.upper()] = t
 
 
@@ -572,6 +574,30 @@ This file is generated from the PicoMite User Manual, which carries the full
 description of every entry along with the tutorial chapters.\
 """
 
+PREAMBLE_TINY = """\
+MMBasic syntax reference.  Type HELP followed by a command, function, option
+or variable name - quotes are not needed:
+
+    HELP PRINT
+    HELP MATH FFT
+    HELP MM.INFO(OPTION)
+
+This file carries the syntax of every entry and nothing else.  The PicoMite
+User Manual describes what each one does.
+
+The name must match a topic exactly, so use the wildcards to explore:
+
+    HELP MATH*        every topic whose name starts with MATH
+    HELP *SPRITE*     every topic with SPRITE anywhere in the name
+
+Nothing is printed when no topic matches - try a wildcard.
+
+Indexes of every topic in this file:
+
+    HELP COMMANDS     HELP FUNCTIONS    HELP OPTIONS
+    HELP VARIABLES    HELP OBSOLETE\
+"""
+
 INDEX_TOPICS = [
     ("COMMANDS", "COMMAND", "MMBasic commands"),
     ("FUNCTIONS", "FUNCTION", "MMBasic functions"),
@@ -600,8 +626,9 @@ def index_body(title, names):
     return lines
 
 
-def build_blocks(by_name, short=False):
-    blocks = [(PREAMBLE_NAME, PREAMBLE.splitlines())]
+def build_blocks(by_name, short=False, tiny=False):
+    blocks = [(PREAMBLE_NAME,
+               (PREAMBLE_TINY if tiny else PREAMBLE).splitlines())]
     for topic_name, section, title in INDEX_TOPICS:
         names = [t.name for t in by_name.values()
                  if t.section == section and not t.is_stub]
@@ -624,6 +651,9 @@ def build_blocks(by_name, short=False):
             body.extend(layout(t.syntax))
             body.append("")
             body.append("Described with the rest of its family:  HELP " + t.stub_for)
+        elif tiny and not t.always:
+            for syn, _ in t.sections:
+                body.extend(layout(syn))
         else:
             for syn, desc in t.sections:
                 if short:
@@ -666,6 +696,8 @@ def main():
     ap.add_argument("-o", "--out")
     ap.add_argument("--short", action="store_true",
                     help="syntax plus a one or two sentence summary only")
+    ap.add_argument("--tiny", action="store_true",
+                    help="syntax only, no description at all")
     ap.add_argument("--manual", default=MANUAL)
     ap.add_argument("--tokens", default=os.path.join(ROOT, "AllCommands.h"),
                     help="firmware token table, cross-checked for gaps")
@@ -680,9 +712,13 @@ def main():
         gaps = add_token_aliases(by_name, firmware_tokens(args.tokens))
     add_seealso(by_name)
 
-    out = args.out or os.path.join(
-        ROOT, "docs", "helpmin.txt" if args.short else "help.txt")
-    blocks = build_blocks(by_name, short=args.short)
+    default = "help.txt"
+    if args.tiny:
+        default = "helptiny.txt"
+    elif args.short:
+        default = "helpmin.txt"
+    out = args.out or os.path.join(ROOT, "docs", default)
+    blocks = build_blocks(by_name, short=args.short, tiny=args.tiny)
     size = emit(blocks, out)
 
     real = sum(1 for t in by_name.values() if not t.is_stub and not t.family)
