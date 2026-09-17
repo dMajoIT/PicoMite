@@ -580,8 +580,16 @@ MARKER = "' --- mmb2csub: "
 
 
 def rewrite_source(path, conv, routine, subname, wrapper, block, ctext,
-                   include_c, backup):
-    """Comment the original routine out and append the CSUB (and its C)."""
+                   include_c, keep_original, backup):
+    """Replace the original routine with the CSUB, and append it.
+
+    Both the commented-out original and the generated C are kept by default,
+    because between them they are the whole record of where the hex came from.
+    Both can be dropped, because a comment costs PROGRAM MEMORY on the board -
+    the interpreter stores the text - and on a tight machine that is the
+    difference between a program that loads and one that does not.  Neither is
+    lost by dropping it: the .bak has the original, and the C regenerates.
+    """
     span = find_routine_text(conv, routine)
     if span is None:
         sys.exit("error: could not locate '%s' in the source text" % subname)
@@ -594,12 +602,17 @@ def rewrite_source(path, conv, routine, subname, wrapper, block, ctext,
         with open(path + ".bak", "w") as f:
             f.writelines(lines)
 
-    # MMBasic's block comment; the interpreter wants /* and */ on lines of
-    # their own, which is also what makes the original easy to restore by hand
-    original = lines[span[0]:span[1] + 1]
-    lines[span[0]:span[1] + 1] = (
-        ["/*\n", MARKER + "%s replaced by a CSUB; original follows\n" % subname]
-        + original + ["*/\n"])
+    if keep_original:
+        # MMBasic's block comment; the interpreter wants /* and */ on lines of
+        # their own, which is also what makes it easy to restore by hand
+        original = lines[span[0]:span[1] + 1]
+        lines[span[0]:span[1] + 1] = (
+            ["/*\n", MARKER + "%s replaced by a CSUB; original follows\n" % subname]
+            + original + ["*/\n"])
+    else:
+        lines[span[0]:span[1] + 1] = [
+            MARKER + "%s is now the CSUB below (original in %s.bak)\n"
+            % (subname, os.path.basename(path))]
 
     out = ["\n", MARKER + "generated code for %s\n" % subname]
     if wrapper:
@@ -632,8 +645,14 @@ def main():
     ap.add_argument("--keep-c", action="store_true",
                     help="also leave the generated .c on disk")
     ap.add_argument("--no-c", action="store_true",
-                    help="do not embed the generated C as comments (it costs "
-                         "program memory on the board)")
+                    help="do not keep the generated C as comments")
+    ap.add_argument("--no-original", action="store_true",
+                    help="delete the original BASIC routine instead of "
+                         "commenting it out")
+    ap.add_argument("--lean", action="store_true",
+                    help="both of the above - keep nothing but the CSUB. "
+                         "Comments cost program memory on the board, and the "
+                         ".bak still holds the original either way")
     ap.add_argument("--no-backup", action="store_true",
                     help="do not write <source>.bak")
     ap.add_argument("--dry-run", action="store_true",
@@ -738,13 +757,30 @@ def main():
             print("\nwrapper:\n" + wrapper)
         return
 
+    before = sum(len(ln) for ln in conv.lines)
     rewrite_source(args.source, conv, routine, args.sub, wrapper, block, ctext,
-                   not args.no_c, not args.no_backup)
+                   not (args.no_c or args.lean),
+                   not (args.no_original or args.lean),
+                   not args.no_backup)
+    after = os.path.getsize(args.source)
     os.unlink(out)
     if not args.keep_c:
         os.unlink(cpath)
-    print("  original commented out; CSUB%s appended"
-          % (" and wrapper" if wrapper else ""))
+    kept = []
+    if not (args.no_original or args.lean):
+        kept.append("the original, commented out")
+    if not (args.no_c or args.lean):
+        kept.append("the generated C")
+    print("  CSUB%s appended%s"
+          % (" and wrapper" if wrapper else "",
+             ("; kept " + " and ".join(kept)) if kept else "; nothing else kept"))
+    # The program TEXT is what the board stores, so this - not the blob size -
+    # is what has to fit in program memory.
+    print("  program text: %d -> %d bytes%s"
+          % (before, after,
+             "" if kept else " (--lean)"))
+    if kept:
+        print("       --lean would keep only the CSUB")
     if not args.no_backup:
         print("  previous version saved as %s.bak" % os.path.basename(args.source))
 
