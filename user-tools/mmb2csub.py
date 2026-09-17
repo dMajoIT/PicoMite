@@ -287,6 +287,14 @@ def check_scope(conv, routine, name, routines=None):
         if uses_on_error(conv, r):
             bad.append("%s uses ON ERROR; a CSUB cannot reach the "
                        "interpreter's error handling" % who)
+        for s in getattr(r, "statics", ()):
+            # A STATIC is carried by the wrapper - see statics_touched. The one
+            # shape that cannot travel is a string ARRAY, for the same reason a
+            # string array parameter cannot.
+            if s.ty == "s" and s.is_array:
+                bad.append("%s: STATIC '%s' is a string ARRAY; its element "
+                           "stride follows a LENGTH the CSUB is not told"
+                           % (who, s.name))
         for p in r.params:
             if p.stype is not None:
                 bad.append("%s: parameter '%s' is a user TYPE" % (who, p.name))
@@ -322,11 +330,127 @@ def arg_count(routine, bodytext, gl):
 
 # MMBasic type suffixes: the generated wrapper is real BASIC and must declare
 # its own types, whatever OPTION DEFAULT is where it gets pasted.
+class StaticSym(object):
+    """A routine's STATIC, dressed as a global so it travels the same road.
+
+    A STATIC and a global differ only in who can see the name: both are one
+    variable that outlives the call. So rather than give statics their own
+    plumbing, the wrapper declares an MMBasic STATIC of its own and passes its
+    address, and from the CSUB's side it is indistinguishable from a global.
+
+    That is the only way it CAN work. mmb2c emits a C `static`, which is
+    writable data in .bss, and a CSUB has none - the blob is position-
+    independent code with .text and .rodata only, so the variable would sit at
+    an address that is not the CSUB's. The wrapper owns the storage instead,
+    and MMBasic's own STATIC gives exactly the right lifetime: one instance,
+    initialised on the first call, surviving every later one.
+    """
+
+    __slots__ = ("name", "acc", "ty", "is_array", "dims", "owner",
+                 "is_const", "decl")
+
+    def __init__(self, sym, owner, decl):
+        self.name = sym.name
+        self.acc = sym.acc          # the C name in mmb2c's body, e.g. v_hits
+        self.ty = sym.ty
+        self.is_array = sym.is_array
+        self.dims = sym.dims
+        self.owner = owner          # which routine's STATIC this is
+        self.is_const = False
+        self.decl = decl            # rest of the BASIC declarator: "(4)",
+        #                             "= 1.5", or ""
+
+
+def split_declarators(text):
+    """Split a STATIC declaration list on its top-level commas."""
+    out, depth, cur, quoted = [], 0, "", False
+    for ch in text:
+        if ch == '"':
+            quoted = not quoted
+        if not quoted:
+            if ch in "([":
+                depth += 1
+            elif ch in ")]":
+                depth -= 1
+            elif ch == "," and depth == 0:
+                out.append(cur)
+                cur = ""
+                continue
+        cur += ch
+    if cur.strip():
+        out.append(cur)
+    return out
+
+
+def static_decls(conv, routine):
+    """{canonical name: the rest of its BASIC declarator} for one routine.
+
+    Read out of the source rather than rebuilt from the symbol, so an array's
+    bounds and an initialiser come across exactly as written. MMBasic's
+    once-only STATIC initialiser is what replaces the __once_ guard mmb2c
+    emits in C.
+    """
+    span = find_routine_text(conv, routine)
+    out = {}
+    if span is None:
+        return out
+    for ln in conv.lines[span[0]:span[1]]:
+        m = re.match(r"\s*static\s+(.*)$", ln, re.I)
+        if not m:
+            continue
+        for dec in split_declarators(m.group(1).rstrip()):
+            d2 = re.match(r"\s*([A-Za-z_][A-Za-z_0-9.]*)[$%!]?\s*(.*)$", dec)
+            if d2:
+                out[d2.group(1).lower()] = d2.group(2).strip()
+    return out
+
+
+def statics_touched(conv, routines):
+    """Every STATIC in the blob, with the name it travels under.
+
+    Named per routine, because two routines in one blob may each have a STATIC
+    called `count` and they are different variables. MAXVARLEN is 32, so the
+    name is kept short rather than descriptive.
+    """
+    out = []
+    for r in routines:
+        decls = static_decls(conv, r)
+        for s in r.statics:
+            nm = ("__s%d_%s" % (len(out), cname_of(s.name)))[:28]
+            out.append((nm, StaticSym(s, r, decls.get(s.name.lower(), ""))))
+    return out
+
+
 SFX = {"f": lambda nm, arr: nm + "!" + ("()" if arr else ""),
        "i": lambda nm, arr: nm + "%" + ("()" if arr else ""),
        "s": lambda nm, arr: nm + "$" + ("()" if arr else "")}
 
 CT = {"f": "MMFLOAT", "i": "MMINTEGER", "s": "char"}
+
+
+def strip_statics(body):
+    """Remove mmb2c's C `static` declarations and its once-only init blocks.
+
+    The variables now arrive as pointers - bind_globals rewrites the names -
+    and the wrapper's own STATIC does the initialising, so both are dead
+    weight, and both would put writable data in a blob that cannot have any.
+    """
+    out, lines, i = [], body.split("\n"), 0
+    while i < len(lines):
+        ln = lines[i]
+        if re.match(r"\s*static\s+[A-Za-z_].*;\s*$", ln):
+            i += 1
+            continue
+        if re.match(r"\s*if \(!__once_[A-Za-z_0-9]+\) \{", ln):
+            depth = ln.count("{") - ln.count("}")
+            i += 1
+            while i < len(lines) and depth > 0:
+                depth += lines[i].count("{") - lines[i].count("}")
+                i += 1
+            continue
+        out.append(ln)
+        i += 1
+    return "\n".join(out)
 
 
 def bind_globals(body, routine, flat, heap):
@@ -344,10 +468,20 @@ def bind_globals(body, routine, flat, heap):
     """
     decls = []
     for k, (nm, s) in enumerate(flat):
-        if nm not in routine.gtouch:
+        owner = getattr(s, "owner", None)
+        if owner is not None:
+            # a STATIC: bind only the owning routine's, because another
+            # routine's STATIC can share mmb2c's C name for it
+            if owner is not routine:
+                continue
+        elif nm not in routine.gtouch:
             continue
         ptr = "__gp_" + cname_of(nm)
-        body = re.sub(r"\b" + re.escape(s.acc) + r"\b", "(*%s)" % ptr, body)
+        # An array or a string already IS the pointer; a scalar is dereferenced.
+        if s.is_array or s.ty == "s":
+            body = re.sub(r"\b" + re.escape(s.acc) + r"\b", ptr, body)
+        else:
+            body = re.sub(r"\b" + re.escape(s.acc) + r"\b", "(*%s)" % ptr, body)
         # Read the pointer ONCE into a local rather than substituting the
         # CFuncRam expression at every use: the compiler then keeps it in a
         # register. Inlining it cost about 6% on a globals-heavy inner loop.
@@ -574,6 +708,21 @@ def adapter_sub(name, routine, entry, passed, gl=(), gtab=False, base=0):
     """
     ps = [SFX[p.ty](p.name, p.is_array) for p in routine.params]
     pre = []
+    # The wrapper owns every STATIC in the blob. MMBasic's STATIC gives the
+    # lifetime the C `static` would have had - one instance, initialised once -
+    # and the declarator is copied from the original so bounds and initialiser
+    # come across exactly as written.
+    for nm, s in gl:
+        if getattr(s, "owner", None) is None:
+            continue
+        base = SFX[s.ty](nm, False)
+        # "(4)" joins on; "= 1.5" needs the space
+        if s.decl.startswith("("):
+            pre.append("  Static %s%s" % (base, s.decl))
+        elif s.decl:
+            pre.append("  Static %s %s" % (base, s.decl))
+        else:
+            pre.append("  Static %s" % base)
     if gl and gtab:
         # One argument for every global: an array of their addresses.
         # PEEK(VARADDR x) is findvar with the same flags CallCFunction uses to
@@ -593,8 +742,11 @@ def adapter_sub(name, routine, entry, passed, gl=(), gtab=False, base=0):
                        % (base + k, SFX[s.ty](nm, s.is_array)))
     body = "\n".join(pre) + ("\n" if pre else "")
     if routine.is_func:
-        fn = SFX[routine.ty](name, False)      # the FUNCTION keeps its type
-        rn = SFX[routine.ty]("__r", False)     # and so must the local
+        # `name` is already spelled as the source declares it, suffix or not,
+        # and is used verbatim: adding a suffix the original did not have
+        # breaks every existing call site with "Inconsistent type suffix".
+        fn = name
+        rn = SFX[routine.ty]("__r", False)     # the local DOES need its type
         return ("Function %s(%s)\n  Local %s\n%s  %s %s\n  %s = %s\nEnd Function\n"
                 % (fn, ", ".join(ps), rn, body, entry, ", ".join(passed), fn, rn))
     if not pre and list(ps) == list(passed):
@@ -641,7 +793,8 @@ def write_c(cpath, source, subname, routines, bodies, shim, gl, consts,
             f.write("\n")
         for r in routines:
             f.write("static "
-                    + add_polls(bind_globals(bodies[r.cname], r, flat, heap))
+                    + add_polls(bind_globals(strip_statics(bodies[r.cname]),
+                                             r, flat, heap))
                     + "\n\n")
         f.write(shim + "\n")
 
@@ -666,7 +819,7 @@ def try_build(conv, mmb2c, routine, name, opt="s"):
         probs = check_scope(conv, routine, name, rs)
         if probs:
             return False, probs[0], 0, [r.name for r in rs], 0
-        gl = globals_touched(conv, rs)
+        gl = globals_touched(conv, rs) + statics_touched(conv, rs)
         if len(gl) > 62:
             return False, "%d globals; CFuncRam holds 62" % len(gl), 0, [], 0
         shim, nargs, passed = entry_shim(conv, routine, name + "K", bodytext, gl)
@@ -808,6 +961,26 @@ def find_routine_text(conv, routine):
     return None
 
 
+def declared_name(conv, routine, fallback):
+    """The routine's name exactly as its own declaration spells it.
+
+    MMBasic lets a FUNCTION be declared with or without a type suffix - both
+    `FUNCTION Deep(n%)` and `FUNCTION Deep!(n%)` return a float - and the two
+    are the SAME routine, so mmb2c stores one canonical name for both. The
+    wrapper cannot: it has to be declared the way the call sites already spell
+    it, or MMBasic rejects the program with "Inconsistent type suffix".
+    """
+    span = find_routine_text(conv, routine)
+    if span is not None:
+        m = re.match(r"\s*(?:sub|function)\s+([A-Za-z_][A-Za-z_0-9.]*[$%!]?)",
+                     conv.lines[span[0]], re.I)
+        if m:
+            return m.group(1)
+    # No declaration to read: spell it explicitly rather than let the
+    # wrapper inherit whatever OPTION DEFAULT happens to be.
+    return SFX[routine.ty](fallback, False) if routine.is_func else fallback
+
+
 def calls_other_routines(routine, cbody):
     """Names of other BASIC routines this one calls.
 
@@ -823,7 +996,7 @@ MARKER = "' --- mmb2csub: "
 
 
 def rewrite_source(path, conv, routine, subname, wrapper, block, ctext,
-                   include_c, keep_original, backup):
+                   include_c, keep_original, backup, allow_converted=False):
     """Replace the original routine with the CSUB, and append it.
 
     Both the commented-out original and the generated C are kept by default,
@@ -837,7 +1010,7 @@ def rewrite_source(path, conv, routine, subname, wrapper, block, ctext,
     if span is None:
         sys.exit("error: could not locate '%s' in the source text" % subname)
     lines = [ln if ln.endswith("\n") else ln + "\n" for ln in conv.lines]
-    if any(MARKER in ln for ln in lines):
+    if not allow_converted and any(MARKER in ln for ln in lines):
         sys.exit("error: %s already holds a mmb2csub conversion. Restore it from "
                  "the .bak before converting again." % path)
 
@@ -907,6 +1080,8 @@ def main():
                     help="both of the above - keep nothing but the CSUB. "
                          "Comments cost program memory on the board, and the "
                          ".bak still holds the original either way")
+    ap.add_argument("--already-converted", action="store_true",
+                    help=argparse.SUPPRESS)  # set on the per-routine re-runs
     ap.add_argument("--no-backup", action="store_true",
                     help="do not write <source>.bak")
     ap.add_argument("--dry-run", action="store_true",
@@ -930,6 +1105,20 @@ def main():
         # the next has to re-read it.
         warn_overlap(conv, args.sub)
         rest = [a for a in sys.argv[1:] if a not in args.sub and a != args.source]
+        # ONE .bak for the whole command, written here. It has to hold the
+        # program as it was before any of the conversions, so the children
+        # must not each write their own - the last would otherwise preserve
+        # the second-to-last conversion rather than the original.
+        if not args.no_backup:
+            with open(args.source + ".bak", "w") as f:
+                f.writelines(ln if ln.endswith("\n") else ln + "\n"
+                             for ln in conv.lines)
+            print("original saved as %s.bak" % args.source)
+        # Each conversion leaves its marker behind, and the next would read
+        # that as "already converted" - which is the right answer for a second
+        # run of the same command, but not for the second routine of this one.
+        rest = [a for a in rest if a != "--no-backup"]
+        rest += ["--no-backup", "--already-converted"]
         for nm in args.sub:
             rc = subprocess.run([sys.executable, __file__, args.source, nm] + rest)
             if rc.returncode:
@@ -967,7 +1156,8 @@ def main():
             print("  - " + p)
         sys.exit(1)
 
-    gl = globals_touched(conv, routines)
+    # A STATIC rides with the globals: same pointer-in, same wrapper.
+    gl = globals_touched(conv, routines) + statics_touched(conv, routines)
     if len(gl) > 62:
         sys.exit("error: %s and what it calls reach %d globals; CFuncRam holds 62"
                  % (args.sub[0], len(gl)))
@@ -985,7 +1175,10 @@ def main():
     _, direct_n, _ = entry_shim(conv, routine, "probe", bodytext, gl)
     gtab = args.gtab or (direct_n > 10 and not args.no_gtab)
     _, _, probe = entry_shim(conv, routine, "probe", bodytext, gl, gtab)
-    needs_wrapper = adapter_sub(args.sub[0], routine, "probe", probe,
+    # The wrapper wears the name the program already calls, suffix and all;
+    # the CSUB itself takes the suffix-free one with K on the end.
+    dispname = declared_name(conv, routine, args.sub[0])
+    needs_wrapper = adapter_sub(dispname, routine, "probe", probe,
                                 gl, gtab, conv.opt_base) is not None
     entry = args.name or ((args.sub[0] + "K") if needs_wrapper else args.sub[0])
     shim, nargs, passed = entry_shim(conv, routine, entry, bodytext, gl, gtab)
@@ -1025,7 +1218,7 @@ def main():
     open(out, "w").write(block)
     ctext = open(cpath).read()
 
-    wrapper = adapter_sub(args.sub[0], routine, entry, passed, gl, gtab,
+    wrapper = adapter_sub(dispname, routine, entry, passed, gl, gtab,
                           conv.opt_base)
     nwords = sum(len(l.split()) for l in block.splitlines()
                  if l.startswith("\t") and not l.lstrip().startswith("'"))
@@ -1052,7 +1245,7 @@ def main():
     rewrite_source(args.source, conv, routine, args.sub[0], wrapper, block, ctext,
                    not (args.no_c or args.lean),
                    not (args.no_original or args.lean),
-                   not args.no_backup)
+                   not args.no_backup, args.already_converted)
     after = os.path.getsize(args.source)
     os.unlink(out)
     if not args.keep_c:

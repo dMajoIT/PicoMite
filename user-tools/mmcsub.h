@@ -132,18 +132,30 @@ static unsigned mm_mark(void)
 #define mm_tmpstr() mm_alloc(STRINGSIZE)
 
 /* LOCAL arrays and strings: one block per invocation, which mmb2c declares as
-   struct mm_l_<routine>. It must arrive ZEROED - the generated code relies on
-   an untouched LOCAL reading as zero - and it comes off the scratch stack, so
-   a recursive routine gets a fresh one per call and mm_lfree returns it. */
-static void *mm_lheap(unsigned long n)
+   struct mm_l_<routine>. It must arrive ZEROED, because the generated code
+   relies on an untouched LOCAL reading as zero.
+
+   It comes off the C STACK, not the scratch arena. That matters: mmb2c
+   brackets each statement with mm_mark()/mm_release(), and the first
+   mm_release() in a routine winds the arena back past its own frame - so an
+   arena-allocated frame would be handed to the next allocation while the
+   routine was still using it, and a recursive call would land its frame on
+   its parent's. The frame's lifetime is exactly the C function's, which is
+   what alloca gives, and mm_lfree then has nothing to do.
+
+   A macro rather than a function: alloca in a callee would be freed on the
+   return from that callee. */
+#define mm_lheap(n) mm_zeroed(__builtin_alloca((unsigned long)(n)),                               (unsigned long)(n))
+#define mm_lfree(p) ((void)(p))
+
+static void *mm_zeroed(void *p, unsigned long n)
 {
-    unsigned char *p = mm_alloc((unsigned)n);
+    unsigned char *q = (unsigned char *)p;
     unsigned long k;
     for (k = 0; k < n; k++)
-        p[k] = 0;
+        q[k] = 0;
     return p;
 }
-#define mm_lfree(p) ((void)(p))
 
 /* ------------------------------------------------------------------ *
  *  Globals, for a blob holding more than one routine
@@ -255,24 +267,42 @@ static MMFLOAT mm_fix(MMFLOAT v) { return IntToFloat(__aeabi_d2lz(v)); }
  *  forms exist in the Fuzix runtime to batch console writes; here every
  *  write already goes through one call, so they are the same thing.
  * ------------------------------------------------------------------ */
-static char mm_prbuf[STRINGSIZE];
-
+/* The buffer comes off the scratch stack, NOT from a static: a CSUB has no
+   writable static data, so a `static char buf[]` here would land in .bss at
+   an address the blob does not own - and every PRINT would read and write
+   somebody else's memory. Each helper takes its own mark and gives the space
+   straight back, so a PRINT with many items still costs one buffer. */
 static void mm_pr_s(const char *s)
 {
     /* an MMBasic string, length byte first - copy it and NUL-terminate */
-    Mstrcpy((unsigned char *)mm_prbuf, (unsigned char *)s);
-    MtoC((unsigned char *)mm_prbuf);
-    MMPrintString(mm_prbuf);
+    unsigned m = mm_mark();
+    char *b = (char *)mm_tmpstr();
+    Mstrcpy((unsigned char *)b, (unsigned char *)s);
+    MtoC((unsigned char *)b);
+    MMPrintString(b);
+    mm_release(m);
 }
+/* MMBasic's PRINT leaves a column where the sign would be, so `PRINT 5` gives
+   " 5" and `PRINT -5` gives "-5". Built into the buffer rather than printed
+   separately, so a number still costs one console write. (STR$ does NOT do
+   this, which is why mm_str_i does not.) */
 static void mm_pr_i(MMINTEGER v)
 {
-    IntToStr(mm_prbuf, v, 10);
-    MMPrintString(mm_prbuf);
+    unsigned m = mm_mark();
+    char *b = (char *)mm_tmpstr();
+    b[0] = ' ';
+    IntToStr(b + 1, v, 10);
+    MMPrintString(v < 0 ? b + 1 : b);
+    mm_release(m);
 }
 static void mm_pr_f(MMFLOAT v)
 {
-    FloatToStr(mm_prbuf, v, 0, MM_AUTO_PRECISION, ' ');
-    MMPrintString(mm_prbuf);
+    unsigned m = mm_mark();
+    char *b = (char *)mm_tmpstr();
+    b[0] = ' ';
+    FloatToStr(b + 1, v, 0, MM_AUTO_PRECISION, ' ');
+    MMPrintString(b[1] == '-' ? b + 1 : b);
+    mm_release(m);
 }
 #define mm_pr_nl() MMPrintString("\r\n")
 #define mm_pr_tab() MMPrintString("\t")
