@@ -356,7 +356,7 @@ long long sqrf(double *a)
 }
 ```
 ```
-python armcfgen.py sqrf.c --compile -n sqrf -e sqrf -I d:\Dropbox\PicoMite\PicoMite
+python armcfgen.py sqrf.c --compile -n sqrf -e sqrf -I path\to\PicoMite
 ```
 ```basic
 x! = 1.5 : sqrf x! : Print x!   ' 2.25
@@ -419,7 +419,7 @@ void main(void)
 ```
 
 ```
-python armcfgen.py rotest.c --compile -n rotest -e main -I d:\Dropbox\PicoMite\PicoMite
+python armcfgen.py rotest.c --compile -n rotest -e main -I path\to\PicoMite
 ```
 ```basic
 rotest          ' prints 12345678
@@ -452,11 +452,15 @@ needs just Python + pyelftools.)
 ## 2.2 Quick start
 
 ```
-python armcfgen.py sqrf.c --compile -n sqrf -e sqrf -I d:\Dropbox\PicoMite\PicoMite
+python armcfgen.py sqrf.c --compile -n sqrf -e sqrf -I path\to\PicoMite
 ```
 
 Add `-o sqrf.bas` to write to a file instead of the screen, then copy the
 `CSUB … END CSUB` block into your program.
+
+`path\to\PicoMite` is wherever you unpacked the firmware source — the folder
+holding `PicoCFunctions.h`. If you are running `armcfgen.py` from the
+`user-tools` folder it came in, that is simply `-I ..`.
 
 ## 2.3 Command‑line reference
 
@@ -488,7 +492,7 @@ the entry‑offset word pointing at `--entry`. Functions can call each other. Us
 for any single‑function CSUB and for multi‑function drivers.
 
 ```
-python armcfgen.py driver.c helpers.c --compile -n driver -e main -I d:\Dropbox\PicoMite\PicoMite
+python armcfgen.py driver.c helpers.c --compile -n driver -e main -I path\to\PicoMite
 ```
 
 The entry function must be **4‑byte aligned** — make it the first function (the
