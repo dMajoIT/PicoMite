@@ -887,9 +887,9 @@ the top bit in the width and height
 ~BLIT FLASH
 BLIT FLASH from, to, xin, yin, xout, yout, width, height [,colour]
 
-Copies an area of a specific 'from' flash slot to a 'to' framebuffer N, F, or
-L. 'xin' and 'yin' define the top left of the area of 'width' and 'height' on
-the flash slot to be copied.
+Copies an area of a specific 'from' image slot to a 'to' framebuffer N, F, or
+L. Slots 1 to 3 are the flash slots; on an RP2350 with PSRAM, slots 4 to 8 are
+the RAM slots 1 to 5 (see FLASH LOAD IMAGE).
 
 ~BLIT FRAMEBUFFER
 BLIT FRAMEBUFFER from, to, xin, yin, xout, yout, width, height [,colour]
@@ -2078,9 +2078,8 @@ Load a program from the specified flash location into program memory.
 ~FLASH LOAD IMAGE
 FLASH LOAD IMAGE n, filename$ [,O/OVERWRITE]
 
-This command loads a bmp file specified into the flash slot in RGB121 format.
-The flash slot should have been previously erased or specifying the optional
-parameter O or OVERWRITE will force an erase.
+This command loads a bmp file specified into image slot n in RGB121 format.
+Slots 1 to 3 are the flash slots.
 
 ~FLASH MODBUFF LOAD
 FLASH MODBUFF LOAD fname$
@@ -4824,7 +4823,8 @@ Returns the size of file$ in bytes or 0 if not found.
 ~MM.INFO(FLASH ADDRESS)
 MM.INFO(FLASH ADDRESS n)
 
-Returns the address of the flash slot n.
+Returns the address of image slot n: a flash slot for 1 to 3 or, on an RP2350
+with PSRAM, RAM slot n-3 for 4 to 8 (see FLASH LOAD IMAGE).
 
 ~MM.INFO(FLASH)
 MM.INFO(FLASH)

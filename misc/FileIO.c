@@ -691,6 +691,7 @@ void MIPS16 cmd_drive(void)
 #if defined(rp2350)
 extern unsigned int mmap[HEAP_MEMORY_SIZE / PAGESIZE / PAGESPERWORD];
 extern unsigned int psmap[7 * 1024 * 1024 / PAGESIZE / PAGESPERWORD];
+static void PrintImageSlotHeader(int *pp); /* defined with cmd_flash below */
 void MIPS16 cmd_psram(void)
 {
     if (!PSRAMsize)
@@ -768,7 +769,7 @@ void MIPS16 cmd_psram(void)
                             MMPrintString("\"\r\n");
                         }
                         else
-                            MMPrintString("\r\n");
+                            PrintImageSlotHeader(pp);
                         k = 1;
                         break;
                     }
@@ -798,7 +799,7 @@ void MIPS16 cmd_psram(void)
             ;
         }
         uint8_t *c = (uint8_t *)(PSRAMblock + ((i - 1) * MAX_PROG_SIZE));
-        if (*c != 0x0 && overwrite == 0)
+        if (*(uint32_t *)c != 0 && overwrite == 0)
             error("Already programmed");
         memset(c, 0xFF, MAX_PROG_SIZE);
         ClearTempMemory();
@@ -830,7 +831,7 @@ void MIPS16 cmd_psram(void)
     {
         int i = getint(p, 1, MAXRAMSLOTS);
         uint8_t *c = (uint8_t *)(PSRAMblock + ((i - 1) * MAX_PROG_SIZE));
-        if (*c != 0x0)
+        if (*(uint32_t *)c != 0)
             error("Already programmed");
         uint8_t *q = ProgMemory;
         memcpy(c, q, MAX_PROG_SIZE);
@@ -966,7 +967,7 @@ bool writetoflashcallback(int *imagewidth, int *imageheight, uint32_t *linedata,
     }
 
     // Check if image fits in flash
-    if ((*imagewidth) * (*imageheight) / 2 > MAX_PROG_SIZE - 4)
+    if (((*imagewidth + 1) / 2) * (*imageheight) > MAX_PROG_SIZE - 8)
     {
         MMPrintString("Error: Image too large for flash region\r\n");
         if (writebuf)
@@ -979,8 +980,8 @@ bool writetoflashcallback(int *imagewidth, int *imageheight, uint32_t *linedata,
     // Convert RGB888 to packed RGB121 (2 pixels per byte)
     flashpackline(linedata, *imagewidth, *linenumber);
 
-    // Calculate number of valid bytes in linedata after packing
-    int packedBytes = (*imagewidth) / 2;
+    // Calculate number of valid bytes in linedata after packing (blit121 reads rows of (w+1)/2 bytes)
+    int packedBytes = (*imagewidth + 1) / 2;
     uint8_t *packedData = (uint8_t *)linedata;
 
     // Copy packed data to write buffer, flushing when full
@@ -1023,6 +1024,64 @@ bool writetoflashcallback(int *imagewidth, int *imageheight, uint32_t *linedata,
     return true;
 }
 
+/* Base address of image slot 'slot' for BLIT FLASH, TILEMAP and MM.INFO(FLASH
+   ADDRESS).  Slots 1..MAXFLASHSLOTS are the flash slots.  On the RP2350 the
+   slots above them are the RAM slots 1..MAXRAMSLOTS in PSRAM, laid out exactly
+   like a flash slot (8-byte width/height header, then packed RGB121 rows), so
+   every consumer reads either kind through this one pointer and a program moves
+   an image between flash and PSRAM by changing a slot number.  RAM images are
+   volatile: psram_init() wipes every slot that does not hold a program. */
+uint8_t *ImageSlotAddress(int slot)
+{
+    if (slot < 1 || slot > MAXIMAGESLOTS)
+        error("Invalid slot %", slot);
+    if (slot <= MAXFLASHSLOTS)
+        return (uint8_t *)(flash_target_contents + (slot - 1) * MAX_PROG_SIZE);
+#ifdef rp2350
+    if (!PSRAMsize)
+        error("PSRAM not enabled");
+    return (uint8_t *)(PSRAMblock + (slot - MAXFLASHSLOTS - 1) * MAX_PROG_SIZE);
+#else
+    return NULL;
+#endif
+}
+
+/* Prints what a non-program slot holds - ": image w x h" when the slot starts
+   with a plausible FLASH LOAD IMAGE header - and ends the line either way. */
+static void PrintImageSlotHeader(int *pp)
+{
+    uint32_t *hdr = (uint32_t *)pp;
+    if (hdr[0] >= 1 && hdr[0] <= 3840 && hdr[1] >= 1 && hdr[1] <= 2160)
+    {
+        MMPrintString(": image ");
+        PInt(hdr[0]);
+        MMPrintString(" x ");
+        PInt(hdr[1]);
+    }
+    MMPrintString("\r\n");
+}
+
+#ifdef rp2350
+/* FLASH LOAD IMAGE into a RAM slot: the same packed layout writetoflashcallback
+   produces, written straight to PSRAM with no staging buffer. */
+static uint8_t *ramwritepointer;
+static bool writetoramcallback(int *imagewidth, int *imageheight, uint32_t *linedata, int *linenumber)
+{
+    if (*linenumber == 0)
+    {
+        uint32_t *hdr = (uint32_t *)ramwritepointer;
+        hdr[0] = *imagewidth;
+        hdr[1] = *imageheight;
+        ramwritepointer += 8;
+    }
+    flashpackline(linedata, *imagewidth, *linenumber);
+    int packedBytes = (*imagewidth + 1) / 2;
+    memcpy(ramwritepointer, linedata, packedBytes);
+    ramwritepointer += packedBytes;
+    return true;
+}
+#endif
+
 void MIPS16 cmd_flash(void)
 {
     unsigned char *p;
@@ -1061,7 +1120,7 @@ void MIPS16 cmd_flash(void)
         if (!(argc == 3 || argc == 5))
             SyntaxError();
         ;
-        int i = getint(argv[0], 1, MAXFLASHSLOTS);
+        int i = getint(argv[0], 1, MAXIMAGESLOTS);
         if (argc == 5)
         {
             if (checkstring(argv[4], (unsigned char *)"O") || checkstring(argv[4], (unsigned char *)"OVERWRITE"))
@@ -1069,10 +1128,13 @@ void MIPS16 cmd_flash(void)
             else
                 SyntaxError();
         }
-        if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && i == MAXFLASHSLOTS)
+        /* Slots above the flash ones are RAM slots in PSRAM (RP2350 only);
+           ImageSlotAddress() errors if there is no PSRAM. */
+        bool toram = (i > MAXFLASHSLOTS);
+        uint32_t *c = (uint32_t *)ImageSlotAddress(i);
+        if (!toram && Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && i == MAXFLASHSLOTS)
             StandardErrorParam(25, MAXFLASHSLOTS);
-        uint32_t *c = (uint32_t *)(flash_target_contents + (i - 1) * MAX_PROG_SIZE);
-        if (*c != 0xFFFFFFFF && overwrite == false)
+        if ((toram ? *c != 0 : *c != 0xFFFFFFFF) && overwrite == false)
             error("Already programmed");
         if (!InitSDCard())
             return;
@@ -1084,12 +1146,23 @@ void MIPS16 cmd_flash(void)
             return;
         int width, height;
         decodeBMPheader(&width, &height);
+        /* Reject a bad or oversize file before anything is erased */
+        if (width < 1 || width > 3840 || height < 1 || height > 2160)
+        {
+            FileClose(BMPfnbr);
+            error("Invalid BMP file");
+        }
+        if (((width + 1) / 2) * height + 8 > MAX_PROG_SIZE)
+        {
+            FileClose(BMPfnbr);
+            error("Image too large for slot");
+        }
         if (!CurrentLinePtr)
         {
             MMPrintString("Saving ");
             MMPrintString(pp);
-            MMPrintString(" to flash slot ");
-            PInt(i);
+            MMPrintString(toram ? " to RAM slot " : " to flash slot ");
+            PInt(toram ? i - MAXFLASHSLOTS : i);
             PRet();
             MMPrintString("Image is ");
             PInt(width);
@@ -1097,6 +1170,18 @@ void MIPS16 cmd_flash(void)
             PInt(height);
             MMPrintString(" RGB121 pixels\r\n");
         }
+#ifdef rp2350
+        if (toram)
+        {
+            memset(c, 0, MAX_PROG_SIZE);
+            ramwritepointer = (uint8_t *)c;
+            linecallback = writetoramcallback;
+            decodeBMP(1);
+            FileClose(BMPfnbr);
+            linecallback = NULL;
+            return;
+        }
+#endif
         uSec(100000);
         FlashWriteInit(i);
         safe_flash_range_erase(realflashpointer, MAX_PROG_SIZE);
@@ -1206,7 +1291,7 @@ void MIPS16 cmd_flash(void)
                             MMPrintString("\"\r\n");
                         }
                         else
-                            MMPrintString("\r\n");
+                            PrintImageSlotHeader(pp);
                         k = 1;
                         break;
                     }

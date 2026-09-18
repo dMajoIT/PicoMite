@@ -684,12 +684,12 @@ int blitother(void)
         if (!(argc == 15 || argc == 17))
             SyntaxError();
         ;
-        int i = getint(argv[0], 1, MAXFLASHSLOTS);
-        s = (unsigned char *)(flash_target_contents + (i - 1) * MAX_PROG_SIZE);
+        int i = getint(argv[0], 1, MAXIMAGESLOTS);
+        s = ImageSlotAddress(i); /* flash slot, or a RAM slot in PSRAM on the RP2350 */
         uint32_t *x = (uint32_t *)s;
         HResS = x[0];
         VResS = x[1];
-        if (HResS < 0 || HResS > 3840 || VResS < 0 || VResS > 2160)
+        if (HResS < 1 || HResS > 3840 || VResS < 1 || VResS > 2160)
             error("Invalid Image");
         HResD = HRes;
         VResD = VRes;

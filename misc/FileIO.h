@@ -524,6 +524,7 @@ _Static_assert(sizeof(struct option_s) == 896 + 2048, "struct option_s must stay
         extern bool (*linecallback)(int *imagewidth, int *imageheight, uint32_t *linedata, int *linenumber);
         extern BMP_Result decodeBMP(bool topdown);
         void decodeBMPheader(int *width, int *height);
+        uint8_t *ImageSlotAddress(int slot);
         /* ============================================================================
          * Function declarations - File management
          * ============================================================================ */

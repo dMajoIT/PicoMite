@@ -8314,7 +8314,7 @@ void MIPS16 fun_info(void)
         }
         else if ((tp = checkstring(ep, (unsigned char *)"FLASH ADDRESS")))
         {
-            iret = (int64_t)(unsigned int)(flash_target_contents + (getint(tp, 1, MAXFLASHSLOTS) - 1) * MAX_PROG_SIZE);
+            iret = (int64_t)(unsigned int)ImageSlotAddress(getint(tp, 1, MAXIMAGESLOTS));
             targ = T_INT;
             return;
         }

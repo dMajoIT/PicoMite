@@ -390,6 +390,14 @@ extern "C"
 #define FLASH_ERASE_SIZE 4096
 #define MAXFLASHSLOTS 3
 #define MAXRAMSLOTS 5
+#ifdef rp2350
+/* Image slots as seen by FLASH LOAD IMAGE, BLIT FLASH, TILEMAP and MM.INFO(FLASH ADDRESS):
+   1..MAXFLASHSLOTS are the flash slots, the next MAXRAMSLOTS are the RAM slots 1..5 in
+   PSRAM.  See ImageSlotAddress() in FileIO.c. */
+#define MAXIMAGESLOTS (MAXFLASHSLOTS + MAXRAMSLOTS)
+#else
+#define MAXIMAGESLOTS MAXFLASHSLOTS
+#endif
 #define MAXVARHASH MAXLOCALVARS // Hash range for local variables
 
 /* ============================================================================

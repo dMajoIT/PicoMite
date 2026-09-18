@@ -481,6 +481,8 @@ Drawing a 320×240 viewport with 16×16 tiles requires rendering ~336 tiles per 
 FLASH LOAD IMAGE 1, "tileset.bmp"
 ```
 
+Image slots 1-3 are flash. On a board with PSRAM, slots 4-8 are the RAM slots 1-5: the same command loads them, `BLIT FLASH`, `TILEMAP` and `MM.INFO(FLASH ADDRESS)` take the same slot number, and nothing else changes. A RAM image loads faster and wears no flash, but it is cleared at every reset, so load it at every start (with `O`, since the slot may still hold it after a `RUN`). Use a constant for the slot number and the choice is one edit.
+
 **Step 2: Define the map in DATA statements:**
 
 ```basic
@@ -871,7 +873,7 @@ The BLIT commands provide fast block transfer of rectangular pixel regions betwe
 
 | Command | Purpose |
 |---------|---------|
-| `BLIT FLASH slot, dst, sx, sy, dx, dy, w, h [, trans]` | Draw from flash image to buffer |
+| `BLIT FLASH slot, dst, sx, sy, dx, dy, w, h [, trans]` | Draw from an image slot (flash 1-3, RAM 4-8) to buffer |
 | `BLIT FRAMEBUFFER src, dst, x1, y1, x2, y2, w, h [, trans]` | Copy between F/L/N/T buffers |
 | `BLIT RESIZE src, dst, sx, sy, sw, sh, dx, dy, dw, dh [, trans]` | Scale/resize between buffers |
 | `BLIT MERGE trans, x, y, w, h` | Partial-area layer merge |
@@ -895,7 +897,9 @@ BLIT FLASH 2, F, 0, 0, 250, 5, 64, 16, 0           ' UI element with transparenc
 
 `FLASH LOAD IMAGE` erases and rewrites a whole flash slot. That takes a
 noticeable moment and wears the flash, so a game that does it on every run pays
-for it every run. Write the slot once, then check it.
+for it every run. Write the slot once, then check it. (A RAM slot, 4-8 on a
+board with PSRAM, is the opposite case: it is cleared at every reset, so load
+it every run with `O` and skip the checks below.)
 
 The check is built in: **without `OVERWRITE`, `FLASH LOAD IMAGE` refuses with
 "Already programmed" when the slot is in use.** A skipped error is therefore the
@@ -940,7 +944,7 @@ must be and emit them as `DATA`:
 |--------|----------|
 | 0 | image width, 32-bit |
 | 4 | image height, 32-bit |
-| 8 onward | the picture, **top row first**, `width / 2` bytes per row |
+| 8 onward | the picture, **top row first**, `(width + 1) \ 2` bytes per row |
 
 Each byte holds two pixels with the **left one in the low nibble**. The nibble
 is the RGB121 code - red bit 7, green bits 7 and 6, blue bit 7 of the colour -

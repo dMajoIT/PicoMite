@@ -312,7 +312,7 @@ BLIT RESIZE F, L, 32, 16, 64, 64, 100, 40, 128, 96, 0
 
 ## BLIT FLASH
 
-Copies a rectangular region from a flash image slot into a framebuffer. Flash images are loaded once with `FLASH LOAD IMAGE` and persist in flash memory, allowing fast rendering without SD card access during gameplay.
+Copies a rectangular region from an image slot into a framebuffer. Images are loaded with `FLASH LOAD IMAGE`: slots 1-3 are flash and persist across power cycles, and on an RP2350 with PSRAM slots 4-8 are RAM slots 1-5 in PSRAM, which load faster and cost no flash wear but are cleared at every reset. Either kind renders without SD card access during gameplay.
 
 ### Syntax
 
@@ -324,7 +324,7 @@ BLIT FLASH slot, dst, x1, y1, x2, y2, w, h [, transparent]
 
 | Parameter | Description |
 | :--- | :--- |
-| `slot` | Flash image slot number (1-3) |
+| `slot` | Image slot number: 1-3 flash, 4-8 the RAM slots 1-5 (RP2350 with PSRAM only) |
 | `dst` | Destination buffer: `L`, `F`, `N` (VGA only), `T` (RP2350 VGA only) |
 | `x1`, `y1` | Top-left corner within the flash image (source region origin) |
 | `x2`, `y2` | Top-left corner on the destination buffer |
@@ -333,9 +333,10 @@ BLIT FLASH slot, dst, x1, y1, x2, y2, w, h [, transparent]
 
 ### Behaviour
 
-- The flash image must have been previously loaded with `FLASH LOAD IMAGE`.
-- Images are stored in RGB121 format in flash.
-- Source region must fit within the flash image dimensions.
+- The image must have been previously loaded with `FLASH LOAD IMAGE` into the same slot number.
+- Images are stored in RGB121 format, in flash or in PSRAM.
+- Source region must fit within the image dimensions.
+- A RAM slot holds an image or a program, not both: `RAM SAVE` refuses a slot that holds an image, and `RAM ERASE` clears either.
 - On non-VGA builds, `N` is not available as a destination.
 
 ### Example
@@ -349,6 +350,11 @@ BLIT FLASH 1, F, 0, 0, 0, 0, 320, 240
 
 ' Blit a 64x16 UI element with transparency
 BLIT FLASH 2, F, 0, 0, 250, 5, 64, 16, 0
+
+' The same from a RAM slot (RP2350 with PSRAM): slot 4 is RAM slot 1.
+' RAM images are volatile, so load at every start.
+FLASH LOAD IMAGE 4, "background.bmp", O
+BLIT FLASH 4, F, 0, 0, 0, 0, 320, 240
 ```
 
 ---
@@ -476,7 +482,7 @@ BLIT MEMORY img_addr%, 100, 50, 0
 | `BLIT LOAD #n,file$[,xo,yo,w,h]` | Load BMP into buffer | Yes (needs SD) |
 | `BLIT MERGE [c],x,y,w,h[,mode,t]` | Composite layer over framebuffer to LCD | LCD only |
 | `BLIT RESIZE s,d,sx,sy,sw,sh,dx,dy,dw,dh[,t]` | Scale/resize between buffers | Yes |
-| `BLIT FLASH slot,d,x1,y1,x2,y2,w,h[,t]` | Draw from flash image slot | Yes |
+| `BLIT FLASH slot,d,x1,y1,x2,y2,w,h[,t]` | Draw from an image slot (flash 1-3, RAM 4-8) | Yes |
 | `BLIT FRAMEBUFFER s,d,x1,y1,x2,y2,w,h[,t]` | Copy between framebuffers | Yes |
 | `BLIT COMPRESSED addr,x,y[,t]` | Draw RLE-compressed nibble data | Yes |
 | `BLIT MEMORY addr,x,y[,t]` | Draw raw/compressed nibble data | Yes |

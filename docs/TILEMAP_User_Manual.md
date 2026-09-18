@@ -16,10 +16,11 @@ Instead of blitting each tile individually from BASIC (which would require hundr
 
 ## Tileset Image Format
 
-The tileset is a BMP image containing all tiles arranged in a grid. Load it into one of the 3 flash slots:
+The tileset is a BMP image containing all tiles arranged in a grid. Load it into an image slot with `FLASH LOAD IMAGE`. Slots 1-3 are flash and persist; on a board with PSRAM, slots 4-8 are the RAM slots 1-5 in PSRAM, which load faster and wear nothing but are cleared at every reset, so load them at every start:
 
 ```
-FLASH LOAD IMAGE 1, "tileset.bmp"
+FLASH LOAD IMAGE 1, "tileset.bmp"       ' flash slot 1, once
+FLASH LOAD IMAGE 4, "tileset.bmp", O    ' RAM slot 1, every run
 ```
 
 The tileset image should have tiles arranged in a regular grid. For example, a 256×64 pixel image with 16×16 pixel tiles contains 16 tiles across and 4 rows = 64 tiles total.
@@ -38,7 +39,7 @@ Creates a tilemap by reading map data from DATA statements into compact internal
 |-----------|-------|-------------|
 | `mapLabel` | label | Label before the DATA statements containing the map |
 | `id` | 1-4 | Tilemap slot number (up to 4 simultaneous tilemaps) |
-| `flashSlot` | 1-3 | Flash image slot containing the tileset |
+| `flashSlot` | 1-8 | Image slot containing the tileset: 1-3 flash, 4-8 the RAM slots 1-5 (needs PSRAM) |
 | `tileW` | 1-256 | Width of each tile in pixels |
 | `tileH` | 1-256 | Height of each tile in pixels |
 | `tilesPerRow` | 1-1024 | Number of tiles across the tileset image |
@@ -69,7 +70,7 @@ Creates a tilemap exactly as `TILEMAP CREATE` does, but reads the map from a tex
 |-----------|-------|-------------|
 | `file$` | string | Name of the map file; `.map` is added if no extension is given |
 | `id` | 1-4 | Tilemap slot number |
-| `flashSlot` | 1-3 | Flash image slot containing the tileset |
+| `flashSlot` | 1-8 | Image slot containing the tileset: 1-3 flash, 4-8 the RAM slots 1-5 (needs PSRAM) |
 | `tileW` | 1-256 | Width of each tile in pixels |
 | `tileH` | 1-256 | Height of each tile in pixels |
 | `tilesPerRow` | 1-1024 | Number of tiles across the tileset image |

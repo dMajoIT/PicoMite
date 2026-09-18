@@ -305,16 +305,16 @@ static unsigned char *tilemap_get_dest(unsigned char *token)
     }
 }
 
-/* Validate the flash image in 'slot' (loaded by FLASH LOAD IMAGE) and return
- * its base address and pixel size */
+/* Validate the image in 'slot' (loaded by FLASH LOAD IMAGE - a flash slot, or
+ * on the RP2350 a RAM slot in PSRAM) and return its base address and pixel size */
 static uint8_t *tilemap_flash_image(int slot, int *fw, int *fh)
 {
-    uint8_t *base = (uint8_t *)(flash_target_contents + (slot - 1) * MAX_PROG_SIZE);
+    uint8_t *base = ImageSlotAddress(slot);
     uint32_t *hdr = (uint32_t *)base;
     *fw = (int)hdr[0];
     *fh = (int)hdr[1];
     if (*fw < 1 || *fw > 3840 || *fh < 1 || *fh > 2160)
-        error("Invalid flash image in slot %", slot);
+        error("No image in slot %", slot);
     return base;
 }
 
@@ -365,7 +365,7 @@ static void tilemap_cmd_create(unsigned char *p)
         SyntaxError();
 
     int id = getint(argv[0], 1, MAX_TILEMAPS) - 1;
-    int slot = getint(argv[2], 1, MAXFLASHSLOTS);
+    int slot = getint(argv[2], 1, MAXIMAGESLOTS);
     int tw = getint(argv[4], 1, 256);
     int th = getint(argv[6], 1, 256);
     int tpr = getint(argv[8], 1, 1024);
@@ -445,7 +445,7 @@ static void tilemap_cmd_load(unsigned char *p)
 
     char *fname = (char *)getFstring(argv[0]);
     int id = getint(argv[2], 1, MAX_TILEMAPS) - 1;
-    int slot = getint(argv[4], 1, MAXFLASHSLOTS);
+    int slot = getint(argv[4], 1, MAXIMAGESLOTS);
     int tw = getint(argv[6], 1, 256);
     int th = getint(argv[8], 1, 256);
     int tpr = getint(argv[10], 1, 1024);

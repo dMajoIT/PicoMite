@@ -1046,16 +1046,17 @@ the top bit in the width and height
 ~BLIT FLASH
 BLIT FLASH from, to, xin, yin, xout, yout, width, height [,colour]
 
-Copies an area of a specific 'from' flash slot to a 'to' framebuffer N, F, or
-L. 'xin' and 'yin' define the top left of the area of 'width' and 'height' on
-the flash slot to be copied.
+Copies an area of a specific 'from' image slot to a 'to' framebuffer N, F, or
+L.  Slots 1 to 3 are the flash slots; on an RP2350 with PSRAM, slots 4 to 8
+are the RAM slots 1 to 5 (see FLASH LOAD IMAGE).  'xin' and 'yin' define the
+top left of the area of 'width' and 'height' on the image to be copied.
 'xout' and 'yout' define the top left of the area on the target framebuffer to
 receive the copy.
-The optional parameter colour defines a pixel colour in the flash slot which
-will not be copied. If omitted all pixels are copied. The colour is specified
-as a number between 0 and 15 representing: Black, Blue, Myrtle, Cobalt,
-Midgreen, Cerulean, green, cyan, red, magenta, rust, fuchsia, brown, lilac,
-yellow and white
+The optional parameter colour defines a pixel colour in the image which will
+not be copied. If omitted all pixels are copied. The colour is specified as a
+number between 0 and 15 representing: Black, Blue, Myrtle, Cobalt, Midgreen,
+Cerulean, green, cyan, red, magenta, rust, fuchsia, brown, lilac, yellow and
+white
 
 ~BLIT FRAMEBUFFER
 BLIT FRAMEBUFFER from, to, xin, yin, xout, yout, width, height [,colour]
@@ -3342,12 +3343,17 @@ Load a program from the specified flash location into program memory.
 ~FLASH LOAD IMAGE
 FLASH LOAD IMAGE n, filename$ [,O/OVERWRITE]
 
-This command loads a bmp file specified into the flash slot in RGB121 format.
-The flash slot should have been previously erased or specifying the optional
+This command loads a bmp file specified into image slot n in RGB121 format.
+Slots 1 to 3 are the flash slots.  On an RP2350 with PSRAM, slots 4 to 8 are
+the RAM slots 1 to 5: they load faster and wear no flash, but are cleared at
+every reset, so a program loads them at every start.  BLIT FLASH, TILEMAP and
+MM.INFO(FLASH ADDRESS) take the same slot number, so an image moves between
+flash and RAM by changing that one number.  The slot should have been
+previously erased (RAM ERASE for a RAM slot) or specifying the optional
 parameter O or OVERWRITE will force an erase.  Note that the firmware will set
-the first two words in the flash slot to the width of the saved image and the
-height of the saved image.  The image size need not be the same dimensions as
-the current display.
+the first two words in the slot to the width of the saved image and the height
+of the saved image.  The image size need not be the same dimensions as the
+current display.
 
 ~FLASH MODBUFF LOAD
 FLASH MODBUFF LOAD fname$
@@ -8230,7 +8236,8 @@ Returns the size of file$ in bytes or 0 if not found.
 ~MM.INFO(FLASH ADDRESS)
 MM.INFO(FLASH ADDRESS n)
 
-Returns the address of the flash slot n.
+Returns the address of image slot n: a flash slot for 1 to 3 or, on an RP2350
+with PSRAM, RAM slot n-3 for 4 to 8 (see FLASH LOAD IMAGE).
 
 ~MM.INFO(FLASH)
 MM.INFO(FLASH)
@@ -14303,7 +14310,8 @@ internal storage.
   Parameter  Range  Description
   mapLabel  label  Label before the DATA statements containing the map
   id  1-4  Tilemap slot number (up to 4 simultaneous tilemaps)
-  flashSlot  1-3  Flash image slot containing the tileset
+  flashSlot  1-8  Image slot containing the tileset: 1-3 flash, 4-8 the RAM
+  slots 1-5 (needs PSRAM)
   tileW  1-256  Width of each tile in pixels
   tileH  1-256  Height of each tile in pixels
   tilesPerRow  1-1024  Number of tiles across the tileset image
@@ -14383,7 +14391,8 @@ produced by a tool on the PC.
   Parameter  Range  Description
   file$  string  Name of the map file; .map is added if no extension is given
   id  1-4  Tilemap slot number
-  flashSlot  1-3  Flash image slot containing the tileset
+  flashSlot  1-8  Image slot containing the tileset: 1-3 flash, 4-8 the RAM
+  slots 1-5 (needs PSRAM)
   tileW  1-256  Width of each tile in pixels
   tileH  1-256  Height of each tile in pixels
   tilesPerRow  1-1024  Number of tiles across the tileset image
