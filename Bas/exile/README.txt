@@ -69,9 +69,12 @@ is called - the game finds everything beside itself.  Then:
 
 That is the only command needed.
 
-The first run installs the game's kernel into the library, and if
-the board already holds a library belonging to another program it
-will ask once before replacing it.
+On a board with PSRAM the game's kernel is loaded into RAM as a
+library at every start and the flash library is never touched, so
+whatever you keep there stays.  Without PSRAM the first run installs
+the kernel into the flash library instead, and if the board already
+holds a library belonging to another program it will ask once before
+replacing it.
 
 On a board with PSRAM (the PicoComputer 3 has it) the two tilesets
 are loaded into RAM at every start, which takes a moment and leaves

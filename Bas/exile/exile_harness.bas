@@ -32,7 +32,11 @@
 '   arrows   move the view on its own
 '   TAB      turn round
 '   ESC      quit
-LIBRARY LOAD MM.INFO(PATH) + "exile_lib.bas"
+' RAM asks for the kernel to go into RAM slot 5 (firmware b11 on): a board with
+' PSRAM then never touches the flash library, which stays whoever's it was, and
+' a repeat load of the same file is instant.  Without PSRAM it is the flash
+' library as before, asked about once if another program's is there.
+LIBRARY LOAD MM.INFO(PATH) + "exile_lib.bas", RAM
 Option EXPLICIT
 Option DEFAULT INTEGER
 Option BASE 0

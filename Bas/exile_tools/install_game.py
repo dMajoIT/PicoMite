@@ -10,7 +10,8 @@ installed anywhere else and nothing is left at the root of a drive.
 
 The program finds the rest through MM.INFO(PATH), which is the directory it was
 loaded from, so the folder can be anywhere on any drive and one RUN starts it:
-LIBRARY LOAD writes the kernel and restarts the program by itself on the first
+LIBRARY LOAD puts the kernel in a RAM slot on a board with PSRAM (or writes it
+to the flash library without one) and restarts the program by itself on the first
 run, and the tilesets go into RAM slots on a board with PSRAM (firmware b11 on)
 or, without it, into flash slots 1 and 2 only if those are not already programmed.
 The board is the one PC3_PORT names (COM4 if unset).
