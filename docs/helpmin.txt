@@ -26,294 +26,453 @@ description of every entry along with the tutorial chapters.
 ~COMMANDS
 MMBasic commands
 
-'                          LONGSTRING TRIM
-*FILE                      LONGSTRING UCASE
-/*                         LOOP
-?                          MANDELBROT
-A:                         MANDELBROT CENTRE
-ADC                        MANDELBROT DRAW
-ADC CLOSE                  MANDELBROT PAN
-ADC FREQUENCY              MANDELBROT RESET
-ADC OPEN                   MANDELBROT ZOOM
-ADC RUN                    MAP
-ADC START                  MAP GREYSCALE
-AND                        MAP MAXIMITE
-ARC                        MAP RESET
-ARRAY ADD                  MAP SET
-ARRAY INSERT               MATH
-ARRAY SET                  MATH ADD
-ARRAY SLICE                MATH AES128
-AS                         MATH CLAMP
-ASTRO                      MATH FFT
-AUTOSAVE                   MATH FFT INVERSE
-BACKLIGHT                  MATH FFT MAGNITUDE
-BEZIER                     MATH FFT PHASE
-BIT                        MATH INSERT
-BITBANG                    MATH INTERPOLATE
-BITSTREAM                  MATH PID INIT
-BLIT                       MATH PID START
-BLIT CLOSE                 MATH PID STOP
-BLIT COMPRESSED            MATH POWER
-BLIT FLASH                 MATH RANDOMIZE
-BLIT FRAMEBUFFER           MATH SCALE
-BLIT MEMORY                MATH SENSORFUSION
-BLIT MEMORY332             MATH SET
-BLIT MERGE                 MATH SHIFT
-BLIT READ                  MATH SINC
-BLIT RESIZE                MATH SLICE
-BLIT WRITE                 MATH WINDOW
-BOX                        MEMORY
-BYTE                       MEMORY COPY
-CALL                       MEMORY COPY FLOAT
-CAMERA                     MEMORY COPY INTEGER
-CAMERA CAPTURE             MEMORY INPUT
-CAMERA CAPTURE JPEG        MEMORY PACK
-CAMERA CHANGE              MEMORY PRINT
-CAMERA CLOSE               MEMORY SET
-CAMERA OPEN                MEMORY SET BYTE
-CAMERA REGISTER            MEMORY SET FLOAT
-CAMERA TEST                MEMORY SET INTEGER
-CAMERA(OV2640)             MEMORY SET SHORT
-CAMERA(OV5640)             MEMORY SET WORD
-CASE                       MEMORY UNPACK
-CASE ELSE                  MID$
-CAT                        MIN
-CHAIN                      MKDIR
-CHDIR                      MOD
-CIRCLE                     MODE
-CLEAR                      MOUSE
-CLICK                      MOUSE CLOSE
-CLOSE                      MOUSE INTERRUPT DISABLE
-CLS                        MOUSE INTERRUPT ENABLE
-CMM2 LOAD                  MOUSE OPEN
-CMM2 RUN                   MOUSE SET
-COLOR                      NEW
-COLOUR                     NEXT
-COLOUR MAP                 NOT
-CONFIGURE                  ON ERROR ABORT
-CONFIGURE LIST             ON KEY
-CONST                      ON PS2
-CONTINUE                   ONESHOT
-CONTINUE DO                ONESHOT DISABLE
-COPY                       ONESHOT R
-COPY A2A                   ONEWIRE
-CPU                        ONEWIRE RESET
-CPU RESTART                OPEN
-CPU SLEEP                  OPERATORS
-CPU SPEED                  OR
-CSUB                       PAUSE
-DATA                       PEEK
-DATE$                      PIN
-DEFINEFONT                 PIO
-DEVICE                     PIO CLEAR
-DEVICE BITSTREAM           PIO CONFIGURE
-DEVICE CAMERA              PIO DMA RX
-DEVICE GAMEPAD             PIO DMA RX OFF
-DEVICE HUMID               PIO EXECUTE
-DEVICE KEYPAD              PIO INIT MACHINE
-DEVICE LCD                 PIO INTERRUPT
-DEVICE MOUSE               PIO PROGRAM
-DEVICE SERIALRX            PIO PROGRAM LINE
-DEVICE SERIALTX            PIO READ
-DEVICE WII                 PIO SET BASE
-DEVICE WS2812              PIO START
-DIM                        PIO STOP
-DO                         PIO SYNC
-DO WHILE                   PIO WRITE
-DRAW3D                     PIO WRITEFIFO
-DRIVE                      PIXEL
-EDIT                       PLAY
-EDIT FILE                  PLAY ARRAY
-ELSE                       PLAY BBC ENVELOPE
-ELSE IF                    PLAY BBC SOUND
-ELSEIF                     PLAY CONTINUE
-END                        PLAY FLAC
-END CSUB                   PLAY HALT
-END DEFINEFONT             PLAY LOAD SOUND
-END FUNCTION               PLAY MIDI
-END IF                     PLAY MIDI CMD
-END SELECT                 PLAY MIDI TEST
-END SUB                    PLAY MIDIFILE
-END TYPE                   PLAY MODFILE
-ENDIF                      PLAY MODSAMPLE
-EPOCH                      PLAY MP3
-ERASE                      PLAY NEXT
-ERROR                      PLAY NOTE OFF
-ESCAPE CODES               PLAY NOTE ON
-EXECUTE                    PLAY PAUSE
-EXIT                       PLAY PREVIOUS
-EXIT DO                    PLAY SAMPLE
-EXIT FOR                   PLAY SOUND
-EXIT FUNCTION              PLAY STREAM
-EXIT SUB                   PLAY TONE
-FILES                      PLAY VOLUME
-FILL                       PLAY WAV
-FLAG                       POKE
-FLAGS                      POKE BYTE
-FLASH                      POKE DISPLAY
-FLASH CHAIN                POKE DISPLAY HRES
-FLASH DISK LOAD            POLYGON
-FLASH ERASE                PORT
-FLASH ERASE ALL            PRINT
-FLASH LIST                 PULSE
-FLASH LOAD                 PWM
-FLASH LOAD IMAGE           PWM SYNC
-FLASH MODBUFF LOAD         RAM
-FLASH OVERWRITE            RAM CHAIN
-FLASH RUN                  RAM ERASE
-FLASH SAVE                 RAM ERASE ALL
-FLASH UF2                  RAM FILE LOAD
-FLUSH                      RAM LIST
-FM                         RAM LOAD
-FONT                       RAM OVERWRITE
-FOR                        RAM RUN
-FRAME                      RAM SAVE
-FRAMEBUFFER                RANDOMIZE
-FRAMEBUFFER CLOSE          RAY
-FRAMEBUFFER COPY           RBOX
-FRAMEBUFFER CREATE         READ
-FRAMEBUFFER LAYER          READ SAVE
-FRAMEBUFFER LAYER TOP      REDIM
-FRAMEBUFFER MERGE          REFRESH
-FRAMEBUFFER SYNC           REM
-FRAMEBUFFER WAIT           RENAME
-FRAMEBUFFER WRITE          RESOLUTION
-FUNCTION                   RESTORE
-GAMEPAD                    RETURN
-GAMEPAD COLOUR             RMDIR
-GAMEPAD CONFIGURE          RTC
-GAMEPAD HAPTIC             RTC GETTIME
-GAMEPAD INTERRUPT DISABLE  RTC SETREG
-GAMEPAD INTERRUPT ENABLE   RTC SETTIME
-GAMEPAD MONITOR            RUN
-GOSUB                      SAVE
-GOTO                       SAVE CONTEXT
-GUI                        SAVE DATA
-GUI BITMAP                 SAVE IMAGE
-GUI CALIBRATE              SAVE PERSISTENT
-GUI CLICK                  SEEK
-GUI CLICK DOWN             SELECT CASE
-GUI CLICK PIN              SERVO
-GUI CURSOR                 SETPIN
-GUI CURSOR COLOUR          SETTICK
-GUI CURSOR HIDE            SLEW
-GUI CURSOR LINK MOUSE      SORT
-GUI CURSOR LOAD            SPI OPEN
-GUI CURSOR OFF             SPI2
-GUI CURSOR ON              SPRITE
-GUI CURSOR SHOW            STAR
-GUI RESET LCDPANEL         STATIC
-GUI TEST LCDPANEL          STEP
-GUI TEST TOUCH             STEPPER
-HELP                       STRUCT
-HUMID                      SUB
-I2C                        SYNC
-I2C CHECK                  TEMPR START
-I2C CLOSE                  TEXT
-I2C OPEN                   THEN
-I2C READ                   TILE
-I2C SLAVE                  TILE HEIGHT
-I2C WRITE                  TILEMAP
-I2C2                       TIME$
-I2CLCD                     TIMER
-I2CLCD CLOSE               TMC22XX
-I2CLCD CREATECHAR          TO
-I2CLCD INIT                TOUCH
-IF                         TRACE
-INC                        TRACE ON
-INPUT                      TRIANGLE
-INTERRUPT                  TRIANGLE RESTORE
-INV                        TRIANGLE SAVE
-IR                         TURTLE
-IR SEND                    TYPE
-IRETURN                    UNTIL
-KEYBOARD                   UPDATE FIRMWARE
-KEYBOARD ON                VAR SAVE
-KEYPAD                     WATCHDOG
-KILL                       WEB
-LCD                        WEB CLOSE TCP CLIENT
-LCD CMD                    WEB CONNECT
-LCD INIT                   WEB MQTT CLOSE
-LET                        WEB MQTT CONNECT
-LIBRARY                    WEB MQTT PUBLISH
-LIBRARY SAVE               WEB MQTT SUBSCRIBE
-LINE                       WEB MQTT UNSUBSCRIBE
-LINE AA                    WEB NTP
-LINE GRAPH                 WEB OPEN TCP CLIENT
-LINE INPUT                 WEB OPEN TCP STREAM
-LINE PLOT                  WEB OPEN TLS CLIENT
-LIST                       WEB OPEN TLS STREAM
-LIST COMMANDS              WEB PING
-LIST PINS                  WEB SCAN
-LIST SYSTEM I2C            WEB TCP CLIENT READ
-LIST VARIABLES             WEB TCP CLIENT REQUEST
-LMID                       WEB TCP CLIENT STREAM
-LOAD                       WEB TCP CLIENT WRITE
-LOAD CONTEXT               WEB TCP INTERRUPT
-LOAD DATA                  WEB TCP READ
-LOAD JPG                   WEB TCP SEND
-LOAD PNG                   WEB TLS
-LOCAL                      WEB TLS CA
-LOCATION                   WEB TLS NOVERIFY
-LONGSTRING                 WEB TRANSMIT CODE
-LONGSTRING AES128          WEB TRANSMIT FILE
-LONGSTRING APPEND          WEB TRANSMIT PAGE
-LONGSTRING BASE64          WEB UDP INTERRUPT
-LONGSTRING CLEAR           WEB UDP SEND
-LONGSTRING CONCAT          WHILE
-LONGSTRING COPY            WII
-LONGSTRING LCASE           WII NUNCHUCK
-LONGSTRING LEFT            WII NUNCHUCK CLOSE
-LONGSTRING LOAD            WII NUNCHUCK OPEN
-LONGSTRING MID             WS2812
-LONGSTRING PRINT           XMODEM
-LONGSTRING REPLACE         XMODEM SEND
-LONGSTRING RESIZE          XOR
-LONGSTRING RIGHT           YMODEM
-LONGSTRING SETBYTE         YMODEM SEND
+'                                     MAP RESET
+*FILE                                 MAP SET
+/*                                    MATH
+?                                     MATH ADD
+A:                                    MATH AES128
+ADC                                   MATH CLAMP
+ADC CLOSE                             MATH FFT
+ADC FREQUENCY                         MATH FFT INVERSE
+ADC OPEN                              MATH FFT MAGNITUDE
+ADC RUN                               MATH FFT PHASE
+ADC START                             MATH INSERT
+AND                                   MATH INTERPOLATE
+ARC                                   MATH PID INIT
+ARRAY                                 MATH PID START
+ARRAY ADD                             MATH PID STOP
+ARRAY INSERT                          MATH POWER
+ARRAY SET                             MATH RANDOMIZE
+ARRAY SLICE                           MATH SCALE
+AS                                    MATH SENSORFUSION
+ASTRO                                 MATH SET
+AUTOSAVE                              MATH SHIFT
+BACKLIGHT                             MATH SINC
+BEZIER                                MATH SLICE
+BIT                                   MATH WINDOW
+BITBANG                               MEMORY
+BITSTREAM                             MEMORY COPY
+BLIT                                  MEMORY COPY FLOAT
+BLIT CLOSE                            MEMORY COPY INTEGER
+BLIT COMPRESSED                       MEMORY INPUT
+BLIT FLASH                            MEMORY PACK
+BLIT FRAMEBUFFER                      MEMORY PRINT
+BLIT LOAD                             MEMORY SET
+BLIT MEMORY                           MEMORY SET BYTE
+BLIT MEMORY332                        MEMORY SET FLOAT
+BLIT MERGE                            MEMORY SET INTEGER
+BLIT READ                             MEMORY SET SHORT
+BLIT RESIZE                           MEMORY SET WORD
+BLIT WRITE                            MEMORY SHARE CLIENT
+BOX                                   MEMORY SHARE HOST
+BYTE                                  MEMORY SHARE STOP
+CALL                                  MEMORY SHARE STOP CLIENT
+CAMERA                                MEMORY SHARE STOP HOST
+CAMERA CAPTURE                        MEMORY UNPACK
+CAMERA CAPTURE JPEG                   MID$
+CAMERA CHANGE                         MIN
+CAMERA CLOSE                          MKDIR
+CAMERA OPEN                           MOD
+CAMERA REGISTER                       MODE
+CAMERA TEST                           MOUSE
+CAMERA(OV2640)                        MOUSE CLOSE
+CAMERA(OV5640)                        MOUSE INTERRUPT DISABLE
+CASE                                  MOUSE INTERRUPT ENABLE
+CASE ELSE                             MOUSE OPEN
+CAT                                   MOUSE SET
+CHAIN                                 MSGBOX
+CHDIR                                 NEW
+CIRCLE                                NEXT
+CLEAR                                 NOT
+CLICK                                 ON ERROR ABORT
+CLOSE                                 ON KEY
+CLS                                   ON PS2
+CMM2 LOAD                             ONESHOT
+CMM2 RUN                              ONESHOT DISABLE
+COLOR                                 ONESHOT R
+COLOR AS INTEGER                      ONEWIRE
+COLOUR                                ONEWIRE RESET
+COLOUR MAP                            OPEN
+CONFIGURE                             OPERATORS
+CONFIGURE LIST                        OPTION CACHE DEBUG
+CONST                                 OPTION PROFILING
+CONST SOLID                           OPTION TRACECACHE
+CONTINUE                              OR
+CONTINUE DO                           PAUSE
+COPY                                  PEEK
+COPY A2A                              PIN
+CPU                                   PIO
+CPU RESTART                           PIO CLEAR
+CPU SLEEP                             PIO CONFIGURE
+CPU SPEED                             PIO DMA RX
+CSUB                                  PIO DMA RX OFF
+CTRLVAL                               PIO EXECUTE
+DATA                                  PIO INIT MACHINE
+DATA COLLECT                          PIO INTERRUPT
+DATA DAMAGE                           PIO PROGRAM
+DATA LADDER                           PIO PROGRAM LINE
+DATA SOLID                            PIO READ
+DATE$                                 PIO SET BASE
+DEFINEFONT                            PIO START
+DEVICE                                PIO STOP
+DEVICE BITSTREAM                      PIO SYNC
+DEVICE CAMERA                         PIO WRITE
+DEVICE GAMEPAD                        PIO WRITEFIFO
+DEVICE HUMID                          PIXEL
+DEVICE KEYPAD                         PLAY
+DEVICE LCD                            PLAY ARRAY
+DEVICE MOUSE                          PLAY BBC ENVELOPE
+DEVICE SERIALRX                       PLAY BBC SOUND
+DEVICE SERIALTX                       PLAY CONTINUE
+DEVICE WII                            PLAY FLAC
+DEVICE WS2812                         PLAY HALT
+DIM                                   PLAY LOAD SOUND
+DO                                    PLAY MIDI
+DO WHILE                              PLAY MIDI CMD
+DRAW3D                                PLAY MIDI TEST
+DRAW3D CAMERA                         PLAY MIDIFILE
+DRAW3D CLOSE                          PLAY MODFILE
+DRAW3D CLOSE ALL                      PLAY MODSAMPLE
+DRAW3D CREATE                         PLAY MP3
+DRAW3D DIAGNOSE                       PLAY NEXT
+DRAW3D HIDE                           PLAY NOTE OFF
+DRAW3D HIDE ALL                       PLAY NOTE ON
+DRAW3D LIGHT                          PLAY PAUSE
+DRAW3D RESET                          PLAY PREVIOUS
+DRAW3D RESTORE                        PLAY RELEASE
+DRAW3D ROTATE                         PLAY SAMPLE
+DRAW3D SET FLAGS                      PLAY SOUND
+DRAW3D SHOW                           PLAY STOP
+DRAW3D WRITE                          PLAY STREAM
+DRIVE                                 PLAY TONE
+EDIT                                  PLAY VOLUME
+EDIT FILE                             PLAY WAV
+ELSE                                  POKE
+ELSE IF                               POKE BYTE
+ELSEIF                                POKE DISPLAY
+END                                   POKE DISPLAY HRES
+END CSUB                              POLYGON
+END DEFINEFONT                        PORT
+END FUNCTION                          PRINT
+END IF                                PULSE
+END SELECT                            PWM
+END SUB                               PWM SYNC
+END TYPE                              RAM
+ENDIF                                 RAM CHAIN
+EPOCH                                 RAM ERASE
+ERASE                                 RAM ERASE ALL
+ERROR                                 RAM FILE LOAD
+ESCAPE CODES                          RAM LIST
+EXECUTE                               RAM LOAD
+EXIT                                  RAM OVERWRITE
+EXIT DO                               RAM RUN
+EXIT FOR                              RAM SAVE
+EXIT FUNCTION                         RANDOMIZE
+EXIT SUB                              RAY
+FILES                                 RAY CAMERA
+FILL                                  RAY CAST
+FLAG                                  RAY CELL
+FLAGS                                 RAY CLOSE
+FLASH                                 RAY COLOUR
+FLASH CHAIN                           RAY DEFINE
+FLASH DISK LOAD                       RAY DOOR
+FLASH ERASE                           RAY DOOR CLEAR
+FLASH ERASE ALL                       RAY DOOR CLOSE
+FLASH LIST                            RAY MAP
+FLASH LOAD                            RAY MINIMAP
+FLASH LOAD IMAGE                      RAY MOVE
+FLASH MODBUFF LOAD                    RAY RENDER
+FLASH OVERWRITE                       RAY SPRITE
+FLASH RUN                             RAY SPRITE CLEAR
+FLASH SAVE                            RAY SPRITE REMOVE
+FLASH UF2                             RAY TURN
+FLUSH                                 RBOX
+FM                                    READ
+FONT                                  READ SAVE
+FOR                                   REDIM
+FRAME                                 REFRESH
+FRAME BOX                             REM
+FRAME CLEAR                           RENAME
+FRAME CLOSE                           RESOLUTION
+FRAME CLS                             RESTORE
+FRAME COLOUR                          RETURN
+FRAME CREATE                          RMDIR
+FRAME CURSOR                          RTC
+FRAME DESTROY                         RTC GETTIME
+FRAME HIDE                            RTC SETREG
+FRAME HLINE                           RTC SETTIME
+FRAME INPUT                           RTC SETTIME MID$
+FRAME OVERLAY                         RUN
+FRAME PANEL                           SAVE
+FRAME SCROLL                          SAVE CONTEXT
+FRAME SHOW                            SAVE DATA
+FRAME TITLE                           SAVE IMAGE
+FRAME VBUF                            SAVE PERSISTENT
+FRAME WRITE                           SEEK
+FRAMEBUFFER                           SELECT
+FRAMEBUFFER CLOSE                     SELECT CASE
+FRAMEBUFFER COPY                      SERVO
+FRAMEBUFFER CREATE                    SETPIN
+FRAMEBUFFER LAYER                     SETTICK
+FRAMEBUFFER LAYER TOP                 SETTICK PAUSE
+FRAMEBUFFER MERGE                     SETTICK RESUME
+FRAMEBUFFER SYNC                      SIN COS TAN ASIN ACOS ATAN SQR ABS INT EXP LOG SGN FIX CINT DEG RAD
+FRAMEBUFFER WAIT                      SLEW
+FRAMEBUFFER WRITE                     SORT
+FUNCTION                              SPI OPEN
+GAMEPAD                               SPI2
+GAMEPAD COLOUR                        SPRITE
+GAMEPAD CONFIGURE                     SPRITE CLOSE
+GAMEPAD HAPTIC                        SPRITE CLOSE ALL
+GAMEPAD INTERRUPT DISABLE             SPRITE COPY
+GAMEPAD INTERRUPT ENABLE              SPRITE HIDE
+GAMEPAD MONITOR                       SPRITE HIDE ALL
+GOSUB                                 SPRITE HIDE SAFE
+GOTO                                  SPRITE INTERRUPT
+GUI                                   SPRITE LOAD
+GUI AREA                              SPRITE LOADARRAY
+GUI BARGAUGE                          SPRITE LOADBMP
+GUI BCOLOUR                           SPRITE LOADPNG
+GUI BEEP                              SPRITE MOVE
+GUI BITMAP                            SPRITE NEXT
+GUI BUTTON                            SPRITE NOINTERRUPT
+GUI CALIBRATE                         SPRITE NOSTINTERRUPT
+GUI CAPTION                           SPRITE READ
+GUI CHECKBOX                          SPRITE RESTORE
+GUI CLICK                             SPRITE SCROLL
+GUI CLICK DOWN                        SPRITE SET TRANSPARENT
+GUI CLICK PIN                         SPRITE SHOW
+GUI CURSOR                            SPRITE SHOW SAFE
+GUI CURSOR COLOUR                     SPRITE STATIC
+GUI CURSOR HIDE                       SPRITE STATIC CLEAR
+GUI CURSOR LINK MOUSE                 SPRITE STINTERRUPT
+GUI CURSOR LOAD                       SPRITE SWAP
+GUI CURSOR OFF                        SPRITE WRITE
+GUI CURSOR ON                         STAR
+GUI CURSOR SHOW                       STATIC
+GUI DELETE                            STEP
+GUI DISABLE                           STEPPER
+GUI DISPLAYBOX                        STEPPER ARC
+GUI ENABLE                            STEPPER AXIS
+GUI FCOLOUR                           STEPPER BUFFER
+GUI FORMATBOX                         STEPPER CLEAR
+GUI FORMATBOX CANCEL                  STEPPER CLOSE
+GUI FRAME                             STEPPER ENABLE
+GUI GAUGE                             STEPPER ESTOP
+GUI HIDE                              STEPPER GC
+GUI INTERRUPT                         STEPPER GC G28
+GUI LED                               STEPPER GCODE
+GUI LISTBOX                           STEPPER GS
+GUI LISTBOX CANCEL                    STEPPER HWLIMITS
+GUI NUMBERBOX                         STEPPER INIT
+GUI NUMBERBOX CANCEL                  STEPPER INVERT
+GUI PAGE                              STEPPER JERK
+GUI RADIO                             STEPPER LIMITS
+GUI REDRAW                            STEPPER POSITION
+GUI RESET LCDPANEL                    STEPPER POSITION HOME
+GUI SETUP                             STEPPER RECOVER
+GUI SHOW                              STEPPER RESET
+GUI SLIDER                            STEPPER RUN
+GUI SPINBOX                           STEPPER SCURVE
+GUI SWITCH                            STEPPER SPINDLE
+GUI TEST LCDPANEL                     STEPPER STATUS
+GUI TEST TOUCH                        STEPPER TUNE
+GUI TEXTBOX                           STRUCT
+GUI TEXTBOX CANCEL                    STRUCT COPY
+HELP                                  STRUCT LOAD
+HUMID                                 STRUCT SAVE
+I2C                                   SUB
+I2C CHECK                             SYNC
+I2C CLOSE                             TEMPR START
+I2C OPEN                              TEXT
+I2C READ                              THEN
+I2C SLAVE                             TILE
+I2C WRITE                             TILE HEIGHT
+I2C2                                  TILEMAP
+I2CLCD                                TILEMAP ATTR
+I2CLCD CLOSE                          TILEMAP CLOSE
+I2CLCD CREATECHAR                     TILEMAP CREATE
+I2CLCD INIT                           TILEMAP DESTROY
+IF                                    TILEMAP DRAW
+IF ALARM THEN                         TILEMAP LOAD
+IF ASC                                TILEMAP SCROLL
+IN                                    TILEMAP SET
+INC                                   TILEMAP SPRITE CLOSE
+INPUT                                 TILEMAP SPRITE CREATE
+INTERRUPT                             TILEMAP SPRITE DESTROY
+INV                                   TILEMAP SPRITE DRAW
+IR                                    TILEMAP SPRITE MOVE
+IR SEND                               TILEMAP SPRITE SET
+IRETURN                               TILEMAP VIEW
+KEYBOARD                              TIME$
+KEYBOARD OFF                          TIMER
+KEYBOARD ON                           TMC22XX
+KEYPAD                                TO
+KILL                                  TOUCH
+LCD                                   TRACE
+LCD CMD                               TRACE ON
+LCD INIT                              TRIANGLE
+LET                                   TRIANGLE RESTORE
+LIBRARY                               TRIANGLE SAVE
+LIBRARY SAVE                          TURTLE
+LINE                                  TYPE
+LINE AA                               UNTIL
+LINE GRAPH                            UPDATE FIRMWARE
+LINE INPUT                            VAR SAVE
+LINE PLOT                             WATCHDOG
+LIST                                  WEB
+LIST COLLISIONS                       WEB CLOSE TCP CLIENT
+LIST COMMANDS                         WEB CONNECT
+LIST PINS                             WEB MQTT CLOSE
+LIST SYSTEM I2C                       WEB MQTT CONNECT
+LIST TYPE                             WEB MQTT PUBLISH
+LIST VARIABLES                        WEB MQTT SUBSCRIBE
+LMID                                  WEB MQTT UNSUBSCRIBE
+LOAD                                  WEB NTP
+LOAD CONTEXT                          WEB OPEN TCP CLIENT
+LOAD DATA                             WEB OPEN TCP STREAM
+LOAD JPG                              WEB OPEN TLS CLIENT
+LOAD PNG                              WEB OPEN TLS STREAM
+LOCAL                                 WEB PING
+LOCATION                              WEB SCAN
+LONGSTRING                            WEB TCP CLIENT READ
+LONGSTRING AES128                     WEB TCP CLIENT REQUEST
+LONGSTRING APPEND                     WEB TCP CLIENT STREAM
+LONGSTRING BASE64                     WEB TCP CLIENT WRITE
+LONGSTRING CLEAR                      WEB TCP INTERRUPT
+LONGSTRING CONCAT                     WEB TCP READ
+LONGSTRING COPY                       WEB TCP SEND
+LONGSTRING LCASE                      WEB TLS
+LONGSTRING LEFT                       WEB TLS CA
+LONGSTRING LOAD                       WEB TLS NOVERIFY
+LONGSTRING MID                        WEB TRANSMIT CODE
+LONGSTRING PRINT                      WEB TRANSMIT FILE
+LONGSTRING REPLACE                    WEB TRANSMIT PAGE
+LONGSTRING RESIZE                     WEB UDP INTERRUPT
+LONGSTRING RIGHT                      WEB UDP SEND
+LONGSTRING SETBYTE                    WHILE
+LONGSTRING TRIM                       WII
+LONGSTRING UCASE                      WII CLASSIC
+LOOP                                  WII CLASSIC OPEN
+MANDELBROT                            WII NUNCHUCK
+MANDELBROT CENTRE                     WII NUNCHUCK CLOSE
+MANDELBROT DRAW                       WII NUNCHUCK OPEN
+MANDELBROT PAN                        WS2812
+MANDELBROT RESET                      XMODEM
+MANDELBROT ZOOM                       XMODEM SEND
+MAP                                   XOR
+MAP GREYSCALE                         YMODEM
+MAP MAXIMITE                          YMODEM SEND
 
 ~FUNCTIONS
 MMBasic functions
 
-ABS                  KEYDOWN              PEEK(VAR)
-ACOS                 LCASE$               PEEK(VARHEADER)
-ASC                  LCOMPARE             PEEK(WP)
-ASIN                 LEFT$                PI
-ATAN2                LEN                  PIN(BOOTSEL)
-ATN                  LGETBYTE             PIN(TEMP)
-BIN$                 LGETSTR$             PIO(.WRAP)
-BIN2STR$             LINPUT               PIO(DMA RX POINTER)
-BOUND                LINSTR               PIO(EXECCTRL)
-CHOICE               LLEN                 PIO(FDEBUG)
-CHR$                 LOC                  PIO(FLEVEL)
-CINT                 LOF                  PIO(FSTAT)
-CLICK(DOWN)          LOG                  PIO(NEXT LINE)
-COS                  MATH(ATAN3)          PIO(PINCTRL)
-CWD$                 MATH(BASE64)         PIO(READFIFO)
-DATETIME$            MATH(CHI)            PIO(SHIFTCTRL)
-DAY$                 MATH(CORREL)         PULSIN
-DEG                  MATH(COSH)           RAD
-DEVICE(GAMEPAD)      MATH(CROSSING)       RGB
-DEVICE(MOUSE)        MATH(DOTPRODUCT)     RIGHT$
-DEVICE(NUNCHUCK)     MATH(LOG10)          RND
-DEVICE(WII)          MATH(MAGNITUDE)      SGN
-DIR$                 MATH(MAX)            SIN
-DISTANCE             MATH(MEAN)           SPACE$
-EOF                  MATH(MEDIAN)         SPI
-EPOCH(DATETIME$)     MATH(MIN)            SQR
-EVAL                 MATH(PID)            STR$
-EXP                  MATH(RAND)           STR2BIN
-FIELD$               MATH(SD)             STRING$
-FIX                  MATH(SINH)           TAB
-FORMAT$              MATH(SUM)            TAN
-GETSCANLINE          MATH(TANH)           TEMPR
-GPS                  MAX                  TOUCH(TAP)
-HEX$                 OCT$                 TOUCH(X)
-INKEY$               PEEK(BP)             TRIM$
-INPUT$               PEEK(BYTE)           UCASE$
-INSTR                PEEK(CFUNADDR)       VAL
-INT                  PEEK(PROGMEM)
-JSON$                PEEK(SP)
+ABS                         MATH(SUM)
+ACOS                        MATH(TANH)
+ASC                         MAX
+ASIN                        MM.INFO(KEYBOARD)
+ATAN2                       OCT$
+ATN                         PEEK(BP)
+BIN$                        PEEK(BYTE)
+BIN2STR$                    PEEK(CFUNADDR)
+BOUND                       PEEK(PROGMEM)
+CHOICE                      PEEK(SP)
+CHR$                        PEEK(STEPPER A)
+CINT                        PEEK(STEPPER ACTIVE)
+CLICK(DOWN)                 PEEK(STEPPER BUFFER)
+CLICK(LASTREF)              PEEK(STEPPER STATUS)
+CLICK(LASTX)                PEEK(STEPPER X)
+CLICK(LASTY)                PEEK(STEPPER Y)
+CLICK(REF)                  PEEK(STEPPER Z)
+CLICK(UP)                   PEEK(VAR)
+COS                         PEEK(VARHEADER)
+CWD$                        PEEK(WP)
+DATETIME$                   PI
+DAY$                        PIN(BOOTSEL)
+DEG                         PIN(TEMP)
+DEVICE(GAMEPAD)             PIO(.WRAP)
+DEVICE(MOUSE)               PIO(DMA RX POINTER)
+DEVICE(NUNCHUCK)            PIO(EXECCTRL)
+DEVICE(WII)                 PIO(FDEBUG)
+DIR$                        PIO(FLEVEL)
+DISTANCE                    PIO(FSTAT)
+DRAW3D(DISTANCE)            PIO(NEXT LINE)
+DRAW3D(X)                   PIO(PINCTRL)
+DRAW3D(XMAX)                PIO(READFIFO)
+DRAW3D(XMIN)                PIO(SHIFTCTRL)
+DRAW3D(Y)                   PRINT TOUCH(X)
+DRAW3D(YMAX)                PULSIN
+DRAW3D(YMIN)                RAD
+DRAW3D(Z)                   RAY(CAMA)
+EOF                         RAY(CAMX)
+EPOCH(DATETIME$)            RAY(CAMY)
+EVAL                        RAY(CASTDIST)
+EXP                         RAY(CASTSIDE)
+FIELD$                      RAY(CASTWALL)
+FIX                         RAY(CASTX)
+FORMAT$                     RAY(CASTY)
+FRAME(ACTIVE)               RAY(CELL)
+FRAME(BC)                   RAY(DEFINE)
+FRAME(CELL)                 RAY(DIST)
+FRAME(FC)                   RAY(DOOR)
+FRAME(HEIGHT)               RAY(MAPH)
+FRAME(INKEY)                RAY(MAPW)
+FRAME(OVERLAYS)             RAY(SPRITES)
+FRAME(PANELS)               RAY(SPRITEX)
+FRAME(PCELL)                RAY(SPRITEY)
+FRAME(PH)                   RAY(WALL)
+FRAME(PW)                   RGB
+FRAME(PX)                   RIGHT$
+FRAME(PY)                   RND
+FRAME(SX)                   SELECT CASE TOUCH(LASTREF)
+FRAME(SY)                   SELECT CASE TOUCH(REF)
+FRAME(VH)                   SGN
+FRAME(VISIBLE)              SIN
+FRAME(VW)                   SPACE$
+FRAME(WIDTH)                SPI
+GETSCANLINE                 SPRITE(A)
+GPS                         SPRITE(B)
+GUI FCOLOUR RGB(RED)        SPRITE(C)
+GUI FCOLOUR RGB(WHITE)      SPRITE(D)
+HEX$                        SPRITE(E)
+IF PIN(GP2)                 SPRITE(H)
+INKEY$                      SPRITE(L)
+INPUT$                      SPRITE(N)
+INSTR                       SPRITE(S)
+INT                         SPRITE(ST COLLISION)
+JSON$                       SPRITE(ST OBJECT)
+KEYBOARD(INKEY$)            SPRITE(ST)
+KEYBOARD(KEYDOWN)           SPRITE(T)
+KEYDOWN                     SPRITE(V)
+LCASE$                      SPRITE(W)
+LCOMPARE                    SPRITE(X)
+LEFT$                       SPRITE(Y)
+LEN                         SQR
+LGETBYTE                    STR$
+LGETSTR$                    STR2BIN
+LINPUT                      STRING$
+LINSTR                      STRUCT(FIND)
+LLEN                        STRUCT(OFFSET)
+LOC                         STRUCT(SIZEOF)
+LOF                         STRUCT(TYPE)
+LOG                         TAB
+MATH(ATAN3)                 TAN
+MATH(BASE64)                TEMPR
+MATH(CHI)                   TILEMAP(ATTR)
+MATH(CORREL)                TILEMAP(COLLISION)
+MATH(COSH)                  TILEMAP(COLS)
+MATH(CROSSING)              TILEMAP(SPRITE HIT)
+MATH(DOTPRODUCT)            TILEMAP(SPRITE TILE)
+MATH(LOG10)                 TILEMAP(SPRITE W)
+MATH(MAGNITUDE)             TILEMAP(SPRITE X)
+MATH(MAX)                   TILEMAP(TILE)
+MATH(MEAN)                  TILEMAP(VIEWX)
+MATH(MEDIAN)                TOUCH(TAP)
+MATH(MIN)                   TOUCH(X)
+MATH(PID)                   TRIM$
+MATH(RAND)                  UCASE$
+MATH(SD)                    VAL
+MATH(SINH)
 
 ~OPTIONS
 OPTION settings
@@ -397,61 +556,61 @@ MM.INFO$(FCOLOUR)          MM.INFO(HEAPEND)
 MM.INFO$(FILESIZE)         MM.INFO(HPOS)
 MM.INFO$(FLASH ADDRESS)    MM.INFO(ID)
 MM.INFO$(FLASH)            MM.INFO(IP ADDRESS)
-MM.INFO$(FLASHTOP)         MM.INFO(KEYBOARD)
-MM.INFO$(FONT ADDRESS)     MM.INFO(LCD320)
-MM.INFO$(FONT POINTER)     MM.INFO(LCDPANEL)
-MM.INFO$(FONT)             MM.INFO(LINE)
-MM.INFO$(FONTHEIGHT)       MM.INFO(MAX CONNECTIONS)
-MM.INFO$(FREE SPACE)       MM.INFO(MAX GP)
-MM.INFO$(HEAP)             MM.INFO(MAX VARS)
-MM.INFO$(HEAPEND)          MM.INFO(MODBUFF ADDRESS)
-MM.INFO$(HPOS)             MM.INFO(MODIFIED)
-MM.INFO$(ID)               MM.INFO(OPTION)
-MM.INFO$(IP ADDRESS)       MM.INFO(PATH)
-MM.INFO$(KEYBOARD)         MM.INFO(PIN)
-MM.INFO$(LCD320)           MM.INFO(PINNO)
-MM.INFO$(LCDPANEL)         MM.INFO(PIO RX DMA)
-MM.INFO$(LINE)             MM.INFO(PIO TX DMA)
-MM.INFO$(MAX CONNECTIONS)  MM.INFO(PLATFORM)
-MM.INFO$(MAX GP)           MM.INFO(PROGRAM)
-MM.INFO$(MAX VARS)         MM.INFO(PS2)
-MM.INFO$(MODBUFF ADDRESS)  MM.INFO(PSRAM SIZE)
-MM.INFO$(MODIFIED)         MM.INFO(PWM COUNT)
-MM.INFO$(OPTION)           MM.INFO(PWM DUTY)
-MM.INFO$(PATH)             MM.INFO(PWM SLICE)
-MM.INFO$(PIN)              MM.INFO(SCREENBUFF)
-MM.INFO$(PINNO)            MM.INFO(SCROLL)
-MM.INFO$(PIO RX DMA)       MM.INFO(SDCARD)
-MM.INFO$(PIO TX DMA)       MM.INFO(SOUND)
-MM.INFO$(PLATFORM)         MM.INFO(SPI SPEED)
-MM.INFO$(PROGRAM)          MM.INFO(STACK)
-MM.INFO$(PS2)              MM.INFO(SYSTEM HEAP)
-MM.INFO$(PSRAM SIZE)       MM.INFO(SYSTEM I2C)
-MM.INFO$(PWM COUNT)        MM.INFO(SYSTICK)
-MM.INFO$(PWM DUTY)         MM.INFO(TCP PORT)
-MM.INFO$(PWM SLICE)        MM.INFO(TCP REQUEST)
-MM.INFO$(SCREENBUFF)       MM.INFO(TCPIP STATUS)
-MM.INFO$(SCROLL)           MM.INFO(TELNET)
-MM.INFO$(SDCARD)           MM.INFO(TILE HEIGHT)
-MM.INFO$(SOUND)            MM.INFO(TOUCH)
-MM.INFO$(SPI SPEED)        MM.INFO(TRACK)
-MM.INFO$(STACK)            MM.INFO(UPTIME)
-MM.INFO$(SYSTEM HEAP)      MM.INFO(USB PID)
-MM.INFO$(SYSTEM I2C)       MM.INFO(USB VID)
-MM.INFO$(SYSTICK)          MM.INFO(USB)
-MM.INFO$(TCP PORT)         MM.INFO(VALID CPUSPEED)
-MM.INFO$(TCP REQUEST)      MM.INFO(VARCNT)
-MM.INFO$(TCPIP STATUS)     MM.INFO(VERSION)
-MM.INFO$(TELNET)           MM.INFO(WRITEBUFF)
-MM.INFO$(TILE HEIGHT)      MM.MESSAGE$
-MM.INFO$(TOUCH)            MM.ONEWIRE
-MM.INFO$(TRACK)            MM.PERSISTENT
-MM.INFO$(UPTIME)           MM.PS2
-MM.INFO$(USB PID)          MM.SUPPLY
-MM.INFO$(USB VID)          MM.TOPIC$
-MM.INFO$(USB)              MM.USB
-MM.INFO$(VALID CPUSPEED)   MM.VER
-MM.INFO$(VARCNT)           MM.WATCHDOG
+MM.INFO$(FLASHTOP)         MM.INFO(LCD320)
+MM.INFO$(FONT ADDRESS)     MM.INFO(LCDPANEL)
+MM.INFO$(FONT POINTER)     MM.INFO(LINE)
+MM.INFO$(FONT)             MM.INFO(MAX CONNECTIONS)
+MM.INFO$(FONTHEIGHT)       MM.INFO(MAX GP)
+MM.INFO$(FREE SPACE)       MM.INFO(MAX VARS)
+MM.INFO$(HEAP)             MM.INFO(MODBUFF ADDRESS)
+MM.INFO$(HEAPEND)          MM.INFO(MODIFIED)
+MM.INFO$(HPOS)             MM.INFO(OPTION)
+MM.INFO$(ID)               MM.INFO(PATH)
+MM.INFO$(IP ADDRESS)       MM.INFO(PIN)
+MM.INFO$(KEYBOARD)         MM.INFO(PINNO)
+MM.INFO$(LCD320)           MM.INFO(PIO RX DMA)
+MM.INFO$(LCDPANEL)         MM.INFO(PIO TX DMA)
+MM.INFO$(LINE)             MM.INFO(PLATFORM)
+MM.INFO$(MAX CONNECTIONS)  MM.INFO(PROGRAM)
+MM.INFO$(MAX GP)           MM.INFO(PS2)
+MM.INFO$(MAX VARS)         MM.INFO(PSRAM SIZE)
+MM.INFO$(MODBUFF ADDRESS)  MM.INFO(PWM COUNT)
+MM.INFO$(MODIFIED)         MM.INFO(PWM DUTY)
+MM.INFO$(OPTION)           MM.INFO(PWM SLICE)
+MM.INFO$(PATH)             MM.INFO(SCREENBUFF)
+MM.INFO$(PIN)              MM.INFO(SCROLL)
+MM.INFO$(PINNO)            MM.INFO(SDCARD)
+MM.INFO$(PIO RX DMA)       MM.INFO(SOUND)
+MM.INFO$(PIO TX DMA)       MM.INFO(SPI SPEED)
+MM.INFO$(PLATFORM)         MM.INFO(STACK)
+MM.INFO$(PROGRAM)          MM.INFO(SYSTEM HEAP)
+MM.INFO$(PS2)              MM.INFO(SYSTEM I2C)
+MM.INFO$(PSRAM SIZE)       MM.INFO(SYSTICK)
+MM.INFO$(PWM COUNT)        MM.INFO(TCP PORT)
+MM.INFO$(PWM DUTY)         MM.INFO(TCP REQUEST)
+MM.INFO$(PWM SLICE)        MM.INFO(TCPIP STATUS)
+MM.INFO$(SCREENBUFF)       MM.INFO(TELNET)
+MM.INFO$(SCROLL)           MM.INFO(TILE HEIGHT)
+MM.INFO$(SDCARD)           MM.INFO(TOUCH)
+MM.INFO$(SOUND)            MM.INFO(TRACK)
+MM.INFO$(SPI SPEED)        MM.INFO(UPTIME)
+MM.INFO$(STACK)            MM.INFO(USB PID)
+MM.INFO$(SYSTEM HEAP)      MM.INFO(USB VID)
+MM.INFO$(SYSTEM I2C)       MM.INFO(USB)
+MM.INFO$(SYSTICK)          MM.INFO(VALID CPUSPEED)
+MM.INFO$(TCP PORT)         MM.INFO(VARCNT)
+MM.INFO$(TCP REQUEST)      MM.INFO(VERSION)
+MM.INFO$(TCPIP STATUS)     MM.INFO(WRITEBUFF)
+MM.INFO$(TELNET)           MM.MESSAGE$
+MM.INFO$(TILE HEIGHT)      MM.ONEWIRE
+MM.INFO$(TOUCH)            MM.PERSISTENT
+MM.INFO$(TRACK)            MM.PS2
+MM.INFO$(UPTIME)           MM.SUPPLY
+MM.INFO$(USB PID)          MM.TOPIC$
+MM.INFO$(USB VID)          MM.USB
+MM.INFO$(USB)              MM.VER
+MM.INFO$(VALID CPUSPEED)   MM.WATCHDOG
+MM.INFO$(VARCNT)
 
 ~OBSOLETE
 Obsolete commands and functions - do not use in new programs
@@ -545,6 +704,12 @@ ARC x, y, r1, [r2], a1, a2 [, c]
 Draws an arc of a circle with a given colour and width between two radials
 (defined in degrees). Parameters for the ARC command are:
 
+~ARRAY
+ARRAY Commands NOT Supporting Structures
+
+The following ARRAY commands do not support structure member arrays because
+they operate on multi-dimensional arrays:
+
 ~ARRAY ADD
 ARRAY ADD in(), value ,out()
 
@@ -577,9 +742,10 @@ This command copies a specified set of values from a multi-dimensional array
 into a single dimensional array. It is much faster than using a FOR loop.
 
 ~AS
-AS
+As an example, the following program will print out the X and Y coordinates of
+any touch on the screen:
 
-Described with the rest of its family:  HELP DIM
+Full details: Advanced Graphics Functions.pdf
 
 ~ASC
 ASC( string$ )
@@ -724,6 +890,11 @@ BLIT FRAMEBUFFER from, to, xin, yin, xout, yout, width, height [,colour]
 Copies an area of a specific 'from' framebuffer N, F, or L to another
 different 'to' framebuffer N, F, or L. 'xin' and 'yin' define the top left of
 the area of 'width' and 'height' on the source framebuffer to be copied.
+
+~BLIT LOAD
+BLIT LOAD / BLIT LOADBMP
+
+Loads a BMP image file (or a sub-region of it) into a blit buffer.
 
 ~BLIT MEMORY
 BLIT MEMORY address, x, y [,col]
@@ -925,9 +1096,9 @@ RP2350 versions only. The OV5640 is a 5-megapixel camera, selected by giving
 OV5640 as the first parameter of CAMERA OPEN.
 
 ~CASE
-CASE
+Case Is >= value
 
-Described with the rest of its family:  HELP SELECT CASE
+comparison with IS
 
 ~CASE ELSE
 CASE ELSE
@@ -993,7 +1164,8 @@ See also: ERASE
 ~CLICK
 CLICK is the first word of several entries:
 
-CLICK(DOWN)
+CLICK(DOWN)     CLICK(LASTX)    CLICK(REF)
+CLICK(LASTREF)  CLICK(LASTY)    CLICK(UP)
 
 List them all with:  HELP CLICK*
 
@@ -1020,6 +1192,32 @@ compatible with the Colour Maximite 2). A click of the left mouse button and a
 touch on a touch sensitive LCD panel are treated identically, so CLICK()
 effectively substitutes for the TOUCH() function and the same program can be
 driven by either a mouse or a touch screen.
+
+~CLICK(LASTREF)
+CLICK(LASTREF)
+
+Will return the reference number of the last control that was clicked on.
+
+~CLICK(LASTX)
+CLICK(LASTX)
+
+Will return the X coordinate of the last location that was clicked on.
+
+~CLICK(LASTY)
+CLICK(LASTY)
+
+Will return the Y coordinate of the last location that was clicked on.
+
+~CLICK(REF)
+CLICK(REF)
+
+Will return the reference number of the control that is currently being
+clicked on or zero if no control is currently being clicked on.
+
+~CLICK(UP)
+CLICK(UP)
+
+Will return true if the screen is currently NOT being clicked on.
 
 ~CLOSE
 CLOSE [#]fnbr [,[#]fnbr] ...
@@ -1052,6 +1250,11 @@ COLOR
 
 Described with the rest of its family:  HELP COLOUR
 
+~COLOR AS INTEGER
+COLOR AS INTEGER
+
+offset=32
+
 ~COLOUR
 COLOUR fore [, back] or COLOR fore [, back]
 
@@ -1081,6 +1284,11 @@ CONST id = expression   [, id = expression] ... etc
 
 Create a constant identifier which cannot be changed once created. 'id' is the
 identifier which follows the same rules as for variables.
+
+~CONST SOLID
+CONST SOLID = &b0001
+
+CONST LADDER = &b0010 CONST COLLECT = &b1000
 
 ~CONTINUE
 CONTINUE
@@ -1118,11 +1326,11 @@ COS( number )
 Returns the cosine of the argument 'number' in radians.
 
 ~CPU
-CPU is the first word of several entries:
+CPU speed bounds
 
-CPU RESTART  CPU SLEEP    CPU SPEED
-
-List them all with:  HELP CPU*
+The cyw43 wireless driver and btstack run in alarm-IRQ context. At low CPU
+speeds, the per-event processing margin becomes too tight for sustained
+bidirectional traffic and the link destabilises.
 
 ~CPU RESTART
 CPU RESTART
@@ -1154,6 +1362,11 @@ Defines the binary code for an embedded machine code program module written in
 C or ARM assembler. The module will appear in MMBasic as the command 'name'
 and can be used in the same manner as a built-in command.
 
+~CTRLVAL
+CtrlVal(#1) = 2
+
+select "Cherry" and redraw the collapsed control
+
 ~CWD$
 CWD$
 
@@ -1165,6 +1378,26 @@ DATA constant[,constant]..
 
 Stores numerical and string constants to be accessed by READ. In general
 string constants should be surrounded by double quotes (").
+
+~DATA COLLECT
+DATA COLLECT
+
+tile 5: coin (collectible)
+
+~DATA DAMAGE
+DATA DAMAGE
+
+tile 6: spikes (damaging)
+
+~DATA LADDER
+DATA LADDER
+
+tile 4: ladder
+
+~DATA SOLID
+DATA SOLID
+
+tile 2: brick (solid)
 
 ~DATE$
 DATE$ = "DD-MM-YY[YY]"
@@ -1433,6 +1666,122 @@ boundaries of a 3D object and could be used to define an area to be erased
 before re-drawing. See the document "3D_Graphics_User_Manual.pdf" in the
 PicoMite firmware download for a full description.
 
+~DRAW3D CAMERA
+DRAW3D CAMERA n, viewplane [, x] [, y] [, panx] [, pany]
+
+Configures a camera for 3D projection.
+
+~DRAW3D CLOSE
+DRAW3D CLOSE n1 [, n2, n3, ...]
+
+Closes one or more 3D objects and frees their memory.
+
+~DRAW3D CLOSE ALL
+DRAW3D CLOSE ALL
+
+Closes all 3D objects and frees all associated memory.
+
+~DRAW3D CREATE
+DRAW3D CREATE n, nv, nf, camera, vertex(), facecount(), faces(), colours() [,
+linecolour()] [, fillcolour()]
+
+Creates a new 3D object in memory.
+
+~DRAW3D DIAGNOSE
+DRAW3D DIAGNOSE n, x, y, z [, sort]
+
+Outputs diagnostic information about a 3D object's faces.
+
+~DRAW3D HIDE
+DRAW3D HIDE n1 [, n2, n3, ...]
+
+Hides one or more 3D objects by clearing their display area.
+
+~DRAW3D HIDE ALL
+DRAW3D HIDE ALL
+
+Hides all currently displayed 3D objects.
+
+~DRAW3D LIGHT
+DRAW3D LIGHT n, x, y, z, ambient
+
+Sets the light source position and ambient lighting level for an object.
+
+~DRAW3D RESET
+DRAW3D RESET n1 [, n2, n3, ...]
+
+Resets one or more 3D objects to their original (pre-rotation) state.
+
+~DRAW3D RESTORE
+DRAW3D RESTORE n1 [, n2, n3, ...]
+
+Restores (redraws) previously hidden 3D objects at their last displayed
+position.
+
+~DRAW3D ROTATE
+DRAW3D ROTATE quaternion(), n1 [, n2, n3, ...]
+
+Rotates one or more 3D objects using a quaternion.
+
+~DRAW3D SET FLAGS
+DRAW3D SET FLAGS n, flag, face1, count1 [, face2, count2, ...]
+
+Sets rendering flags for specific faces of a 3D object.
+
+~DRAW3D SHOW
+DRAW3D SHOW n, x, y, z [, nonormals] [, depthmode]
+
+Displays a 3D object on screen, clearing any previous display of that object.
+
+~DRAW3D WRITE
+DRAW3D WRITE n, x, y, z [, nonormals] [, depthmode]
+
+Displays a 3D object on screen without clearing the previous display.
+
+~DRAW3D(DISTANCE)
+DRAW3D(DISTANCE n)
+
+Returns the average distance from the camera to all faces of object n.
+
+~DRAW3D(X)
+DRAW3D(X n)
+
+Returns the X position where object n was last displayed.
+
+~DRAW3D(XMAX)
+DRAW3D(XMAX n)
+
+Returns the maximum X coordinate of the bounding box for the last display of
+object n.
+
+~DRAW3D(XMIN)
+DRAW3D(XMIN n)
+
+Returns the minimum X coordinate of the bounding box for the last display of
+object n.
+
+~DRAW3D(Y)
+DRAW3D(Y n)
+
+Returns the Y position where object n was last displayed.
+
+~DRAW3D(YMAX)
+DRAW3D(YMAX n)
+
+Returns the maximum Y coordinate of the bounding box for the last display of
+object n.
+
+~DRAW3D(YMIN)
+DRAW3D(YMIN n)
+
+Returns the minimum Y coordinate of the bounding box for the last display of
+object n.
+
+~DRAW3D(Z)
+DRAW3D(Z n)
+
+Returns the Z position where object n was last displayed.
+
 ~DRIVE
 DRIVE drive$
 
@@ -1513,7 +1862,7 @@ Described with the rest of its family:  HELP ENDIF
 ~END SELECT
 END SELECT
 
-Described with the rest of its family:  HELP SELECT CASE
+Full details: Advanced Graphics Functions.pdf
 
 ~END SUB
 END SUB
@@ -1801,6 +2150,227 @@ FRAME
 RP2350 VERSIONS ONLY The frame command supports the programmer to create text
 based user interfaces see the manual 'FRAME_User_Manual.pdf'
 
+~FRAME BOX
+FRAME BOX x, y, w, h [, cols, rows [, fc [, DOUBLE]]]
+
+Draws a box-drawing grid in the frame buffer and automatically registers the
+interior cells of each grid subdivision as a numbered panel.
+
+~FRAME CLEAR
+FRAME CLEAR
+
+Clears the entire frame buffer and destroys all panel definitions. The frame
+buffer itself remains allocated.
+
+~FRAME CLOSE
+FRAME CLOSE
+
+Destroys the frame buffer and releases all associated memory, including all
+panel definitions. Produces an error if no frame exists.
+
+~FRAME CLS
+FRAME CLS [panel_id]
+
+Clears the frame buffer or a specific panel.
+
+~FRAME COLOUR
+FRAME COLOUR panel_id, fg [, bg]
+
+Sets the default foreground and optional background colour for a panel. These
+defaults are used by FRAME PRINT when no explicit colour is specified, and by
+FRAME CLS when clearing the panel.
+
+~FRAME CREATE
+FRAME CREATE
+
+Creates the frame buffer. The buffer dimensions are calculated from the
+display resolution and the current font size: - Width = HRes / font_width
+characters - Height = VRes / font_height characters
+
+~FRAME CURSOR
+FRAME CURSOR panel_id, x, y
+
+FRAME CURSOR ON FRAME CURSOR OFF
+
+~FRAME DESTROY
+FRAME DESTROY panel_id
+
+Destroys an overlay and frees its memory. The panel ID becomes inactive.
+
+~FRAME HIDE
+FRAME HIDE panel_id
+
+Hides an overlay. The main frame content underneath is automatically restored
+on the next FRAME WRITE.
+
+~FRAME HLINE
+FRAME HLINE panel_id, row [, colour [, DOUBLE]]
+
+Draws a horizontal divider line across the panel at the specified row, with
+correct T-junction characters connecting to the left and right borders. The
+junction style is automatically matched to the panel's border style.
+
+~FRAME INPUT
+FRAME INPUT panel_id, variable [, prompt$ [, fc]]
+
+Panel-aware line input. Reads a line of text from the console into the
+specified panel, echoing each character as it is typed.
+
+~FRAME OVERLAY
+FRAME OVERLAY panel_id, width, height [, colour [, DOUBLE]]
+
+Creates an overlay with a private frame buffer and a border.
+
+~FRAME PANEL
+FRAME PANEL id, x, y, w, h
+
+Manually defines or redefines a panel at arbitrary frame buffer coordinates.
+This is useful for creating panels without a grid box, or for mapping a panel
+onto a custom hand-drawn border.
+
+~FRAME SCROLL
+FRAME SCROLL panel_id, sx, sy
+
+Sets the viewport scroll offset for a panel that has a virtual buffer. The
+viewport top-left corner maps to position (sx, sy) in the virtual buffer.
+
+~FRAME SHOW
+FRAME SHOW panel_id, x, y
+
+Shows an overlay at position (x, y) on the main frame. The overlay is
+composited on top of the main frame content during FRAME WRITE.
+
+~FRAME TITLE
+FRAME TITLE panel_id, text$ [, colour]
+
+Centres a title string in the top border of a panel or overlay. The title is
+rendered between bracket characters that connect naturally with the border
+line.
+
+~FRAME VBUF
+FRAME VBUF panel_id, vwidth, vheight
+
+Allocates a virtual buffer of vwidth x vheight cells for the specified panel.
+The virtual dimensions must be at least as large as the panel interior (they
+can be larger in either or both directions).
+
+~FRAME WRITE
+FRAME WRITE
+
+Renders the frame buffer to the screen. Only cells that have changed since the
+last FRAME WRITE are updated, making this efficient for incremental updates.
+
+~FRAME(ACTIVE)
+FRAME(ACTIVE panel_id)   ' Returns 1 if the panel is active, 0 if not
+FRAME(VISIBLE panel_id)  ' Returns 1 if the overlay is visible, 0 if hidden
+
+ACTIVE works for any panel (main-frame or overlay). VISIBLE only works for
+overlay panels and will generate an error if used on a main-frame panel.
+
+~FRAME(BC)
+FRAME(BC panel_id)
+
+Returns the panel's default background colour (RGB121 index)
+
+~FRAME(CELL)
+FRAME(CELL x, y)              ' Read a cell from the main frame buffer
+FRAME(PCELL panel_id, x, y)   ' Read a cell from a panel's buffer
+
+Returns the raw 16-bit cell value. To extract the components:
+
+~FRAME(FC)
+FRAME(FC panel_id)   ' Returns the panel's default foreground colour (RGB121 index)
+FRAME(BC panel_id)   ' Returns the panel's default background colour (RGB121 index)
+
+Full details: FRAME_User_Manual.pdf
+
+~FRAME(HEIGHT)
+FRAME(HEIGHT)
+
+Returns the frame height in characters
+
+~FRAME(INKEY)
+FRAME(INKEY)   ' Non-blocking key read (returns string, like INKEY$)
+
+Returns a single-character string if a key has been pressed, or an empty
+string if no key is available. This is the frame-aware equivalent of INKEY$
+and should be used in place of INKEY$ when a frame is active.
+
+~FRAME(OVERLAYS)
+FRAME(OVERLAYS)
+
+Returns the number of overlays (visible or hidden)
+
+~FRAME(PANELS)
+FRAME(PANELS)     ' Returns the number of active panels
+FRAME(OVERLAYS)   ' Returns the number of overlays (visible or hidden)
+
+Full details: FRAME_User_Manual.pdf
+
+~FRAME(PCELL)
+FRAME(PCELL panel_id, x, y)
+
+Read a cell from a panel's buffer
+
+~FRAME(PH)
+FRAME(PH panel_id)
+
+Returns the interior height of a panel
+
+~FRAME(PW)
+FRAME(PW panel_id)   ' Returns the interior width of a panel
+FRAME(PH panel_id)   ' Returns the interior height of a panel
+
+The interior dimensions exclude the box-drawing border. For example, a box
+drawn at 0,0 to 40,24 with a 2x1 grid will have two panels each with an
+interior width of 19 and height of 23.
+
+~FRAME(PX)
+FRAME(PX panel_id)   ' Returns the panel's cursor X position (0-based)
+FRAME(PY panel_id)   ' Returns the panel's cursor Y position (0-based)
+
+These return the current cursor position within the panel, relative to the
+panel's top-left interior corner.
+
+~FRAME(PY)
+FRAME(PY panel_id)
+
+Returns the panel's cursor Y position (0-based)
+
+~FRAME(SX)
+FRAME(SX panel_id)
+
+Returns horizontal scroll offset (0 if no vbuf)
+
+~FRAME(SY)
+FRAME(SY panel_id)
+
+Returns vertical scroll offset (0 if no vbuf)
+
+~FRAME(VH)
+FRAME(VH panel_id)
+
+Returns virtual buffer height (0 if no vbuf)
+
+~FRAME(VISIBLE)
+FRAME(VISIBLE panel_id)
+
+Returns 1 if the overlay is visible, 0 if hidden
+
+~FRAME(VW)
+FRAME(VW panel_id)   ' Returns virtual buffer width (0 if no vbuf)
+FRAME(VH panel_id)   ' Returns virtual buffer height (0 if no vbuf)
+FRAME(SX panel_id)   ' Returns horizontal scroll offset (0 if no vbuf)
+FRAME(SY panel_id)   ' Returns vertical scroll offset (0 if no vbuf)
+
+These queries return 0 when the panel does not have a virtual buffer attached.
+
+~FRAME(WIDTH)
+FRAME(WIDTH)    ' Returns the frame width in characters
+FRAME(HEIGHT)   ' Returns the frame height in characters
+
+Returns 0 if no frame has been created.
+
 ~FRAMEBUFFER
 FRAMEBUFFER
 
@@ -2003,16 +2573,32 @@ in detail in the file Option_GPS_User_Manual.pdf included in the firmware
 download zip file.
 
 ~GUI
-GUI is the first word of several entries:
+GUI Caption #1, "Flow Rate", 20, 170,, RGB(brown),0
 
-GUI BITMAP             GUI CURSOR COLOUR      GUI CURSOR SHOW
-GUI CALIBRATE          GUI CURSOR HIDE        GUI RESET LCDPANEL
-GUI CLICK              GUI CURSOR LINK MOUSE  GUI TEST LCDPANEL
-GUI CLICK DOWN         GUI CURSOR LOAD        GUI TEST TOUCH
-GUI CLICK PIN          GUI CURSOR OFF
-GUI CURSOR             GUI CURSOR ON
+Full details: Advanced Graphics Functions.pdf
 
-List them all with:  HELP GUI*
+~GUI AREA
+GUI AREA #ref, StartX, StartY, Width, Height
+
+~GUI BARGAUGE
+GUI BARGAUGE #ref, StartX, StartY, width, height, FColour, BColour, min, max,
+c1, ta, c2, tb, c3, tc, c4
+
+This will define either a horizontal or vertical bar gauge. The gauge can be
+coloured to provide a graphical indication of the signal level (e.g.
+
+~GUI BCOLOUR
+GUI BCOLOUR colour, #ref1 [, #ref2, #ref3, etc]
+
+This will change the background colour of the specified controls to 'colour'.
+= TOUCH(DOWN) This is a function that will return true if the screen is
+currently being touched (faster than TOUCH(X or Y)).
+
+~GUI BEEP
+GUI BEEP msec
+
+Where 'msec' is the number of milliseconds that the beeper should be driven. A
+time of 3ms produces a click while 100ms produces a short beep.
 
 ~GUI BITMAP
 GUI BITMAP  x,  y,  bits  [, width]  [, height]  [, scale]  [, c]  [, bc]
@@ -2020,6 +2606,13 @@ GUI BITMAP  x,  y,  bits  [, width]  [, height]  [, scale]  [, c]  [, bc]
 Displays the bits in a bitmap on a VGA/HDMI monitor or LCD panel starting at
 'x' and 'y' on an attached device. 'height' and 'width' are the dimensions of
 the bitmap as displayed on the device and default to 8x8.
+
+~GUI BUTTON
+GUI BUTTON #ref, caption$, StartX, StartY, Width, Height, FColour, BColour
+
+This will draw a momentary button which is a square switch with the caption on
+its face. When touched the visual image of the button will appear to be
+depressed and the control's value will be 1.
 
 ~GUI CALIBRATE
 GUI CALIBRATE
@@ -2029,6 +2622,21 @@ GUI CALIBRATE a,b,c,d,d
 NOT VGA OR HDMI VERSIONS This command is used to calibrate the touch feature
 on an LCD panel. It will display a series of targets on the screen and wait
 for each one to be precisely touched.
+
+~GUI CAPTION
+GUI CAPTION #ref, text$, StartX, StartY, Alignment, FColour, BColour
+
+This will draw a text string on the screen. It is similar to the basic drawing
+command TEXT, the difference being that MMBasic will automatically dim this
+control if a keyboard or number pad is displayed.
+
+~GUI CHECKBOX
+GUI CHECKBOX #10, "Test", 100, 100, 50, rgb(BLUE)
+
+Once created the user can check and uncheck the box using the touch feature of
+the LCD panel without the running BASIC program being involved. When needed
+the program can determine the check box value by using its reference number in
+the CtrlVal() function: IF CtrlVal(#10) THEN ..
 
 ~GUI CLICK
 GUI CLICK
@@ -2108,6 +2716,137 @@ GUI CURSOR SHOW
 
 Described with the rest of its family:  HELP GUI CURSOR
 
+~GUI DELETE
+GUI  DELETE #ref1 [, #ref2, #ref3, etc]
+
+This will delete the controls in the list. This includes removing the image of
+the control from the screen using the current background colour and freeing
+the memory used by the control.
+
+~GUI DISABLE
+GUI  DISABLE #ref1 [, #ref2, #ref3, etc]
+
+~GUI DISPLAYBOX
+GUI DISPLAYBOX #ref, StartX, StartY, Width, Height, FColour, BColour
+
+This will draw a box with rounded corners. Any string can be displayed in the
+box by using the CtrlVal(r) = command.
+
+~GUI ENABLE
+GUI  ENABLE #ref1 [, #ref2, #ref3, etc]
+
+This will undo the effects of GUI DISABLE and restore the controls in the list
+to normal operation. The keyword ALL can be used as the argument for all
+controls on the currently displayed page.
+
+~GUI FCOLOUR
+GUI FCOLOUR colour, #ref1 [, #ref2, #ref3, etc]
+
+This will change the foreground colour of the specified controls to 'colour'.
+This is especially handy for a LED which can change colour.
+
+~GUI FCOLOUR RGB(RED)
+GUI FCOLOUR RGB(RED), ButtonRef
+
+Full details: Advanced Graphics Functions.pdf
+
+~GUI FCOLOUR RGB(WHITE)
+GUI FCOLOUR RGB(WHITE), ButtonRef
+
+Full details: Advanced Graphics Functions.pdf
+
+~GUI FORMATBOX
+GUI FORMATBOX #ref, Format, StartX, StartY, Width, Height, FColour, BColour
+
+This will draw a box with rounded corners. When the box is touched a numeric
+keypad will appear similar to a Number Box.
+
+~GUI FORMATBOX CANCEL
+GUI FORMATBOX CANCEL
+
+This will dismiss a virtual keypad if it is displayed on the screen. It is the
+same as if the user touched the cancel key except that the touch up interrupt
+is not generated.
+
+~GUI FRAME
+GUI FRAME #ref, caption$, StartX, StartY, Width, Height, Colour
+
+This will draw a frame which is a box with round corners and a caption. A
+frame does not respond to touch but is useful when a group of controls need to
+be visually brought together.
+
+~GUI GAUGE
+GUI GAUGE #ref, StartX, StartY, Radius, FColour, BColour, min, max, nbrdec,
+units$, c1, ta, c2, tb, c3, tc, c4
+
+This will define a graphical circular analog gauge with a digital display in
+the centre showing the value and units. If specified the gauge will be
+coloured to provide a graphical indication of the signal level (e.g.
+
+~GUI HIDE
+GUI  HIDE #ref1 [, #ref2, #ref3, etc]
+
+This will hide the controls in the list. Hidden controls will not respond to
+touch and will be replaced on the screen with the current background colour.
+
+~GUI INTERRUPT
+GUI INTERRUPT fires when a touch-down or touch-up event occurs, enabling
+interrupt-driven touch handling without polling.
+
+Syntax: GUI INTERRUPT down_handler [, up_handler]
+
+~GUI LED
+GUI LED #ref, caption$, CenterX, CenterY, Diameter, Colour
+
+This will draw an indicator light (it looks like a panel mounted LED). When
+its value is set to one it will be illuminated and when it is set to zero it
+will be off (a dull version of its colour attribute).
+
+~GUI LISTBOX
+GUI LISTBOX #ref, array$(), x, y, w, h [, fc] [, bc] [, maxrows]
+
+Creates a list-selection control. The control itself is drawn as a single
+collapsed box (similar in appearance to a DISPLAYBOX) showing the currently
+selected item, with a small down-pointing marker on the right.
+
+~GUI LISTBOX CANCEL
+GUI LISTBOX CANCEL
+
+Closes an open listbox pop-up from your program without changing the
+selection. This is the listbox equivalent of GUI NUMBERBOX CANCEL / GUI
+TEXTBOX CANCEL.
+
+~GUI NUMBERBOX
+GUI NUMBERBOX #ref, StartX, StartY, Width, Height, FColour, BColour
+
+This will draw a box with rounded corners. When the box is touched a numeric
+keypad will appear on the screen as shown on the right.
+
+~GUI NUMBERBOX CANCEL
+GUI NUMBERBOX CANCEL
+
+This will dismiss a virtual keypad if it is displayed on the screen. It is the
+same as if the user touched the cancel key except that the touch up interrupt
+is not generated.
+
+~GUI PAGE
+GUI PAGE 4
+
+Full details: Advanced Graphics Functions.pdf
+
+~GUI RADIO
+GUI RADIO #ref, caption$, CenterX, CenterY, Radius, Colour
+
+This will draw a radio button with a caption. When touched the centre of the
+button will be illuminated to indicate that this option has been selected and
+the control's value will be 1.
+
+~GUI REDRAW
+GUI REDRAW #ref1 [,#ref2, #ref3, etc] or GUI REDRAW ALL
+
+This will redraw the controls on the screen. It is useful if the screen image
+has somehow been corrupted.
+
 ~GUI RESET LCDPANEL
 GUI RESET LCDPANEL
 
@@ -2116,6 +2855,39 @@ Initialisation is automatically done when the PicoMite firmware starts up but
 in some circumstances it may be necessary to interrupt power to the LCD panel
 (eg, to save battery power) and this command can then be used to reinitialise
 the display.
+
+~GUI SETUP
+GUI SETUP 1
+
+Full details: Advanced Graphics Functions.pdf
+
+~GUI SHOW
+GUI  SHOW #ref1 [, #ref2, #ref3, etc]
+
+This will undo the effects of GUI HIDE and restore the controls in the list to
+being visible and capable of normal operation. The keyword ALL can be used as
+the argument for all controls.
+
+~GUI SLIDER
+GUI SLIDER #ref, x, y, w, h [, fc] [, bc] [, min] [, max] [, inc]
+
+Creates a slider: a draggable thumb on a track for entering a continuous value
+by touch.
+
+~GUI SPINBOX
+GUI SPINBOX #ref, StartX, StartY, Width, Height, FColour, BColour, Step,
+Minimum, Maximum
+
+This will draw a box with up/down icons on either end. When these icons are
+touched the number in the box will be incremented or decremented by the
+'StepValue', holding down the touch will repeat at a fast rate.
+
+~GUI SWITCH
+GUI SWITCH #ref, caption$, StartX, StartY, Width, Height, FColour, BColour
+
+This will draw a latching switch with the caption on its face. When touched
+the visual image of the button will appear to be depressed and the control's
+value will be 1.
 
 ~GUI TEST LCDPANEL
 GUI TEST LCDPANEL
@@ -2130,6 +2902,19 @@ WITH TOUCH SUPPORT ONLY Will test the display touch feature on an LCD panel.
 The screen will be cleared and MMBasic will wait for a touch which will cause
 a white dot to be placed on the display marking the exact touch position on
 the screen.
+
+~GUI TEXTBOX
+GUI TEXTBOX #ref, StartX, StartY, Width, Height, FColour, BColour
+
+This will draw a box with rounded corners. When the box is touched a QWERTY
+keyboard will appear on the screen as shown on the right.
+
+~GUI TEXTBOX CANCEL
+GUI TEXTBOX CANCEL
+
+This will dismiss a virtual keyboard if it is displayed on the screen. It is
+the same as if the user touched the cancel key except that the touch up
+interrupt is not generated.
 
 ~HEX$
 HEX$( number [, chars])
@@ -2244,6 +3029,30 @@ IF condition THEN linenbr
 For Microsoft compatibility a GOTO is assumed if the THEN statement is
 followed by a number. A label is invalid in this construct.
 
+~IF ALARM THEN
+IF ALARM THEN CtrlVal(ALARM_LED) = 1
+
+It is much easier to remember what MAIN_SWITCH does than remembering what
+control the number 5 refers to. Also, when you have a lot of controls it is
+much easier to renumber the controls when all their numbers are defined at the
+one place at the start of the program.
+
+~IF ASC
+IF ASC(k$) = 128 AND sy% > 0 THEN sy% = sy% - 1
+
+Up
+
+~IF PIN(GP2)
+IF PIN(GP2) = 0 THEN
+
+0 = pressed (active low with pull-up)
+
+~IN
+In addition to MATH commands, several ARRAY commands also support structure
+member arrays directly.
+
+Supported ARRAY
+
 ~INC
 INC var [,increment]
 
@@ -2344,11 +3153,18 @@ JSON input stored in the longstring array%(). Note that many JSON data sets
 are quite large and may be too big to parse with the memory available.
 
 ~KEYBOARD
-KEYBOARD is the first word of several entries:
+Keyboard input is available on all PicoMite builds. The KEYDOWN function
+supports both USB and PS2 keyboards, providing simultaneous multi-key
+detection for game development. For game development, non-blocking techniques
+are essential - you need to check for key presses without halting the game
+loop.
 
-KEYBOARD ON
+Full details: Game_Input_Devices_Manual.pdf
 
-List them all with:  HELP KEYBOARD*
+~KEYBOARD OFF
+KEYBOARD OFF
+
+hide the keyboard
 
 ~KEYBOARD ON
 KEYBOARD ON
@@ -2359,6 +3175,16 @@ RP2350 VGA USB AND HDMI USB VERSIONS ONLY Display (ON) or remove (OFF) the
 on-screen keyboard configured with OPTION SCREEN KEYBOARD. The on-screen
 keyboard is automatically displayed at the command prompt and in the full
 screen editor and is removed while a program is running.
+
+~KEYBOARD(INKEY$)
+Keyboard (INKEY$)
+
+Any keyboard (USB/PS2/Serial)
+
+~KEYBOARD(KEYDOWN)
+Keyboard (KEYDOWN)
+
+USB or PS2 keyboard
 
 ~KEYDOWN
 KEYDOWN(n)
@@ -2552,6 +3378,11 @@ LIST ALL [fname$]
 List a program on the console. LIST on its own will list the program with a
 pause at every screen full.
 
+~LIST COLLISIONS
+LIST COLLISIONS
+
+List Collisions
+
 ~LIST COMMANDS
 LIST COMMANDS
 or
@@ -2568,6 +3399,11 @@ Lists the current status of all pins on the processor
 LIST SYSTEM I2C
 
 Lists a map of all I2C devices connected to the system I2C bus
+
+~LIST TYPE
+LIST TYPE with Nested Structures
+
+The LIST TYPE command shows nested structure types by name:
 
 ~LIST VARIABLES
 LIST VARIABLES [s%()]
@@ -3343,6 +4179,30 @@ MEMORY SET WORD address, word, numberofwords
 
 Described with the rest of its family:  HELP MEMORY SET
 
+~MEMORY SHARE CLIENT
+MEMORY SHARE CLIENT pio, sm, data_pin, clock_pin, address, count [, bus_width]
+
+Full details: MEMORY_SHARE_User_Manual.pdf
+
+~MEMORY SHARE HOST
+MEMORY SHARE HOST pio, sm, data_pin, clock_pin, address, count [, clock_div [,
+bus_width]]
+
+Full details: MEMORY_SHARE_User_Manual.pdf
+
+~MEMORY SHARE STOP
+MEMORY SHARE STOP          ' stops both host and client
+
+~MEMORY SHARE STOP CLIENT
+MEMORY SHARE STOP CLIENT
+
+stops client only
+
+~MEMORY SHARE STOP HOST
+MEMORY SHARE STOP HOST
+
+stops host only
+
 ~MEMORY UNPACK
 MEMORY UNPACK source%()/sourceaddress%, dest%()/destaddress%, number, size
 
@@ -4031,7 +4891,7 @@ Described with the rest of its family:  HELP MM.INFO$(IP ADDRESS)
 ~MM.INFO(KEYBOARD)
 MM.INFO(KEYBOARD)
 
-Described with the rest of its family:  HELP MM.INFO$(KEYBOARD)
+Returns the current runtime state of the on-screen keyboard as a string:
 
 ~MM.INFO(LCD320)
 MM.INFO(LCD320)
@@ -4405,6 +5265,13 @@ MOUSE SET channel, x-coord, y-coord [, wheel-count]
 Sets the current position that will be returned by the mouse x, y and
 optionally wheel positions
 
+~MSGBOX
+MSGBOX (msg$, b1$ [,b2$ ... b4$])
+
+This function will display a message box on the screen with one to four touch
+sensitive buttons. All other controls will be disabled until the user touches
+one of the buttons.
+
 ~NEW
 NEW
 
@@ -4417,9 +5284,10 @@ NEXT comes at the end of a FOR-NEXT loop; see FOR. The 'counter-variable'
 specifies exactly which loop is being operated on.
 
 ~NOT
-NOT
+Not BLE-related, but a common gotcha: Visual Studio's MSVC tools
 
-Described with the rest of its family:  HELP OPERATORS
+aren't on PATH. Launch VS Code from the Developer Command Prompt for VS, or
+CMake: Select a Kit and choose the Visual Studio kit.
 
 ~OCT$
 OCT$( number [, chars])
@@ -4619,6 +5487,12 @@ OPTION BREAK nn
 
 Set the value of the break key to the ASCII value 'nn'. This key is used to
 interrupt a running program.
+
+~OPTION CACHE DEBUG
+OPTION CACHE DEBUG ON | OFF
+
+When debug mode is on, every statement that fails to compile prints a
+diagnostic line to the console:
 
 ~OPTION CACHE DEBUG ON
 OPTION CACHE DEBUG ON or OPTION CACHE DEBUG OFF
@@ -4989,6 +5863,11 @@ OPTION POWER PFM | PWM
 Changes operation of the 3.3V supply switch mode power supply. By default this
 runs in PFM mode.
 
+~OPTION PROFILING
+OPTION PROFILING
+
+Syntax
+
 ~OPTION PROFILING ON
 OPTION PROFILING ON
 or
@@ -5141,6 +6020,11 @@ defaults to 50, lower is more sensitive (FT6336 only).
 
 See also: TOUCH
 
+~OPTION TRACECACHE
+OPTION TRACECACHE
+
+Syntax
+
 ~OPTION TRACECACHE ON
 OPTION TRACECACHE ON [size [,flags]]
 or
@@ -5205,8 +6089,11 @@ Halt execution of the running program for 'delay' ms. This can be a fraction.
 ~PEEK
 PEEK is the first word of several entries:
 
-PEEK(BP)         PEEK(CFUNADDR)   PEEK(SP)         PEEK(VARHEADER)
-PEEK(BYTE)       PEEK(PROGMEM)    PEEK(VAR)        PEEK(WP)
+PEEK(BP)              PEEK(STEPPER A)       PEEK(STEPPER Y)
+PEEK(BYTE)            PEEK(STEPPER ACTIVE)  PEEK(STEPPER Z)
+PEEK(CFUNADDR)        PEEK(STEPPER BUFFER)  PEEK(VAR)
+PEEK(PROGMEM)         PEEK(STEPPER STATUS)  PEEK(VARHEADER)
+PEEK(SP)              PEEK(STEPPER X)       PEEK(WP)
 
 List them all with:  HELP PEEK*
 
@@ -5252,6 +6139,90 @@ PEEK(SP n%)
 CFUNADDR will return the address (32-bits) of the CFunction 'cfun' in memory.
 This address can be passed to another CFunction which can then call it to
 perform some common process.
+
+~PEEK(STEPPER A)
+PEEK(STEPPER A)
+
+Returns current workspace axis position in mm (X/Y/Z) or degrees (A), or
+active state (ACTIVE returns 1 when stepper is actively processing queued
+work, 0 when idle, or -1 if the stepper subsystem has not been initialized).
+STATUS returns a bitmap of safety and coordinate state: - bit0: X_MIN limit
+asserted - bit1: X_MAX limit asserted - bit2: Y_MIN limit asserted - bit3:
+Y_MAX limit asserted - bit4: Z_MIN limit asserted - bit5: Z_MAX limit asserted
+- bit6: E-STOP asserted - bit7: position known (machine coordinates
+established).
+
+~PEEK(STEPPER ACTIVE)
+PEEK(STEPPER ACTIVE)
+
+Returns current workspace axis position in mm (X/Y/Z) or degrees (A), or
+active state (ACTIVE returns 1 when stepper is actively processing queued
+work, 0 when idle, or -1 if the stepper subsystem has not been initialized).
+STATUS returns a bitmap of safety and coordinate state: - bit0: X_MIN limit
+asserted - bit1: X_MAX limit asserted - bit2: Y_MIN limit asserted - bit3:
+Y_MAX limit asserted - bit4: Z_MIN limit asserted - bit5: Z_MAX limit asserted
+- bit6: E-STOP asserted - bit7: position known (machine coordinates
+established).
+
+~PEEK(STEPPER BUFFER)
+PEEK(STEPPER BUFFER)
+
+Returns current workspace axis position in mm (X/Y/Z) or degrees (A), or
+active state (ACTIVE returns 1 when stepper is actively processing queued
+work, 0 when idle, or -1 if the stepper subsystem has not been initialized).
+STATUS returns a bitmap of safety and coordinate state: - bit0: X_MIN limit
+asserted - bit1: X_MAX limit asserted - bit2: Y_MIN limit asserted - bit3:
+Y_MAX limit asserted - bit4: Z_MIN limit asserted - bit5: Z_MAX limit asserted
+- bit6: E-STOP asserted - bit7: position known (machine coordinates
+established).
+
+~PEEK(STEPPER STATUS)
+PEEK(STEPPER STATUS)
+
+Returns current workspace axis position in mm (X/Y/Z) or degrees (A), or
+active state (ACTIVE returns 1 when stepper is actively processing queued
+work, 0 when idle, or -1 if the stepper subsystem has not been initialized).
+STATUS returns a bitmap of safety and coordinate state: - bit0: X_MIN limit
+asserted - bit1: X_MAX limit asserted - bit2: Y_MIN limit asserted - bit3:
+Y_MAX limit asserted - bit4: Z_MIN limit asserted - bit5: Z_MAX limit asserted
+- bit6: E-STOP asserted - bit7: position known (machine coordinates
+established).
+
+~PEEK(STEPPER X)
+PEEK(STEPPER X)
+
+Returns current workspace axis position in mm (X/Y/Z) or degrees (A), or
+active state (ACTIVE returns 1 when stepper is actively processing queued
+work, 0 when idle, or -1 if the stepper subsystem has not been initialized).
+STATUS returns a bitmap of safety and coordinate state: - bit0: X_MIN limit
+asserted - bit1: X_MAX limit asserted - bit2: Y_MIN limit asserted - bit3:
+Y_MAX limit asserted - bit4: Z_MIN limit asserted - bit5: Z_MAX limit asserted
+- bit6: E-STOP asserted - bit7: position known (machine coordinates
+established).
+
+~PEEK(STEPPER Y)
+PEEK(STEPPER Y)
+
+Returns current workspace axis position in mm (X/Y/Z) or degrees (A), or
+active state (ACTIVE returns 1 when stepper is actively processing queued
+work, 0 when idle, or -1 if the stepper subsystem has not been initialized).
+STATUS returns a bitmap of safety and coordinate state: - bit0: X_MIN limit
+asserted - bit1: X_MAX limit asserted - bit2: Y_MIN limit asserted - bit3:
+Y_MAX limit asserted - bit4: Z_MIN limit asserted - bit5: Z_MAX limit asserted
+- bit6: E-STOP asserted - bit7: position known (machine coordinates
+established).
+
+~PEEK(STEPPER Z)
+PEEK(STEPPER Z)
+
+Returns current workspace axis position in mm (X/Y/Z) or degrees (A), or
+active state (ACTIVE returns 1 when stepper is actively processing queued
+work, 0 when idle, or -1 if the stepper subsystem has not been initialized).
+STATUS returns a bitmap of safety and coordinate state: - bit0: X_MIN limit
+asserted - bit1: X_MAX limit asserted - bit2: Y_MIN limit asserted - bit3:
+Y_MAX limit asserted - bit4: Z_MIN limit asserted - bit5: Z_MAX limit asserted
+- bit6: E-STOP asserted - bit7: position known (machine coordinates
+established).
 
 ~PEEK(VAR)
 PEEK(VAR var, +/-offset)
@@ -5638,6 +6609,11 @@ PLAY PREVIOUS
 Stops playback of the current audio file and starts the previous one in the
 directory
 
+~PLAY RELEASE
+PLAY RELEASE
+
+Full details: PLAY_SAMPLE_User_Manual.pdf
+
 ~PLAY SAMPLE
 PLAY SAMPLE left%(), right%(), freq, attack, decay, sustain, release [, freqR,
 attackR, decayR, sustainR, releaseR] [, interrupt] or PLAY RELEASE
@@ -5651,6 +6627,17 @@ PLAY SOUND soundno, channelno, type [,frequency] [,volume]
 Play a series of sounds simultaneously on the audio output. 'soundno' is the
 sound number and can be from 1 to 4 allowing for four simultaneous sounds on
 each channel.
+
+~PLAY STOP
+PLAY STOP silences all four channels, empties every queue and releases the
+audio output. PLAY PAUSE and PLAY RESUME freeze and continue the whole engine,
+queues included. MM.INFO(SOUND) returns BBC while it is playing and PAUSED BBC
+while paused.
+
+When every channel is silent and every queue is empty the audio output is
+released automatically, as it is when a PLAY TONE ends, so a program does not
+need PLAY STOP between a tune and a following PLAY WAV or PLAY MP3. The next
+PLAY BBC SOUND starts the engine again.
 
 ~PLAY STREAM
 PLAY STREAM buffer%(), readpointer%, writepointer%
@@ -5772,6 +6759,11 @@ in pixels.
 
 See also: OPEN
 
+~PRINT TOUCH(X)
+PRINT TOUCH(X) TOUCH(Y)
+
+Full details: Advanced Graphics Functions.pdf
+
 ~PULSE
 PULSE pin, width
 
@@ -5886,6 +6878,187 @@ RAY
 RP2350 VERSIONS EXCEPT WEBMITERP2350 Command to allow the development of games
 using raycasting techniques. See the separate manual
 'Raycaster_User_Manual.pdf'
+
+~RAY CAMERA
+RAY CAMERA x!, y!, angle! [, fov!]
+
+Place and orient the viewer camera.
+
+~RAY CAST
+RAY CAST angle!
+
+Cast a single ray from the camera position at an absolute angle.
+
+~RAY CELL
+RAY CELL x, y, value
+
+Write a value to a map cell at runtime.
+
+~RAY CLOSE
+RAY CLOSE
+
+Free all raycaster state (map, column arrays, sprites). Called automatically
+on program end.
+
+~RAY COLOUR
+RAY COLOUR floor_fg, ceil_fg [, floor_bg, ceil_bg, floor_pat, ceil_pat]
+
+Set the floor and ceiling appearance.
+
+~RAY DEFINE
+RAY DEFINE type, fg, bg, pattern [, door]
+
+Set the visual properties for a wall type.
+
+~RAY DOOR
+RAY DOOR x, y, offset!
+
+Set a sliding door at a map cell with a given open offset.
+
+~RAY DOOR CLEAR
+RAY DOOR CLEAR
+
+Remove all active door slots.
+
+~RAY DOOR CLOSE
+RAY DOOR CLOSE x, y
+
+Remove the door slot at (x, y). The cell reverts to a normal solid wall (as if
+RAY DOOR was never called).
+
+~RAY MAP
+RAY MAP w, h, map%()
+
+Define the world grid using an integer array.
+
+See also: RAY DEFINE
+
+~RAY MINIMAP
+RAY MINIMAP x, y, size
+
+Draw a top-down minimap overlay onto the framebuffer.
+
+~RAY MOVE
+RAY MOVE speed! [, strafe!]
+
+Move the camera with built-in collision detection.
+
+~RAY RENDER
+RAY RENDER
+
+Render the complete 3D scene into the current WriteBuf framebuffer. This
+draws:
+
+~RAY SPRITE
+RAY SPRITE id, spritenum, x!, y!
+
+Place or update a billboard sprite in the world.
+
+~RAY SPRITE CLEAR
+RAY SPRITE CLEAR
+
+Remove all sprites.
+
+~RAY SPRITE REMOVE
+RAY SPRITE REMOVE id
+
+Remove sprite id from the raycaster (stop rendering it).
+
+~RAY TURN
+RAY TURN degrees!
+
+Rotate the camera heading.
+
+~RAY(CAMA)
+RAY(CAMA)
+
+Camera angle (degrees)
+
+~RAY(CAMX)
+RAY(CAMX)
+
+Camera X position
+
+~RAY(CAMY)
+RAY(CAMY)
+
+Camera Y position
+
+~RAY(CASTDIST)
+RAY(CASTDIST)
+
+Distance from last `RAY CAST
+
+~RAY(CASTSIDE)
+RAY(CASTSIDE)
+
+Side hit from last `RAY CAST` (0=X-side, 1=Y-side)
+
+~RAY(CASTWALL)
+RAY(CASTWALL)
+
+Wall type from last `RAY CAST
+
+~RAY(CASTX)
+RAY(CASTX)
+
+Map X cell from last `RAY CAST
+
+~RAY(CASTY)
+RAY(CASTY)
+
+Map Y cell from last `RAY CAST
+
+~RAY(CELL)
+RAY(CELL x, y)
+
+Map cell value at (x, y)
+
+~RAY(DEFINE)
+RAY(DEFINE type, property)
+
+Wall definition field (type: integer or single char). 0=fg, 1=bg, 2=pattern,
+3=door
+
+~RAY(DIST)
+RAY(DIST col)
+
+Perpendicular wall distance at screen column `col
+
+~RAY(DOOR)
+RAY(DOOR x, y)
+
+Door offset at (x, y), or  1.0 if not an active door
+
+~RAY(MAPH)
+RAY(MAPH)
+
+Map height
+
+~RAY(MAPW)
+RAY(MAPW)
+
+Map width
+
+~RAY(SPRITES)
+RAY(SPRITES)
+
+Count of active sprites
+
+~RAY(SPRITEX)
+RAY(SPRITEX id)
+
+World X of sprite `id
+
+~RAY(SPRITEY)
+RAY(SPRITEY id)
+
+World Y of sprite `id
+
+~RAY(WALL)
+RAY(WALL col)
+
+Wall type hit at screen column `col
 
 ~RBOX
 RBOX  x,  y,  w,  h  [, r]  [,c] [,fill]
@@ -6018,9 +7191,19 @@ RTC GETREG reg, var
 Described with the rest of its family:  HELP RTC
 
 ~RTC SETTIME
-RTC SETTIME year, month, day, hour, minute, second
+RTC SETTIME CtrlVal(#1)
 
-Described with the rest of its family:  HELP RTC
+You can use the USA style DATETIME4 to get the date/time. In that case you
+would use this to set the RTC:
+
+~RTC SETTIME MID$
+RTC SETTIME MID$(CtrlVal(#1),4,3) + LEFT$(CtrlVal(#1),2) +
+RIGHT$((CtrlVal(#1),9)
+
+MMBasic will try to position the virtual keypad on the screen so as to not
+obscure the format box that caused it to appear. A pen down interrupt will be
+generated when the keypad is deployed and a key up interrupt will be generated
+when all the required data has been entered and the keypad is hidden.
 
 ~RUN
 RUN
@@ -6079,6 +7262,11 @@ SEEK [#]fnbr, pos
 Will position the read/write pointer in a file that has been opened on the
 Flash Filesystem or SD Card for RANDOM access to the 'pos' byte.
 
+~SELECT
+Select Case Asc(k$)
+
+Full details: Advanced Graphics Functions.pdf
+
 ~SELECT CASE
 SELECT CASE value
   CASE testexp [[, testexp] ...]
@@ -6088,6 +7276,16 @@ SELECT CASE value
 
 Executes one of several groups of statements, depending on the value of an
 expression. 'value' is the expression to be tested.
+
+~SELECT CASE TOUCH(LASTREF)
+SELECT CASE TOUCH(LASTREF)
+
+Full details: Advanced Graphics Functions.pdf
+
+~SELECT CASE TOUCH(REF)
+SELECT CASE TOUCH(REF)
+
+Full details: Advanced Graphics Functions.pdf
 
 ~SERVO
 SERVO channel [positionA] [,positionB]
@@ -6176,6 +7374,16 @@ SETTICK RESUME, target [, nbr]
 Pause or resume the specified timer. When paused the interrupt is delayed but
 the current count is maintained.
 
+~SETTICK PAUSE
+SETTICK PAUSE [, tick_number]
+
+pause
+
+~SETTICK RESUME
+SETTICK RESUME [, tick_number]
+
+resume
+
 ~SGN
 SGN( number )
 
@@ -6186,6 +7394,12 @@ and -1 for negative numbers.
 SIN( number )
 
 Returns the sine of the argument 'number' in radians.
+
+~SIN COS TAN ASIN ACOS ATAN SQR ABS INT EXP LOG SGN FIX CINT DEG RAD
+SIN COS TAN ASIN ACOS ATAN SQR ABS INT EXP LOG SGN FIX CINT DEG RAD
+
+Trig intrinsics bail to the interpreter when OPTION ANGLE DEGREES is in
+effect. LOG bails when the argument is <= 0.
 
 ~SLEW
 SLEW dRA1, dDec1, flipRA, flipDec, dRA2, dDec2, mountRA, mountDec, RAs, DECs,
@@ -6245,6 +7459,228 @@ SPRITE()
 
 See Appendix G and the separate SPRITE_User_Manual pdf
 
+~SPRITE CLOSE
+SPRITE CLOSE #n
+
+Closes a single sprite and frees its memory.
+
+~SPRITE CLOSE ALL
+SPRITE CLOSE ALL
+
+Closes all sprites and static objects.
+
+~SPRITE COPY
+SPRITE COPY #source, #dest, count
+
+Creates copies of a sprite that share the same image data.
+
+~SPRITE HIDE
+SPRITE HIDE #n
+
+Hides a single sprite.
+
+~SPRITE HIDE ALL
+SPRITE HIDE ALL
+
+Hides all currently displayed sprites.
+
+~SPRITE HIDE SAFE
+SPRITE HIDE SAFE #n
+
+Safely hides a sprite, handling overlapping sprites.
+
+~SPRITE INTERRUPT
+SPRITE INTERRUPT label
+
+Sets the interrupt handler for sprite-to-sprite and edge collisions.
+
+~SPRITE LOAD
+SPRITE LOAD filename$ [, start_sprite] [, mode]
+
+Loads sprites from a sprite definition file.
+
+~SPRITE LOADARRAY
+SPRITE LOADARRAY #n, width, height, array()
+
+Loads a sprite from a numeric array.
+
+~SPRITE LOADBMP
+SPRITE LOADBMP #n, filename$ [, x_offset, y_offset, width, height]
+
+Loads a sprite from a BMP file.
+
+~SPRITE LOADPNG
+SPRITE LOADPNG #n, filename$ [, transparent] [, cutoff]
+
+Loads a sprite from a PNG file.
+
+~SPRITE MOVE
+SPRITE MOVE
+
+Executes all pending SPRITE NEXT movements.
+
+~SPRITE NEXT
+SPRITE NEXT #n, x, y
+
+Sets the next position for a sprite (used with SPRITE MOVE).
+
+~SPRITE NOINTERRUPT
+SPRITE NOINTERRUPT
+
+Disables the sprite collision interrupt.
+
+~SPRITE NOSTINTERRUPT
+SPRITE NOSTINTERRUPT
+
+Disables the static object collision interrupt.
+
+~SPRITE READ
+SPRITE READ #n, x, y, width, height
+
+Reads a sprite directly from the screen.
+
+~SPRITE RESTORE
+SPRITE RESTORE
+
+Restores all sprites hidden by SPRITE HIDE ALL.
+
+~SPRITE SCROLL
+SPRITE SCROLL x, y [, fill_color]
+
+Scrolls the background and layer 0 sprites.
+
+~SPRITE SET TRANSPARENT
+SPRITE SET TRANSPARENT color
+
+Sets the transparent color for all sprites.
+
+~SPRITE SHOW
+SPRITE SHOW #n, x, y, layer [, rotation]
+
+Displays a sprite at a specified position.
+
+~SPRITE SHOW SAFE
+SPRITE SHOW SAFE #n, x, y, layer [, rotation] [, newbuffer]
+
+Displays a sprite safely, properly handling overlapping sprites.
+
+~SPRITE STATIC
+SPRITE STATIC #n, x, y, width, height  ' Define
+SPRITE STATIC #n, OFF                   ' Remove
+
+Defines or removes a static object.
+
+~SPRITE STATIC CLEAR
+SPRITE STATIC CLEAR
+
+Removes all static objects.
+
+~SPRITE STINTERRUPT
+SPRITE STINTERRUPT label
+
+Sets the interrupt handler for static object collisions.
+
+~SPRITE SWAP
+SPRITE SWAP #displayed, #hidden [, rotation]
+
+Swaps a displayed sprite with a hidden sprite of the same size.
+
+~SPRITE WRITE
+SPRITE WRITE #n, x, y [, rotation]
+
+Draws a sprite directly to the screen without tracking.
+
+~SPRITE(A)
+SPRITE(A, #n)
+
+Returns the memory address of sprite #n's image data.
+
+~SPRITE(B)
+SPRITE(B, #n)
+
+Performs pixel-level collision detection between the sprite and the background
+it is covering. This function compares the sprite's non-transparent pixels
+against the background stored when the sprite was displayed.
+
+~SPRITE(C)
+SPRITE(C, #n [, index])
+
+Returns collision information for sprite #n.
+
+~SPRITE(D)
+SPRITE(D, #n1, #n2)
+
+Returns the distance in pixels between the centers of sprites #n1 and #n2.
+Returns -1 if either sprite is not displayed.
+
+~SPRITE(E)
+SPRITE(E, #n)
+
+Returns the edge collision flags for sprite #n.
+
+~SPRITE(H)
+SPRITE(H, #n)
+
+Returns the height of sprite #n in pixels. Returns -1 if sprite not loaded.
+
+~SPRITE(L)
+SPRITE(L, #n)
+
+Returns the layer of sprite #n. Returns -1 if sprite not displayed.
+
+~SPRITE(N)
+SPRITE(N)
+
+Returns the total number of sprites currently displayed.
+
+~SPRITE(S)
+SPRITE(S)
+
+Returns the sprite number that triggered the last collision interrupt.
+
+~SPRITE(ST COLLISION)
+SPRITE(ST, COLLISION)
+
+Returns the sprite number that collided with a static object (set when
+STINTERRUPT fires).
+
+~SPRITE(ST OBJECT)
+SPRITE(ST, OBJECT)
+
+Returns the static object number that was hit (set when STINTERRUPT fires).
+
+~SPRITE(ST)
+SPRITE(ST, #n, X)
+
+Returns the X position of static object #n. Returns -1 if not defined.
+
+~SPRITE(T)
+SPRITE(T, #n)
+
+Returns the cumulative collision bitmask for sprite #n. Each bit represents a
+sprite that has collided (bit 0 = sprite 1, etc.).
+
+~SPRITE(V)
+SPRITE(V, #n1, #n2)
+
+Returns the angle (in radians) from sprite #n1 to sprite #n2, measured
+clockwise from north. Returns -1 if either sprite is not displayed.
+
+~SPRITE(W)
+SPRITE(W, #n)
+
+Returns the width of sprite #n in pixels. Returns -1 if sprite not loaded.
+
+~SPRITE(X)
+SPRITE(X, #n)
+
+Returns the X position of sprite #n. Returns 10000 if sprite not displayed.
+
+~SPRITE(Y)
+SPRITE(Y, #n)
+
+Returns the Y position of sprite #n. Returns 10000 if sprite not displayed.
+
 ~SQR
 SQR( number )
 
@@ -6276,6 +7712,173 @@ controlling up to 3 stepper motor axes (X, Y, Z) with support for G-code
 execution, acceleration planning, and hardware limit switches. This is
 described in detail in the file Stepper_Reference.pdf included in the firmware
 download zip file.
+
+~STEPPER ARC
+STEPPER ARC
+STEPPER ARC tolerance [, angle_deg [, max_segments]]
+
+Controls how G2/G3 arcs are broken into line segments. With no arguments the
+current settings are printed.
+
+~STEPPER AXIS
+STEPPER AXIS axis, step_pin, dir_pin [, enable_pin] [, dir_invert] [,
+steps_per_unit] [, max_vel] [, max_accel] [, home_backoff_mm]
+
+Configures a specific axis (X, Y, Z, or A). - axis: X, Y, Z, or A.
+
+~STEPPER BUFFER
+STEPPER BUFFER
+
+Prints the state of the G-code queue and of the move the ISR is executing:
+blocks held against buffer capacity, the count of blocks executed so far, the
+ISR tick count, and the current move's phase, step rate, cruise and exit rates
+and steps remaining. Where STEPPER STATUS reports the machine, this reports
+the pipeline - it is the command to use when motion stalls or stutters and you
+need to see whether the buffer is starving.
+
+~STEPPER CLEAR
+STEPPER CLEAR
+
+Clears the G-code buffer (only when motion is idle).
+
+~STEPPER CLOSE
+STEPPER CLOSE
+
+Shuts down the stepper subsystem, releases resources, and deconfigures
+stepper-owned GPIO pins.
+
+~STEPPER ENABLE
+STEPPER ENABLE X|Y|Z|A|ALL [, 0|1]
+
+Drives the enable pin of one axis, or of every axis when ALL is given. The
+second argument enables (1, the default) or disables (0) the driver; the pin
+is driven active low.
+
+~STEPPER ESTOP
+STEPPER ESTOP
+
+Software emergency stop: halts motion immediately, clears buffer, and turns
+spindle off. Drivers are disabled unless estop_keep_enabled was set to 1 in
+STEPPER INIT.
+
+~STEPPER GC
+STEPPER GC <gcode> [words...]
+
+Executes a standard G-code command string. Supported codes: G0, G1, G2, G3,
+G4, G28, G90, G91, G92, M3, M5.
+
+~STEPPER GC G28
+STEPPER GC G28                       ' run the homing cycle
+
+- Minimum speed: StallGuard4 requires the motor to be moving above some
+minimum velocity (set by TCOOLTHRS). The G28 routine performs a fast approach
+followed by a slow refine pass; the slow pass will be below TCOOLTHRS and DIAG
+will not fire on it.
+
+~STEPPER GCODE
+STEPPER GCODE G0|G1|G2|G3|G4|G28|G90|G91|G92|M3|M5 [, X, x] [, Y, y] [, Z, z]
+[, A, a] [, F, feed] [, I, i] [, J, j] [, K, k] [, R, r] [, P, ms]
+
+Alternative syntax for adding motion commands to the buffer. All parameters
+must be comma separated.
+
+~STEPPER GS
+STEPPER GS string$
+
+Executes a G-code command supplied as a string expression. Accepts any MMBasic
+string variable, literal, or expression and passes it to the same G-code
+parser as STEPPER GC.
+
+~STEPPER HWLIMITS
+STEPPER HWLIMITS x_min, y_min, z_min [,x_max, y_max, z_max [,invert_mask]]
+
+Configures hardware limit switch pins. Pins must be mutually exclusive with
+AXIS/SPINDLE/E-STOP, except min and max may share the same pin on the same
+axis.
+
+~STEPPER INIT
+STEPPER INIT [arc_tolerance] [,buffer_size] [,estop_pin] [,estop_keep_enabled]
+
+Initializes the stepper subsystem. Must be called before any other STEPPER
+commands.
+
+~STEPPER INVERT
+STEPPER INVERT X|Y|Z|A, 0|1
+
+Sets the direction-invert flag for one axis, the same setting as the
+dir_invert argument of STEPPER AXIS, so the sense of an axis can be corrected
+without reconfiguring it. Takes effect on the next move.
+
+~STEPPER JERK
+STEPPER JERK value
+
+Sets the jerk limit in mm/s^3 for S-curve planning.
+
+~STEPPER LIMITS
+STEPPER LIMITS axis, min_mm, max_mm
+
+Sets soft limits for an axis (X, Y, or Z) in mm. The A axis has no soft
+limits.
+
+~STEPPER POSITION
+STEPPER POSITION axis, position
+
+Sets the current position of an axis (X/Y/Z in mm; A in degrees) to the
+specified value.
+
+~STEPPER POSITION HOME
+STEPPER POSITION HOME
+
+Sets all axes to position 0 and clears G92 offsets.
+
+~STEPPER RECOVER
+STEPPER RECOVER
+
+Returns the system to a safe idle state after a fault: motion is disarmed and
+the G-code buffer is cleared, and the command confirms with 'Stepper recovered
+- disarmed, buffer cleared'. Axis configuration is kept, so this is the normal
+way back after an E-STOP or a limit trip - use STEPPER RUN to arm again.
+
+~STEPPER RESET
+STEPPER RESET
+
+Returns all four axes to their power-on defaults and turns the spindle off.
+Axis configuration, the spindle pin and the E-STOP pin are all cleared, and
+any latched E-STOP trip is released, so the axes must be configured again with
+STEPPER AXIS before motion.
+
+~STEPPER RUN
+STEPPER RUN [,0|1]
+
+Arms the system and begins executing buffered commands. Optional mode argument
+controls behavior when the queue drains: - 0 (default): remain armed with
+drivers enabled while idle.
+
+~STEPPER SCURVE
+STEPPER SCURVE 0|1
+
+Enables (1) or disables (0) S-curve acceleration profiling for smoother
+motion.
+
+~STEPPER SPINDLE
+STEPPER SPINDLE pin [,invert]
+
+Configures a spindle control pin used by buffered M3/M5 commands. Pin must not
+conflict with AXIS/HWLIMITS/E-STOP pins.
+
+~STEPPER STATUS
+STEPPER STATUS
+
+Displays detailed system status, including axis positions, buffer state, and
+configuration (including auto-disable-on-idle mode).
+
+~STEPPER TUNE
+STEPPER TUNE axis [, dir_invert] [, steps_per_unit] [, max_vel] [, max_accel]
+[, home_backoff_mm]
+
+Adjusts the motion parameters of an already-configured axis without closing
+and re-initialising the stepper subsystem - useful for interactively tuning an
+axis. Unlike STEPPER AXIS, it never changes the step/dir/enable pins.
 
 ~STR$
 STR$( number )
@@ -6329,6 +7932,41 @@ NOT PICOMITEMIN Returns data from a structure (also known as a User-Defined
 Type) which allows related variables of different types to be grouped under a
 single name. This is described in full in the file
 MMBasic_Structures_Manual.pdf included in the firmware download zip file.
+
+~STRUCT COPY
+STRUCT COPY
+
+The STRUCT COPY command provides the same functionality with explicit syntax:
+
+~STRUCT LOAD
+STRUCT LOAD
+
+Reads structure data from an already-open file:
+
+~STRUCT SAVE
+STRUCT SAVE
+
+Writes structure data to an already-open file:
+
+~STRUCT(FIND)
+Struct(FIND arr().member, value [,start])
+
+Find element with matching member value, returns index or -1
+
+~STRUCT(OFFSET)
+Struct(OFFSET typename$, element$)
+
+Get byte offset of member within structure type
+
+~STRUCT(SIZEOF)
+Struct(SIZEOF typename$)
+
+Get size in bytes of a structure type
+
+~STRUCT(TYPE)
+Struct(TYPE typename$, element$)
+
+Get base type of member (1=FLOAT, 2=STRING, 4=INTEGER)
 
 ~SUB
 SUB xxx (arg1 [,arg2, ...])    <statements>    <statements> END SUB
@@ -6401,6 +8039,143 @@ TILEMAP
 TILEMAP is a powerful command for writing games. See the separate
 TILEMAP_User_Manual.pdf for more details
 
+~TILEMAP ATTR
+TILEMAP ATTR attrLabel, id, numTiles
+
+Associates a tile attribute table with a tilemap. Attributes are properties of
+tile types in the tileset image (e.g.
+
+~TILEMAP CLOSE
+TILEMAP CLOSE
+
+Destroys all tilemaps (all 4 slots) and all sprites (all 64 slots), and frees
+all internal memory. Called automatically on program end.
+
+~TILEMAP CREATE
+TILEMAP CREATE mapLabel, id, flashSlot, tileW, tileH, tilesPerRow, cols, rows
+
+Creates a tilemap by reading map data from DATA statements into compact
+internal storage.
+
+~TILEMAP DESTROY
+TILEMAP DESTROY id
+
+Destroys a tilemap and frees its internal memory (map and attribute table).
+
+~TILEMAP DRAW
+TILEMAP DRAW id, dest, viewX, viewY, screenX, screenY, viewW, viewH [,
+transparent]
+
+Renders all visible tiles to a destination buffer. This is the core rendering
+command.
+
+~TILEMAP LOAD
+TILEMAP LOAD file$, id, flashSlot, tileW, tileH, tilesPerRow
+
+Creates a tilemap exactly as TILEMAP CREATE does, but reads the map from a
+text file instead of DATA statements. The file carries the map size, so cols
+and rows are not given.
+
+~TILEMAP SCROLL
+TILEMAP SCROLL id, dx, dy
+
+Adjusts the stored viewport position by a relative offset and clamps to world
+bounds. Use this for simple camera control without tracking the position
+yourself.
+
+~TILEMAP SET
+TILEMAP SET id, col, row, tileIndex
+
+Sets a single tile in the internal map. Useful for interactive changes
+(removing a coin when collected, opening a door, breaking a block).
+
+~TILEMAP SPRITE CLOSE
+TILEMAP SPRITE CLOSE
+
+Destroys all 64 sprites. Also called automatically by TILEMAP CLOSE.
+
+~TILEMAP SPRITE CREATE
+TILEMAP SPRITE CREATE id, tilemapRef, tileIndex, x, y
+
+Creates a sprite.
+
+~TILEMAP SPRITE DESTROY
+TILEMAP SPRITE DESTROY id
+
+Destroys a single sprite, clearing its slot.
+
+~TILEMAP SPRITE DRAW
+TILEMAP SPRITE DRAW dest, transparent
+
+Renders all active sprites (up to 64) in one call. Sprites are drawn in slot
+order (1 first, 64 last), so higher-numbered sprites appear on top.
+
+~TILEMAP SPRITE MOVE
+TILEMAP SPRITE MOVE id, x, y
+
+Moves a sprite to a new pixel position.
+
+~TILEMAP SPRITE SET
+TILEMAP SPRITE SET id, tileIndex
+
+Changes the tile displayed by a sprite. Use this for animation (e.g.
+
+~TILEMAP VIEW
+TILEMAP VIEW id, x, y
+
+Sets the viewport position to an absolute world-pixel coordinate.
+
+~TILEMAP(ATTR)
+TILEMAP(ATTR id, tileIndex)
+
+Returns the attribute flags for a given tile type. Returns 0 if no attribute
+table is loaded or the tile index is out of range.
+
+~TILEMAP(COLLISION)
+TILEMAP(COLLISION id, x, y, w, h [, mask])
+
+Tests whether a rectangular region (in world pixel coordinates) overlaps any
+non-zero tile. Returns the tile index of the first matching tile found, or 0
+if the entire region is clear.
+
+~TILEMAP(COLS)
+TILEMAP(COLS id) / TILEMAP(ROWS id)
+
+Returns the number of columns or rows in the map.
+
+~TILEMAP(SPRITE HIT)
+TILEMAP(SPRITE HIT id1, id2)
+
+Tests whether two sprites overlap using axis-aligned bounding box collision.
+Returns 1 if the sprites overlap, 0 otherwise.
+
+~TILEMAP(SPRITE TILE)
+TILEMAP(SPRITE TILE id)
+
+Returns the current tile index displayed by a sprite.
+
+~TILEMAP(SPRITE W)
+TILEMAP(SPRITE W id) / TILEMAP(SPRITE H id)
+
+Returns the tile width or height (in pixels) of a sprite, inherited from its
+parent tilemap's tile dimensions.
+
+~TILEMAP(SPRITE X)
+TILEMAP(SPRITE X id) / TILEMAP(SPRITE Y id)
+
+Returns the current X or Y pixel position of a sprite.
+
+~TILEMAP(TILE)
+TILEMAP(TILE id, pixelX, pixelY)
+
+Returns the tile index at the given world pixel coordinates. Returns 0 if the
+coordinates are outside the map bounds.
+
+~TILEMAP(VIEWX)
+TILEMAP(VIEWX id) / TILEMAP(VIEWY id)
+
+Returns the current viewport X or Y position (set by DRAW, SCROLL, or VIEW).
+
 ~TIME$
 TIME$ = "HH:MM:SS"
 or
@@ -6438,16 +8213,15 @@ the driver's UART input, 'chip' is 2208 or 2209 and 'address' is the driver's
 address (0 for the TMC2208, 0 to 3 for the TMC2209).
 
 ~TO
-TO
+To minimize wasted space from padding, consider:
 
-Described with the rest of its family:  HELP FOR
+1. Grouping numeric members together: Place all INTEGER and FLOAT members
+consecutively.
 
 ~TOUCH
-TOUCH is the first word of several entries:
+TOUCH() Function - Reading Touch Coordinates
 
-TOUCH(TAP)  TOUCH(X)
-
-List them all with:  HELP TOUCH*
+Syntax:
 
 ~TOUCH(TAP)
 TOUCH(TAP)
@@ -6800,9 +8574,11 @@ be specified and can be either a numeric address (eg, "192.168.1.147") or a
 normal text address (eg, "google.com").
 
 ~WHILE
-WHILE
+While direct structure member array syntax is convenient, there are cases
+where STRUCT EXTRACT is still preferred:
 
-Described with the rest of its family:  HELP DO
+1. Repeated use of the same data: If you need to pass the same member data to
+multiple commands or in a loop, extracting once is more efficient.
 
 ~WII
 WII [CLASSIC] OPEN [,interrupt]
@@ -6816,6 +8592,18 @@ WII [CLASSIC] CLOSE
 CLOSE will stop the background polling and disable any interrupt specified
 
 See also: DEVICE
+
+~WII CLASSIC
+WII CLASSIC is the first word of several entries:
+
+WII CLASSIC OPEN
+
+List them all with:  HELP WII CLASSIC*
+
+~WII CLASSIC OPEN
+WII CLASSIC OPEN interrupt_handler [, button_mask]
+
+WII CLASSIC CLOSE
 
 ~WII NUNCHUCK
 WII NUNCHUCK is the first word of several entries:
@@ -6845,11 +8633,11 @@ This command will drive one or more WS2812 LED chips connected to 'pin'. Note
 that the pin must be set to a digital output before this command is used.
 
 ~XMODEM
-XMODEM is the first word of several entries:
+XMODEM file transfer
 
-XMODEM SEND
-
-List them all with:  HELP XMODEM*
+ble_term implements XMODEM-CRC (128-byte packets) directly over the BLE link -
+no external file-transfer tool required. The workflow mirrors the Tera Term
+style but driven from the one window:
 
 ~XMODEM SEND
 XMODEM SEND

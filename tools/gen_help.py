@@ -18,6 +18,7 @@ Format rules enforced here (all of them are things cmd_help() requires):
   * no trailing whitespace on a header - the match is whole-string
 """
 import argparse
+import glob
 import os
 import re
 import sys
@@ -277,6 +278,7 @@ class Topic(object):
         self.stub_for = None      # name of the topic holding the description
         self.family = None        # names to point at, for a family keyword
         self.always = False       # keep the body even in the syntax-only build
+        self.source = None        # supplementary manual this came from
         self.seealso = []
 
     @property
@@ -407,6 +409,336 @@ def merge(topics):
         if t.is_stub and t.stub_for.upper() not in names:
             t.stub_for = None
     return by_name
+
+
+# --------------------------------------------------------------------------
+# the supplementary manuals
+#
+# For SPRITE, TILEMAP, RAY, FRAME, STEPPER, STRUCT, DRAW3D and the GUI controls
+# the User Manual carries only a pointer row ("see the separate ..._User_Manual
+# pdf"), so harvesting the manual alone leaves one topic where there should be
+# forty.  These sources carry the real entries.  See docs/Help_Coverage_Review.md.
+# --------------------------------------------------------------------------
+NOT_A_MANUAL = (
+    "bak_", "exile", "elite", "thrust", "port_", "plan", "notes", "review",
+    "audit", "codemap", "manual_style", "feasibility", "briefing", "checklist",
+    "demo", "armcfgen", "mmb2csub", "converter", "help_file", "release",
+    "ov2640", "implementation", "picomite_user", "structures_implementation",
+    # a tutorial, not a reference: every command it shows is documented in its
+    # own family's manual, so it would only ever duplicate or contradict
+    "game_development_guide",
+)
+EXTRA_SOURCES = ["generate_stepper_pdf.py", "Advanced Graphics Functions.docx"]
+
+# The 3D manual writes the command as "3D CREATE"; the keyword is DRAW3D.
+PREFIX_FIXES = [(re.compile(r"^3D\b"), "DRAW3D")]
+
+# printed as the last line of a supplementary topic
+PDF_NAMES = {
+    "generate_stepper_pdf.py": "Stepper_Reference.pdf",
+    "Advanced Graphics Functions.docx": "Advanced Graphics Functions.pdf",
+}
+
+
+def supplementary_sources():
+    out = [p for p in sorted(glob.glob(os.path.join(ROOT, "docs", "*.md")))
+           if not any(s in os.path.basename(p).lower() for s in NOT_A_MANUAL)]
+    out += [os.path.join(ROOT, "docs", p) for p in EXTRA_SOURCES]
+    return [p for p in out if os.path.exists(p)]
+
+
+def pdf_name(path):
+    base = os.path.basename(path)
+    return PDF_NAMES.get(base, os.path.splitext(base)[0] + ".pdf")
+
+
+def fix_prefix(line):
+    for rx, repl in PREFIX_FIXES:
+        if rx.match(line):
+            return rx.sub(repl, line)
+    return line
+
+
+def clean_heading(text):
+    t = fix_prefix(text.strip().strip("`*"))
+    # "2.1 The STAR Command" - the \s+ matters, or the 3 of "3D CREATE" goes too
+    t = re.sub(r"^\d+(\.\d+)*\.?\s+", "", t)
+    t = re.sub(r"^The\s+", "", t)
+    t = re.sub(r"\s+(Commands?|Functions?)$", "", t)
+    # "SPRITE LOADPNG (RP2350 only)" - a build qualifier, not part of the name
+    t = re.sub(r"\s*\([^)]*\b(only|RP2040|RP2350)\b[^)]*\)\s*$", "", t, flags=re.I)
+    return fix_prefix(t)
+
+
+def md_to_text(body):
+    """Markdown section body -> the plain lines a console can print."""
+    out = []
+    for line in body.split("\n"):
+        if line.strip().startswith("```"):
+            continue                                  # keep the code, drop the fence
+        line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)   # links
+        line = line.replace("**", "").replace("`", "")
+        line = re.sub(r"^\s*[-*]\s+", "  - ", line)   # bullets
+        if re.match(r"^\s*\|[-\s|:]+\|\s*$", line):
+            continue                                  # table rule
+        if line.strip().startswith("|"):
+            line = "  " + "  ".join(c.strip() for c in line.strip().strip("|").split("|"))
+        line = re.sub(r"^(#{1,6})\s+", "", line)      # sub-headings
+        out.append(line.rstrip())
+    return out
+
+
+SYNTAX_LABEL = re.compile(r"^\s*(Syntax|Usage|Format)\s*:?\s*$", re.I)
+
+
+def _run_of_syntax(name, lines, i):
+    """Consecutive lines from i that are syntax for this topic's family."""
+    out = []
+    fam = name.upper().split("(")[0]
+    while i < len(lines) and lines[i].strip():
+        s = fix_prefix(lines[i].strip())
+        got = canon_name(s)
+        if not got or got.upper().split("(")[0] != fam:
+            break
+        out.append(s)
+        i += 1
+    return out, i
+
+
+def split_syntax(name, lines):
+    """Lift the syntax lines out of the body text.
+
+    Most sections open with them; the SPRITE and TILEMAP manuals instead put
+    them under a "Syntax:" label a paragraph or two in.
+    """
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    syntax, j = _run_of_syntax(name, lines, i)
+    if syntax:
+        return syntax, lines[j:]
+    for n, line in enumerate(lines[:20]):
+        if not SYNTAX_LABEL.match(line):
+            continue
+        syntax, j = _run_of_syntax(name, lines, n + 1)
+        if syntax:
+            return syntax, lines[:n] + lines[j:]
+    return [], lines
+
+
+TABLE_ROW = re.compile(r"^\s*\|\s*`?([^|`]+?)`?\s*\|(.*)\|?\s*$")
+
+
+def md_table_entries(path):
+    """The FRAME and RAY manuals list their functions as table rows:
+
+        | `RAY(CAMX)` | Camera X position | Float |
+    """
+    txt = open(path, encoding="utf-8", errors="replace").read()
+    for line in txt.split("\n"):
+        m = TABLE_ROW.match(line)
+        if not m:
+            continue
+        syntax = fix_prefix(m.group(1).strip())
+        if "(" not in syntax:
+            continue                       # commands come from the headings
+        name = canon_name(syntax)
+        if not name or "(" not in name:
+            continue
+        cells = [c.strip().strip("`") for c in m.group(2).split("|") if c.strip()]
+        if not cells:
+            continue
+        yield name, [syntax], [cells[0]]
+
+
+CODE_COMMENT = re.compile(r"^([A-Z][^']*?)\s{2,}'\s*(.+)$")
+
+
+def md_code_entries(path):
+    """Fenced code lines that document themselves with a trailing comment:
+
+        FRAME(PW panel_id)   ' Returns the interior width of a panel
+    """
+    txt = open(path, encoding="utf-8", errors="replace").read()
+    for m in re.finditer(r"```[a-z]*\n(.*?)```", txt, re.S):
+        for line in m.group(1).split("\n"):
+            cm = CODE_COMMENT.match(line.strip())
+            if not cm:
+                continue
+            syntax = fix_prefix(cm.group(1).strip())
+            name = canon_name(syntax)
+            if name:
+                yield name, [syntax], [cm.group(2).strip()]
+
+
+def md_entries(path):
+    """One entry per section, keyed on the heading - or, where the heading is
+    prose ("Start Host (Transmitter)"), on the first line of its code block."""
+    txt = open(path, encoding="utf-8", errors="replace").read()
+    parts = re.split(r"(?m)^(#{2,6})[ \t]+(.*)$", txt)
+    heads = [(len(parts[i]), clean_heading(parts[i + 1]),
+              parts[i + 2] if i + 2 < len(parts) else "")
+             for i in range(1, len(parts), 3)]
+    for n, (level, head, body) in enumerate(heads):
+        # A section owns its sub-sections - "Syntax", "Description", "Example" -
+        # but stops at a sub-heading that is a command in its own right, which
+        # gets its own topic and must not be repeated inside the parent's.
+        for level2, head2, body2 in heads[n + 1:]:
+            if level2 <= level or canon_name(head2):
+                break
+            body += "\n" + head2 + "\n" + body2
+        lines = md_to_text(body)
+        # The heading is usually the name.  Where it is prose ("Start Host
+        # (Transmitter)") the first line of the section is, so offer both and
+        # let the caller's keyword check decide which one is real.
+        names = []
+        head_name = canon_name(head)
+        if head_name:
+            names.append(head_name)
+        for l in lines:
+            if l.strip():
+                first = canon_name(fix_prefix(l.strip()))
+                if first and first not in names:
+                    names.append(first)
+                break
+        for name in names:
+            syntax, desc = split_syntax(name, lines)
+            if not syntax and head != name and head_name == name:
+                syntax = [head]
+            yield name, syntax, desc
+
+
+def pdf_script_entries(path):
+    """generate_*_pdf.py: a code_block() starts an entry, multi_cell() fills it."""
+    import ast
+
+    def flush(entry):
+        """A block listing a family (PEEK(STEPPER X), PEEK(STEPPER Y), ...)
+        becomes one topic per name, all sharing the block's description."""
+        if not entry:
+            return
+        names, lines, desc = entry
+        for nm in names:
+            own = [l for l in lines if canon_name(fix_prefix(l)) == nm]
+            yield nm, (own or lines), list(desc)
+
+    tree = ast.parse(open(path, encoding="utf-8", errors="replace").read())
+    cur = None
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        args = [a.value for a in node.args if isinstance(a, ast.Constant)
+                and isinstance(a.value, str)]
+        if not args:
+            continue
+        if node.func.attr in ("code_block", "chapter_title"):
+            for e in flush(cur):
+                yield e
+            cur = None
+            if node.func.attr == "code_block":
+                lines = [l.strip() for l in args[0].split("\n") if l.strip()]
+                names = []
+                for l in lines:
+                    nm = canon_name(fix_prefix(l))
+                    if nm and nm not in names:
+                        names.append(nm)
+                if names:
+                    cur = (names, lines, [])
+        elif node.func.attr == "multi_cell" and cur:
+            cur[2].extend(args[-1].split("\n"))
+    for e in flush(cur):
+        yield e
+
+
+def docx_entries(path):
+    """A syntax paragraph starts an entry; the prose under it is the body.
+
+    Some paragraphs carry both, separated by a line break, and the reference
+    tables at the end list CTRLVAL, MSGBOX and the CLICK functions.
+    """
+    from docx import Document
+    doc = Document(path)
+    cur = None
+    for p in doc.paragraphs:
+        block = [l.strip() for l in p.text.split("\n") if l.strip()]
+        if not block:
+            continue
+        head = block[0]
+        name = canon_name(head) if len(head) < 160 else None
+        # a real entry, not a sentence that happens to start with a keyword
+        if name and " " in head and not head.endswith("."):
+            if cur:
+                yield _drop_trailing_label(cur)
+            cur = (name, [head], block[1:])
+        elif cur:
+            cur[2].extend(block)
+    if cur:
+        yield _drop_trailing_label(cur)
+
+    for tb in doc.tables:
+        for r in tb.rows:
+            cells = []
+            for c in r.cells:
+                if not cells or c._tc is not cells[-1]._tc:
+                    cells.append(c)
+            if len(cells) < 2:
+                continue
+            syntax = " ".join(cells[0].text.split())
+            name = canon_name(syntax)
+            desc = [l.strip() for l in cells[-1].text.split("\n") if l.strip()]
+            if name and desc:
+                yield name, [syntax], desc
+
+
+def _drop_trailing_label(entry):
+    """The heading of the NEXT control ("Switch", "Radio Button") sits at the
+    end of this one's prose - it is a label, not a sentence."""
+    name, syntax, desc = entry
+    while desc and len(desc[-1]) < 40 and not re.search(r"[.:;,)]$", desc[-1]):
+        desc.pop()
+    return name, syntax, desc
+
+
+def harvest_supplementary(by_name, tokens_path=None):
+    """Add every topic the supplementary manuals document. Returns a count."""
+    added, weight = 0, {}
+    # A name only counts if its first word is a real keyword; without this a
+    # prose paragraph ("Several controls can ...") becomes a topic.
+    tokens = firmware_tokens(tokens_path or os.path.join(ROOT, "AllCommands.h"))
+    families = {t.split()[0] for t in tokens}
+    for path in supplementary_sources():
+        pdf = pdf_name(path)
+        if path.endswith(".py"):
+            entries = pdf_script_entries(path)
+        elif path.endswith(".docx"):
+            entries = docx_entries(path)
+        else:
+            # headings first: a table row is a one-line summary, and should not
+            # displace a section that documents the same name properly
+            entries = (list(md_entries(path)) + list(md_code_entries(path))
+                       + list(md_table_entries(path)))
+        for name, syntax, desc in entries:
+            key = name.upper()
+            if key.split("(")[0].split()[0] not in families:
+                continue
+            cur = by_name.get(key)
+            if cur is not None and not cur.is_stub and not cur.family:
+                continue                     # the User Manual documents it properly
+            desc = squeeze([d.rstrip() for d in desc])
+            if not syntax and not desc:
+                continue
+            size = sum(len(d) for d in desc)
+            if weight.get(key, -1) >= size:
+                continue        # already have a fuller entry for this name
+            weight[key] = size
+            if key in by_name and by_name[key].source:
+                added -= 1      # replacing, not adding
+            t = Topic(name, "FUNCTION" if "(" in name else "COMMAND")
+            t.add(syntax or [name], desc + ["", "Full details: " + pdf])
+            t.source = pdf
+            by_name[key] = t
+            added += 1
+    return added
 
 
 # Tables the manual uses for material that has no detailed-listing row of its
@@ -698,6 +1030,8 @@ def main():
                     help="syntax plus a one or two sentence summary only")
     ap.add_argument("--tiny", action="store_true",
                     help="syntax only, no description at all")
+    ap.add_argument("--no-supplementary", action="store_true",
+                    help="User Manual only; skip the supplementary manuals")
     ap.add_argument("--manual", default=MANUAL)
     ap.add_argument("--tokens", default=os.path.join(ROOT, "AllCommands.h"),
                     help="firmware token table, cross-checked for gaps")
@@ -707,6 +1041,7 @@ def main():
     topics, stats = harvest(args.manual)
     by_name = merge(topics)
     add_extra_topics(Document(args.manual), by_name)
+    supp = 0 if args.no_supplementary else harvest_supplementary(by_name, args.tokens)
     gaps = []
     if args.tokens and os.path.exists(args.tokens):
         gaps = add_token_aliases(by_name, firmware_tokens(args.tokens))
@@ -726,6 +1061,7 @@ def main():
           % (stats["rows"], stats["aligned"], stats["merged"]))
     print("topics           : %d (%d described, %d cross-reference stubs)"
           % (len(blocks), real, len(by_name) - real))
+    print("supplementary    : %d topics from the separate manuals" % supp)
     print("written          : %s  (%.1f KB)" % (out, size / 1024.0))
     if gaps:
         print("firmware keywords with no entry in the manual (%d):" % len(gaps))

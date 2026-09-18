@@ -207,7 +207,7 @@ Place or update a billboard sprite in the world.
 | `spritenum` | SPRITE buffer number (1–64), loaded via `SPRITE LOAD` or `SPRITE LOADARRAY` |
 | `x!`, `y!` | World-space position (floating-point) |
 
-The sprite's full-colour 4bpp image is read from the sprite buffer and rendered as a billboard (always facing the camera). Pixels matching the current `SPRITE TRANSPARENT` colour are not drawn. Sprites are automatically depth-sorted and clipped against the wall z-buffer.
+The sprite's full-colour 4bpp image is read from the sprite buffer and rendered as a billboard (always facing the camera). Pixels matching the current `SPRITE SET TRANSPARENT` colour are not drawn. Sprites are automatically depth-sorted and clipped against the wall z-buffer.
 
 > **Note:** The sprite buffer must be loaded before calling RAY SPRITE. Use `SPRITE LOADARRAY` to create sprites from BASIC arrays, or `SPRITE LOAD` to load `.spr` files.
 
@@ -408,7 +408,7 @@ Each pixel is an RGB888 value (e.g., `&hFF0000` for red). The system automatical
 Set the transparent colour index with:
 
 ```basic
-SPRITE TRANSPARENT colour_index
+SPRITE SET TRANSPARENT colour_index
 ```
 
 Default is 0 (BLACK). Any sprite pixel matching this index is not drawn, allowing the wall/floor behind to show through.

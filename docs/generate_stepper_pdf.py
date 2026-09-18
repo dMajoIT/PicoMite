@@ -142,6 +142,38 @@ pdf.ln(2)
 pdf.code_block("STEPPER ESTOP")
 pdf.set_font('Helvetica', '', 11)
 pdf.multi_cell(0, 5, "Software emergency stop: halts motion immediately, clears buffer, and turns spindle off. Drivers are disabled unless estop_keep_enabled was set to 1 in STEPPER INIT.\nIf an INIT estop_pin is configured, hardware E-STOP is monitored in ISR and terminates processing immediately under all circumstances (including homing).")
+pdf.ln(2)
+
+pdf.code_block("STEPPER ENABLE X|Y|Z|A|ALL [, 0|1]")
+pdf.set_font('Helvetica', '', 11)
+pdf.multi_cell(0, 5,
+    "Drives the enable pin of one axis, or of every axis when ALL is given. The second "
+    "argument enables (1, the default) or disables (0) the driver; the pin is driven "
+    "active low. An axis with no enable_pin configured in STEPPER AXIS reports an error, "
+    "except under ALL, where axes without an enable pin are skipped.\n"
+    "Disabling removes holding torque - the motor freewheels."
+)
+pdf.ln(2)
+
+pdf.code_block("STEPPER INVERT X|Y|Z|A, 0|1")
+pdf.set_font('Helvetica', '', 11)
+pdf.multi_cell(0, 5,
+    "Sets the direction-invert flag for one axis, the same setting as the dir_invert "
+    "argument of STEPPER AXIS, so the sense of an axis can be corrected without "
+    "reconfiguring it. Takes effect on the next move."
+)
+pdf.ln(2)
+
+pdf.code_block("STEPPER RESET")
+pdf.set_font('Helvetica', '', 11)
+pdf.multi_cell(0, 5,
+    "Returns all four axes to their power-on defaults and turns the spindle off. Axis "
+    "configuration, the spindle pin and the E-STOP pin are all cleared, and any latched "
+    "E-STOP trip is released, so the axes must be configured again with STEPPER AXIS "
+    "before motion.\n"
+    "Unlike STEPPER CLOSE this leaves the subsystem initialised - it is a configuration "
+    "reset, not a shutdown."
+)
 pdf.ln(5)
 
 # 3. Motion Control
@@ -216,6 +248,23 @@ pdf.ln(2)
 pdf.code_block("STEPPER SPINDLE pin [,invert]")
 pdf.set_font('Helvetica', '', 11)
 pdf.multi_cell(0, 5, "Configures a spindle control pin used by buffered M3/M5 commands. Pin must not conflict with AXIS/HWLIMITS/E-STOP pins.")
+pdf.ln(2)
+
+pdf.code_block("STEPPER ARC\nSTEPPER ARC tolerance [, angle_deg [, max_segments]]")
+pdf.set_font('Helvetica', '', 11)
+pdf.multi_cell(0, 5,
+    "Controls how G2/G3 arcs are broken into line segments. With no arguments the "
+    "current settings are printed.\n"
+    "'tolerance' is the maximum chord deviation in mm - the furthest the straight "
+    "segment is allowed to stray from the true arc. Smaller values give a smoother arc "
+    "and more segments. It must be greater than zero, and it is the same value that "
+    "STEPPER INIT takes as its first argument.\n"
+    "'angle_deg' caps the angular step of a single segment (clamped to 180 degrees), and "
+    "'max_segments' caps the number of segments one arc may generate, which bounds the "
+    "work a single G2/G3 can queue.\n"
+    "Arguments are positional and come in pairs with their separators, so give either "
+    "one, two or three values."
+)
 pdf.ln(5)
 
 # 5. System Management
@@ -246,6 +295,30 @@ pdf.ln(2)
 pdf.code_block("STEPPER STATUS")
 pdf.set_font('Helvetica', '', 11)
 pdf.multi_cell(0, 5, "Displays detailed system status, including axis positions, buffer state, and configuration (including auto-disable-on-idle mode).")
+pdf.ln(2)
+
+pdf.code_block("STEPPER BUFFER")
+pdf.set_font('Helvetica', '', 11)
+pdf.multi_cell(0, 5,
+    "Prints the state of the G-code queue and of the move the ISR is executing: blocks "
+    "held against buffer capacity, the count of blocks executed so far, the ISR tick "
+    "count, and the current move's phase, step rate, cruise and exit rates and steps "
+    "remaining.\n"
+    "Where STEPPER STATUS reports the machine, this reports the pipeline - it is the "
+    "command to use when motion stalls or stutters and you need to see whether the "
+    "buffer is starving."
+)
+pdf.ln(2)
+
+pdf.code_block("STEPPER RECOVER")
+pdf.set_font('Helvetica', '', 11)
+pdf.multi_cell(0, 5,
+    "Returns the system to a safe idle state after a fault: motion is disarmed and the "
+    "G-code buffer is cleared, and the command confirms with 'Stepper recovered - "
+    "disarmed, buffer cleared'.\n"
+    "Axis configuration is kept, so this is the normal way back after an E-STOP or a "
+    "limit trip - use STEPPER RUN to arm again."
+)
 pdf.ln(2)
 
 pdf.code_block("STEPPER CLOSE")

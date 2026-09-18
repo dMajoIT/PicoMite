@@ -22,20 +22,20 @@ COPY "B:/help.txt" TO "A:/help.txt"
 or send it over the serial link with `XMODEM RECEIVE "A:/help.txt"`, or, on a
 WiFi build with TFTP enabled, push it from a PC with any TFTP client.
 
-Check the room you have first — the full reference file is about 410 KB:
+Check the room you have first — the full reference file is about 570 KB:
 
 ```basic
 PRINT MM.INFO(DISK SIZE), MM.INFO$(FREE SPACE)
 ```
 
-Three files are supplied, all with the same 872 topics. Copy whichever one fits
+Three files are supplied, all with the same 1151 topics. Copy whichever one fits
 and rename it to `help.txt` on the drive:
 
 | File | Size | What each topic gives you |
 |---|---|---|
-| `help.txt` | 416 KB | the full description from the manual |
-| `helpmin.txt` | 196 KB | the syntax and a one or two sentence summary |
-| `helptiny.txt` | 83 KB | the syntax only |
+| `help.txt` | 569 KB | the full description from the manual |
+| `helpmin.txt` | 250 KB | the syntax and a one or two sentence summary |
+| `helptiny.txt` | 108 KB | the syntax only |
 
 `helptiny.txt` is the one to use if you mostly want reminding of an argument
 order and have the manual to hand for everything else.
@@ -126,8 +126,10 @@ best. Anything longer belongs in the User Manual, which the topic can point at.
 
 ## Regenerating the supplied file
 
-The reference file is generated from the User Manual, so that the two cannot
-drift apart:
+The reference file is generated from the User Manual and from the supplementary
+manuals (SPRITE, TILEMAP, RAY, FRAME, STEPPER, STRUCT, DRAW3D and the GUI
+controls, whose entries the User Manual delegates to a separate PDF), so that
+they cannot drift apart:
 
 ```
 python tools/gen_help.py            # docs/help.txt      - full text
