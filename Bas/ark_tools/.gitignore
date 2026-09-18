@@ -1,0 +1,16 @@
+# Scratch: generated intermediates, board screenshots and the previews used
+# while the artwork was being drawn.  Everything here is rebuilt by
+# gen_assets.py and build.py, and the early versions of the art are the ones
+# that were replaced, so none of it belongs in the repository.
+out/
+
+# The phase-by-phase snapshots the game was grown from.  phase8_src.bas is
+# the game and is tracked; 2 to 7 are superseded and were never scrubbed of
+# the disassembly's names.
+phase2_src.bas
+phase3_src.bas
+phase4_src.bas
+phase5_src.bas
+phase6_src.bas
+phase7_src.bas
+spike0.bas

@@ -67,3 +67,13 @@ Bas/elite_tools/cache/
 # the mmb2csub distribution unpacked in the tree for use - a working copy,
 # like the uf2s, not something the repo carries
 /mmb2csub/
+
+# ---- Picanoid working files, deliberately not carried ----
+# The design study and the pre-release snapshots of the game still hold the
+# material the shipped game was rewritten to do without: decoded sprite
+# bitmaps, the round layouts as JSON, and the disassembly's own names all
+# through the comments.  Only the finished game, its build tools and the
+# player's guide are tracked.
+/docs/Arkanoid_Port_Plan.html
+/Bas/arkanoid.bas
+/Bas/arkanoid_field.bas

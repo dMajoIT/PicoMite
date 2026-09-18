@@ -1,0 +1,2006 @@
+' =====================================================================
+'  PICANOID - phase 8: attract mode, high scores, the two cheats.
+'  docs/Picanoid_Player_Guide.html
+'
+'  UNITS.  The display runs at 75 Hz and the simulation at 50, so one
+'  step per frame with every rate multiplied by 2/3.  Two thirds of a
+'  pixel is not a fraction if the unit is a third, so:
+'
+'      positions      thirds of a  pixel   (bx3, by3, batx3)
+'      velocities     a 50 Hz own table entries, px per field
+'      one frame      position += 2 * velocity
+'
+'  Nothing rounds anywhere, which is the point of working in thirds.
+'
+'  COLLISION is one axis at a time: move in x, test, undo and negate;
+'  then the same in y.  A ball can take out two bricks in one step and
+'  leave with both components reversed.  That is deliberate - it is what
+'  gives the bounce its character at a corner.
+'
+'  Keys:  mouse  bat        LMB / SPACE  launch
+'         V  self-test   C  force a capsule   N/P round   R reset   S shot
+'         Q  quit
+' =====================================================================
+Option EXPLICIT
+Option DEFAULT NONE
+
+' --------------------------------------------------------------- layout
+Const SCRW = 320, SCRH = 240
+Const FLD_X = 8, FLD_Y = 29
+Const TILEW = 16, TILEH = 8
+Const WALL = 8
+Const PANEL_X = 224
+
+' the game's own coordinates, all in  pixels
+Const WALL_L = 5, WALL_R = &H68      ' the ball bounces leaving this band
+Const CEIL = &HF3                    ' and above this
+Const FLOOR_Y = 6                    ' below this the ball is lost
+Const BAT_Y = 20                     ' batObjY after the rise-up animation
+Const BAT_LO = &H0F, BAT_HI = &H17   ' the ball is tested against the bat here
+Const BAT_MINX = 4, BAT_MAXX = &H5C  ' batX clamps, less batWidth on the right
+Const ZONE_TOP = &HDF, ZONE_BOT = &H5F   ' IsInBrickZone
+Const ROW0_Y = &HDE                  ' brick row 0 counts down from here
+Const SCRY0 = 251                    ' sy = SCRY0 - objY
+
+Const C_BLACK = RGB(0,0,0)
+Const C_WALL  = RGB(96,96,128)
+Const C_LIT   = RGB(160,160,200)
+Const C_TEXT  = RGB(255,255,255)
+Const C_ACC   = RGB(255,64,64)
+Const C_DIM   = RGB(120,120,140)
+
+Const MOUSEDEV = 2
+' Image slots 4 to 8 - the RAM slots - arrived in 6.03.02b11.  MM.VER counts
+' a beta as a fraction below the release, so 6.03.02 itself is GREATER than
+' any b-number and has to be tested for separately.
+Const RELVER = 6.0302                ' the 6.03.02 release itself
+Const VEREPS = 0.0000005             ' half a step: 6.030201 is a whole one away
+Const RAMVER = 6.030210              ' RAM image slots arrived in b11
+Const HOLD_FRAMES = 75               ' a 50 Hz 50 fields, x 3/2
+Const SPEEDUP_AT = 180               ' brick contacts - event driven, unscaled
+Const GRAB_FRAMES = 225              ' a 50 Hz 150 fields, x 3/2
+Const CAP_YTOP = &H1A, CAP_YBOT = &H0E   ' the capsule is catchable between these
+Const DOOR_X = &H6C                  ' the escape door, in the right wall
+Const ALIEN_HOLD = 75                ' a 50 Hz 50 fields, x 3/2
+Const ANIM_RELOAD = 8                ' 6 fields per animation step -> 9 frames
+Const BOOM_FRAMES = 6                ' 4 fields per explosion frame
+Const ALIEN_ODDS = 192               ' 1 in 128 per field -> 1 in 192 per frame
+Const SHOT_STEP = 12                 ' 6 px per field -> 12 thirds per frame
+
+' ---------------------------------------------------------------- state
+Dim INTEGER rlen(N_ROUNDS - 1)
+Dim INTEGER rdat(RND_BYTES - 1)
+Dim INTEGER fmap(255)                ' brick map: 0 empty, 1-8 colour, -2..-5 silver, 10 gold
+Dim INTEGER velx(31), vely(31)       ' /, signed
+Dim INTEGER bx3(3), by3(3), bdx(3), bdy(3), bdir(3), bact(3)
+Dim INTEGER batx3, batw, batxi
+Dim INTEGER ballHeld, heldOff, extraBalls, speedLvl, bounceCnt
+Dim INTEGER bricksLeft, score, lives, rnum, gameEvent
+Dim INTEGER scanIdx, brickVal
+Dim INTEGER i, nb, ns, ng, nextLife, autoBat, nDestroyed
+Dim INTEGER batVis, batRise, introFlash, fieldAcc
+Dim INTEGER capOn, capType, capX, capY3        ' slot 5 - one capsule at a time
+Dim INTEGER activeCaps                         ' lastCapsuleType: -1 none, 0..6
+Dim INTEGER doorStep, doorArmed, batType       ' batType 0 normal 1 wide 2 laser
+Dim INTEGER nCaps(6), nCapsCaught
+' Enemies live in object slots 6 and 7 - exactly two of them.
+Dim INTEGER aType(7), aX3(7), aY3(7), aDX(7), aDY(7), aDir(7), aBoom(7)
+Dim INTEGER alienHold, alienAnim, alienFloor
+Dim INTEGER dirtX(7), dirtY(7), afloor(3)
+Dim INTEGER shotOn, shotX, shotY3, fireEdge
+Dim INTEGER nAliens, nAlienKills
+Dim INTEGER bossHits, bossFlash, fieldAcc2, fieldTick
+Dim INTEGER sndCh(16), sndAmp(16), sndPitch(16), sndDur(16), sndOn
+Dim INTEGER hiScore(7), contFlag, savedRound, quitAll, paused, haveTitle
+Dim INTEGER artSlot                  ' where the artwork lives: RAM 4, or flash 1
+' On-screen captions, so a scripted demo can narrate itself.  Ctrl-B starts
+' capturing a caption from the console and RETURN ends it; it then shows for
+' CAP_FRAMES.  Nothing in the game uses Chr$(2).
+Dim STRING capTxt$
+Dim INTEGER capMode, capTimer
+Dim STRING homeDir$
+Dim STRING keyQ$
+Const CAP_FRAMES = 340
+Dim STRING hiName$(7) LENGTH 8
+Dim INTEGER palR(15), palG(15), palB(15)
+Const BOSS_ROUND = &H1F              ' round 32, zero-based - the boss
+Const BOSS_HITS = &H14               ' twenty, set once per game at
+Dim STRING kk
+
+' ---------------------------------------------------------------- setup
+Restore ArkRoundLen  : For i = 0 To N_ROUNDS - 1 : Read rlen(i) : Next i
+Restore ArkRoundData : For i = 0 To RND_BYTES - 1 : Read rdat(i) : Next i
+Restore ArkBallVX    : For i = 0 To 31 : Read velx(i) : Next i
+Restore ArkBallVY    : For i = 0 To 31 : Read vely(i) : Next i
+Restore ArkAlienDX   : For i = 0 To 7 : Read dirtX(i) : Next i
+Restore ArkAlienDY   : For i = 0 To 7 : Read dirtY(i) : Next i
+Restore ArkAlienFloor: For i = 0 To 3 : Read afloor(i) : Next i
+Restore ArkSndCh     : For i = 0 To 16 : Read sndCh(i) : Next i
+Restore ArkSndAmp    : For i = 0 To 16 : Read sndAmp(i) : Next i
+Restore ArkSndPitch  : For i = 0 To 16 : Read sndPitch(i) : Next i
+Restore ArkSndDur    : For i = 0 To 16 : Read sndDur(i) : Next i
+ArkInitSound
+sndOn = 1
+
+' Assets sit beside the program, wherever it was loaded from.  A program
+' that was typed in rather than loaded has no path and MM.INFO says so, and
+' then the root of A: is as good a guess as any.
+homeDir$ = MM.Info(PATH)
+If homeDir$ = "NONE" Then homeDir$ = "A:/"
+
+' Tiles, sprites and the title screen are one image in ONE slot.  TILEMAP
+' wants its tiles at the origin and takes the image width as its stride;
+' BLIT FLASH checks a source rectangle against the image rather than the
+' screen.  One image satisfies both, so only one slot is spent.
+'
+' Slots 1 to 3 are the flash slots.  On an RP2350 with PSRAM, slots 4 to 8
+' are the RAM slots 1 to 5, laid out identically, and BLIT FLASH, TILEMAP
+' and MM.INFO(FLASH ADDRESS) take either kind by the same number.  Prefer
+' RAM: it loads in a few tens of milliseconds, costs no flash wear, and
+' leaves all three flash slots - including slot 3, which LIBRARY uses - to
+' whoever else wants them.  A RAM slot is wiped by a reset, so the image is
+' read from the drive at every start rather than once.  Without PSRAM, or on
+' firmware older than b11, it goes into flash slot 1 exactly as before.
+artSlot = 1
+If MM.Info(PSRAM SIZE) > 0 And (MM.VER > RAMVER Or Abs(MM.VER - RELVER) < VEREPS) Then
+  artSlot = 4
+End If
+InstallImage artSlot, homeDir$ + "pic_art.bmp", ART_W, ART_H
+haveTitle = 1
+
+' RGB121: bit 3 red, bits 2-1 green, bit 0 blue.  Keep our own copy of the
+' sixteen because MAP(i) cannot be read back.
+For i = 0 To 15
+  palR(i) = 0 : If i And 8 Then palR(i) = 255
+  palG(i) = ((i >> 1) And 3) * 85
+  palB(i) = 0 : If i And 1 Then palB(i) = 255
+Next i
+' 75 Hz, which is exactly 1.5 x a 50 Hz 50 - the only refresh this
+' machine can produce that is an exact multiple of it.  RESOLUTION drops
+' the display to mode 1 as part of the scanout rebuild, so MODE 2 has to
+' come after it, and MAP needs MODE 2 or 3 so it has to come after that.
+Resolution 640, 315000              ' idempotent: no rebuild if already there
+Mode 2
+Map RESET : Map SET                  ' the map survives RUN, so start clean
+FrameBuffer Create
+FrameBuffer Write F
+Tilemap Create ArkBlankMap, 1, artSlot, TILEW, TILEH, 8, FLD_COLS, FLD_ROWS
+
+' A starting table of our own: eight of us, 40000 down to 12000.
+For i = 0 To 7
+  hiName$(i) = Mid$("PICOMITE", 1, 8)
+  hiScore(i) = 40000 - i * 4000
+Next i
+contFlag = 0 : savedRound = 0 : quitAll = 0
+batVis = 1 : batRise = BAT_Y
+
+Do
+  TitleScreen
+  If quitAll Then Exit Do
+  NewGame
+  RunGame
+  If quitAll Then Exit Do
+  GameOverSeq
+Loop
+
+Tilemap Close
+FrameBuffer Close
+Map RESET : Map SET
+Mode 1
+End
+
+' =====================================================================
+Sub NewGame
+  score = 0 : lives = 3 : nextLife = 50000 : bossHits = BOSS_HITS
+  ' P + J + A on the high-score screen sets continueFlag, and the new-game
+  ' setup at then takes the level pointer from savedLevelPtr instead
+  ' of resetting to - so the next game starts at the round you
+  ' reached.  This is in the game code, not the crack.
+  If contFlag Then rnum = savedRound Else rnum = 0
+  contFlag = 0
+  NewRound
+  RoundIntro
+End Sub
+
+' =====================================================================
+Sub RunGame
+Do
+  ReadBat
+  SimStep
+  DrawAll
+
+  If gameEvent = &H0A Then                    ' boss down - the game is won
+    DissolveSeq
+    savedRound = rnum
+    Exit Sub
+  ElseIf gameEvent = 3 Then                   ' escaped through the door
+    AddScore 10000
+    EscapeSeq
+    rnum = (rnum + 1) Mod N_ROUNDS
+    NewRound
+    RoundIntro
+  ElseIf gameEvent = 1 Then                   ' every destructible brick gone
+    rnum = (rnum + 1) Mod N_ROUNDS
+    NewRound
+    RoundIntro
+  ElseIf gameEvent = 2 Then                   ' last ball below the floor
+    gameEvent = 0
+    DeathSeq
+    lives = lives - 1
+    ' a SUB call cannot be followed by ELSE on one line - the argument
+    ' parser takes the ELSE as an argument.  Block form.
+    If lives <= 0 Then
+      savedRound = rnum                       ': remember where the game ended
+      Exit Sub
+    End If
+    NewLife                                   ' the bricks you broke stay broken
+    RoundIntro
+  End If
+
+  kk = ""
+  If Len(keyQ$) > 0 Then
+    kk = UCase$(Left$(keyQ$, 1))
+    keyQ$ = Mid$(keyQ$, 2)
+  End If
+  If kk = "N" Then rnum = (rnum + 1) Mod N_ROUNDS : NewRound
+  If kk = "P" Then rnum = (rnum + N_ROUNDS - 1) Mod N_ROUNDS : NewRound
+  If kk = "R" Then NewRound
+  If kk = "V" Then SelfTest
+  If kk = "T" Then Soak 1500
+  If kk = "D" Then DeathCheck
+  If kk = "C" Then ForceCapsule
+  If kk = "K" Then RollTest
+  If kk = "E" Then EffectsCheck
+  If kk = "X" Then AlienCheck
+  If kk = "Y" Then BossCheck
+  If kk = "M" Then sndOn = 1 - sndOn
+  If kk = "W" Then SoundTest
+  If kk = "Z" Then rnum = BOSS_ROUND : bossHits = BOSS_HITS : NewRound
+  If kk = "A" Then autoBat = 1 - autoBat
+  If kk = "G" Then score = 99999 : lives = 1 : gameEvent = 2   ' force game over
+  If kk = "S" Then Save Image homeDir$ + "picshot.bmp"
+  ' RETURN / fire: with the laser in force it fires, otherwise it launches
+  ' a held ball.  Edge triggered, so one shot per press.
+  If kk = " " Or Device(MOUSE MOUSEDEV, L) Then
+    If fireEdge = 0 Then
+      If activeCaps = 4 Then FireShot Else Launch
+    End If
+    fireEdge = 1
+  Else
+    fireEdge = 0
+  End If
+  If kk = Chr$(127) Or kk = Chr$(8) Then PauseLoop
+Loop Until kk = "Q"
+If kk = "Q" Then quitAll = 1
+savedRound = rnum
+End Sub
+
+' =====================================================================
+'  one 75 Hz frame of simulation - the main loop's half, in its order
+' =====================================================================
+Sub SimStep
+  Local INTEGER s, tmp
+
+  ' Anything that steps an integer accumulator once per FIELD cannot be
+  ' scaled by 2/3 like a velocity, so it runs on a 2-in-3 duty instead:
+  ' exactly 50 updates a second under the 75 Hz frame.
+  fieldAcc2 = fieldAcc2 + 2
+  fieldTick = 0
+  If fieldAcc2 >= 3 Then
+    fieldAcc2 = fieldAcc2 - 3
+    fieldTick = 1
+  End If
+
+  ' --- the speed ladder.  bounceCnt counts brick contacts, not time, so
+  ' --- this threshold is NOT rescaled.
+  If bounceCnt >= SPEEDUP_AT Then
+    bounceCnt = 0
+    If speedLvl < &H18 Then
+      speedLvl = speedLvl + 8
+      SetBallVels
+    Else
+      ' at the top of the ladder it nudges every ball's dx instead, and
+      ' refuses to leave it at zero
+      tmp = 1 : If Rnd < 0.5 Then tmp = -1
+      For s = 1 To 3
+        If bdx(s) + tmp = 0 Then bdx(s) = -2 * tmp Else bdx(s) = bdx(s) + tmp
+      Next s
+    End If
+  End If
+
+  For s = 3 To 1 Step -1
+    If bact(s) Then MoveOneBall s
+  Next s
+
+  UpdateAliens
+  UpdateShot
+  UpdateCapsule
+  AnimateDoor
+End Sub
+
+' =====================================================================
+Sub MoveOneBall(s As INTEGER)
+  Local INTEGER oldx3, oldy3, px, py, hit
+
+  ' --- held on the bat: run the auto-launch countdown and follow the bat
+  If ballHeld > 0 Then
+    ballHeld = ballHeld - 1
+    If ballHeld = 0 Then Launch
+    bx3(s) = batx3 + heldOff
+    Exit Sub
+  End If
+
+  oldx3 = bx3(s) : oldy3 = by3(s)
+
+  ' ------------------------------------------------------------ x first
+  bx3(s) = bx3(s) + 2 * bdx(s)
+  px = bx3(s) \ 3
+  hit = 0
+  If px < WALL_L Or px >= WALL_R Then
+    hit = 1                                   ' the side walls ARE the band test
+  Else
+    If TestBrick(px, by3(s) \ 3, 1) Then
+      BrickHit
+      hit = 1
+    End If
+  End If
+  If hit Then
+    bx3(s) = oldx3
+    bdx(s) = -bdx(s)
+    bounceCnt = bounceCnt + 1
+  End If
+
+  ' ---------------------------------------------------------- then y
+  by3(s) = by3(s) + 2 * bdy(s)
+  py = by3(s) \ 3
+
+  If py < FLOOR_Y Then                        ' lost
+    bact(s) = 0
+    extraBalls = extraBalls - 1
+    If extraBalls < 0 Then gameEvent = 2
+    Exit Sub
+  End If
+
+  If py >= CEIL Then                          ' ceiling
+    by3(s) = oldy3
+    bdy(s) = -bdy(s)
+    bounceCnt = bounceCnt + 1
+    Exit Sub
+  End If
+
+  If TestBrick(bx3(s) \ 3, py, 1) Then
+    BrickHit
+    by3(s) = oldy3
+    bdy(s) = -bdy(s)
+    bounceCnt = bounceCnt + 1
+    Exit Sub
+  End If
+
+  BatTest s, py
+End Sub
+
+' =====================================================================
+'  The bat, reduced to its table.  offset = ballX - batX, taken only when
+'  the ball's y is in 15..23.  Six zones either way; the normal bat is
+'  asymmetric by a pixel and that asymmetry is in the original.
+' =====================================================================
+Sub BatTest(s As INTEGER, py As INTEGER)
+  Local INTEGER off, z, ix
+
+  If py > BAT_HI Or py < BAT_LO Then Exit Sub
+  off = (bx3(s) \ 3) - batxi
+
+  If batw = 0 Then
+    If off < 0 Or off >= 14 Then Exit Sub
+    If off >= 7 Then off = off - 1
+    If off >= 11 Then off = off - 1
+    z = off \ 2
+  Else
+    If off < 0 Or off >= 18 Then Exit Sub
+    z = 0
+    If off >= 2 Then z = 1
+    If off >= 4 Then z = 2
+    If off >= 9 Then z = 3
+    If off >= 12 Then z = 4
+    If off >= 16 Then z = 5
+  End If
+
+  bdir(s) = z + 1
+  ix = bdir(s) + speedLvl
+  bdx(s) = velx(ix)
+  bdy(s) = vely(ix)
+
+  ' G - Grab.  activeCaps = 0 means the ball sticks where it landed and is
+  ' held for 150 fields, or until fire..
+  If activeCaps = 0 Then
+    heldOff = bx3(s) - batx3
+    by3(s) = 3 * &H19
+    ballHeld = GRAB_FRAMES
+    Snd 3
+  Else
+    Snd 1
+  End If
+End Sub
+
+' =====================================================================
+'  LookupBrick plus IsInBrickZone, literally.
+'  Returns the brick value and leaves the map index in scanIdx.
+' =====================================================================
+Function TestBrick(px As INTEGER, py As INTEGER, wide As INTEGER) As INTEGER
+  Local INTEGER col, idx
+
+  brickVal = 0
+  TestBrick = 0
+  If py >= ZONE_TOP Or py < ZONE_BOT Then Exit Function
+
+  col = (px - BAT_MINX) \ 8
+  idx = (((ROW0_Y - py) \ 8) * 16) + col
+  If idx < 0 Or idx > 255 Then Exit Function
+  scanIdx = idx
+
+  If fmap(idx) <> 0 Then
+    brickVal = fmap(idx)
+    TestBrick = 1
+    Exit Function
+  End If
+
+  ' empty: an object in slot 0-5 - a ball or the capsule - is allowed the
+  ' cell to the right as well, but only once it is at least 4 pixels into
+  ' this one.  CPY #&06 / BCS skips it, so aliens (6,7) and the laser (8)
+  ' do not get it.
+  If wide = 0 Then Exit Function
+  If idx + 1 > 255 Then Exit Function
+  If fmap(idx + 1) = 0 Then Exit Function
+  If ((px - BAT_MINX) And 7) < 4 Then Exit Function
+  scanIdx = idx + 1
+  brickVal = fmap(idx + 1)
+  TestBrick = 1
+End Function
+
+' =====================================================================
+'  BrickDestroyed / HardenBrick / EraseBrick,
+'  less the capsule roll, which is phase 4.
+' =====================================================================
+Sub BrickHit
+  Local INTEGER v, co, ro, pts
+
+  ' ROUND 32 IS THE BOSS.  There are no destructible bricks on it - the
+  ' whole face is gold - so every brick contact is a hit on the boss.
+  If rnum = BOSS_ROUND Then
+    bossFlash = 7
+    Snd 0
+    AddScore 1000
+    bossHits = bossHits - 1
+    If bossHits <= 0 Then gameEvent = &H0A
+    Exit Sub
+  End If
+
+  v = brickVal
+  If v = 10 Then                              ' gold: indestructible, no score
+    Snd 2
+    Exit Sub
+  End If
+
+  If v < 0 Then                               ' silver, counting up to zero
+    fmap(scanIdx) = v + 1
+    If fmap(scanIdx) <> 0 Then                ' still standing
+      Snd 2
+      Exit Sub
+    End If
+    AddScore 100
+  Else
+    pts = (v + 4) * 10
+    AddScore pts
+  End If
+
+  Snd 0
+  fmap(scanIdx) = 0
+  co = scanIdx And 15
+  ro = scanIdx \ 16
+  Tilemap Set 1, co, ro, 0
+  bricksLeft = bricksLeft - 1
+  nDestroyed = nDestroyed + 1
+  If bricksLeft <= 0 Then
+    gameEvent = 1
+    Exit Sub
+  End If
+  ' the brick's own position, PlotBrickObjects: col*8+4, &DF-row*8
+  CapsuleRoll v, co * 8 + 4, &HDF - ro * 8
+End Sub
+
+' =====================================================================
+Sub AddScore(n As INTEGER)
+  score = score + n
+  If score >= nextLife Then
+    lives = lives + 1
+    nextLife = nextLife + 50000
+    Snd 6 : Snd 7
+  End If
+End Sub
+
+' =====================================================================
+'  SetBallVelocities: fold the direction, re-read both tables.
+' =====================================================================
+Sub SetBallVels
+  Local INTEGER s, a, ix
+  For s = 1 To 3
+    If bact(s) = 0 Then Continue For
+    a = bdir(s)
+    If a < 4 Then a = a Xor 7
+    ix = a + speedLvl
+    If bdx(s) < 0 Then ix = ix Xor 7
+    bdx(s) = velx(ix)
+    If bdy(s) < 0 Then bdy(s) = -vely(ix) Else bdy(s) = vely(ix)
+  Next s
+End Sub
+
+' =====================================================================
+Sub Launch
+  If ballHeld = 0 Then Exit Sub
+  ballHeld = 0
+  Snd 1
+End Sub
+
+' =====================================================================
+Sub ReadBat
+  Local INTEGER mx, span, s, lead, atWall
+  span = BAT_MAXX - batw - BAT_MINX
+  If autoBat Then
+    ' park the bat under whichever ball is lowest - only for the soak test
+    lead = -1
+    For s = 1 To 3
+      If bact(s) Then
+        If lead < 0 Then lead = s
+        If by3(s) < by3(lead) Then lead = s
+      End If
+    Next s
+    If lead > 0 Then
+      batx3 = bx3(lead) - 3 * 6
+      ' On the boss round the thing that kills you is not the ball, so the
+      ' rails have to dodge as well as chase: shove away from anything
+      ' incoming that is close and low.  Demo scaffolding, not game rules.
+      If rnum = BOSS_ROUND Then
+        For s = 5 To 7
+          If aType(s) < 0 Then Continue For
+          If (aY3(s) \ 3) > 52 Then Continue For
+          If Abs((aX3(s) \ 3) - (batx3 \ 3)) > 22 Then Continue For
+          If (aX3(s) \ 3) > (batx3 \ 3) Then batx3 = batx3 - 3 * 26 Else batx3 = batx3 + 3 * 26
+        Next s
+      End If
+      If batx3 < 3 * BAT_MINX Then batx3 = 3 * BAT_MINX
+      If batx3 > 3 * (BAT_MINX + span) Then batx3 = 3 * (BAT_MINX + span)
+    End If
+  Else
+    mx = Device(MOUSE MOUSEDEV, X)
+    batx3 = 3 * BAT_MINX + (mx * span * 3) \ 319
+  End If
+  batxi = batx3 \ 3
+
+  CheckEscape
+End Sub
+
+' =====================================================================
+'  THE ESCAPE.  Driving the bat into the right wall with the door armed
+'  and its animation finished ends the round for ten thousand.  All three
+'  conditions have to hold.
+' =====================================================================
+Sub CheckEscape
+  If batxi + batw < BAT_MAXX Then Exit Sub
+  If doorArmed = 0 Then Exit Sub
+  If doorStep <> 0 Then Exit Sub
+  gameEvent = 3
+End Sub
+
+' =====================================================================
+'  Soak test: play it with the bat on rails for N frames and report.
+'  Exercises the brick lookup, the silver countdown, the speed ladder
+'  and the round-clear path over thousands of frames.
+' =====================================================================
+Sub Soak(frames As INTEGER)
+  Local INTEGER j, t0, r0, s0, rounds, deaths, wasAuto
+  wasAuto = autoBat : autoBat = 1
+  r0 = rnum : s0 = score : rounds = 0 : deaths = 0 : nDestroyed = 0 : nCapsCaught = 0
+  For j = 0 To 6 : nCaps(j) = 0 : Next j
+  ballHeld = 0
+  t0 = Timer
+  For j = 1 To frames
+    ReadBat
+    SimStep
+    DrawAll
+    If gameEvent = 1 Then
+      rounds = rounds + 1
+      rnum = (rnum + 1) Mod N_ROUNDS
+      NewRound
+      ballHeld = 0
+    ElseIf gameEvent = 2 Then
+      deaths = deaths + 1
+      NewLife
+      ballHeld = 0
+    End If
+  Next j
+  Print
+  Print "soak:"; frames; " frames in"; Timer - t0; " ms ="; Str$(frames * 1000.0 / (Timer - t0), 0, 1); " fps"
+  Print "  rounds cleared"; rounds; "   balls lost"; deaths
+  Print "  bricks destroyed"; nDestroyed; "   score"; score - s0;
+  If nDestroyed > 0 Then Print "   avg"; (score - s0) \ nDestroyed Else Print
+  Print "  speed level"; speedLvl \ 8; "   bounces"; bounceCnt
+  Print "  bricks left"; bricksLeft; " of round"; rnum + 1
+  Print "  aliens released"; nAliens; "   killed"; nAlienKills
+  Print "  capsules dropped"; nCaps(0)+nCaps(1)+nCaps(2)+nCaps(3)+nCaps(4)+nCaps(5)+nCaps(6); "   caught"; nCapsCaught
+  Print "  "; : ShowCaps
+  Print "soak done"
+  autoBat = wasAuto
+End Sub
+
+
+' =====================================================================
+'  Present one  field.  The display is 75 Hz and the original design was 50, so a
+'  field is exactly 1.5 frames: accumulate and draw one or two.  This is
+'  the 3:2 cadence, used for the animations that are counted in fields.
+' =====================================================================
+Sub ShowField(nfields As INTEGER)
+  Local INTEGER f
+  ' fieldAcc is deliberately NOT local: callers ask for one field at a
+  ' time inside their own loops, so the half-frame has to carry over
+  ' between calls or every field costs a whole frame and the animation
+  ' runs at two thirds speed.
+  For f = 1 To nfields
+    fieldAcc = fieldAcc + 3
+    Do While fieldAcc >= 2
+      DrawAll
+      fieldAcc = fieldAcc - 2
+    Loop
+  Next f
+End Sub
+
+' =====================================================================
+'  LOSE A LIFE.  The bat is XOR-plotted on and off nine times,
+'  the gap shortening each pass, then twenty fields of nothing.  Ninety
+'  fields in all - about two seconds.  Then the round resumes by itself:
+'  the original asks for no keypress, and neither do we.
+' =====================================================================
+'  gameEvent 3 (, whose block comment calls it LOSE A LIFE and is
+'  wrong): ten thousand points, then the bat shrinks out of the picture
+'  and the next round starts.
+' =====================================================================
+Sub EscapeSeq
+  Local INTEGER j
+  Snd &H0E : Snd &H0F
+  For j = 1 To 18
+    batVis = 1 - batVis
+    ShowField 2
+  Next j
+  batVis = 1
+  ShowField 20
+End Sub
+
+' =====================================================================
+Sub DeathSeq
+  Local INTEGER t, x
+  Snd 9 : Snd &H0A
+  batVis = 1
+  For t = 9 To 1 Step -1
+    For x = 9 To 0 Step -1
+      If x = t Or x = 0 Then batVis = 1 - batVis
+      ShowField 1
+    Next x
+  Next t
+  batVis = 1
+  ShowField 20
+End Sub
+
+' =====================================================================
+'  ROUND INTRO.  The bat rises into place over twenty
+'  fields, then ROUND n flashes for a hundred and twenty.
+' =====================================================================
+Sub RoundIntro
+  Local INTEGER j
+  batRise = 0
+  For j = 1 To 20
+    batRise = batRise + 1
+    ShowField 1
+  Next j
+  batRise = BAT_Y
+  For j = 1 To 120
+    introFlash = j
+    ShowField 1
+  Next j
+  introFlash = 0
+End Sub
+
+' =====================================================================
+'  Verify the death path: 110 fields of animation then 140 of round intro,
+'  and the reset putting the speed ladder and bat width back.
+' =====================================================================
+'  C steps a capsule through all seven types, dropped above the bat, so
+'  each effect can be seen without waiting for the dice.
+' =====================================================================
+'  Verify the roll at statistically.  Per destroyed ordinary brick
+'  and with nothing in force, each of types 0-4 should come out at 1 in
+'  16 and types 5 and 6 at 1 in 64 - four times rarer.  Then the two
+'  exclusions: a type already in force can never be rolled, and B is
+'  refused outright while a door is armed.
+' =====================================================================
+'  Drop one of each type onto the bat and report what it did.
+' =====================================================================
+'  The three ways an alien dies, and the laser, checked directly.
+' =====================================================================
+'  The boss: twenty hits at a thousand each, its projectiles, the dissolve.
+' =====================================================================
+Sub BossCheck
+  Local INTEGER j, s0, t0, live, s
+  Print
+  rnum = BOSS_ROUND : bossHits = BOSS_HITS : gameEvent = 0
+  NewRound
+  Print "round"; rnum + 1; "  bricksLeft"; bricksLeft; " (want 9999)  bossHits"; bossHits; " (want 20)"
+  s0 = score
+
+  For j = 1 To 19
+    brickVal = 10 : scanIdx = 5 * 16 + 6
+    BrickHit
+  Next j
+  Print "19 hits : bossHits"; bossHits; " (want 1)  gameEvent"; gameEvent; " (want 0)  score +"; score - s0; " (want 19000)"
+
+  brickVal = 10 : scanIdx = 5 * 16 + 6
+  BrickHit
+  Print "20 hits : bossHits"; bossHits; " (want 0)  gameEvent &"; Hex$(gameEvent); " (want A)  score +"; score - s0; " (want 20000)"
+
+  ' --- the projectiles
+  gameEvent = 0 : nAliens = 0
+  aType(5) = -1 : aType(6) = -1 : aType(7) = -1 : alienHold = 1
+  For j = 1 To 450
+    SimStep
+  Next j
+  live = 0
+  For s = 5 To 7
+    If aType(s) >= 0 Then live = live + 1
+  Next s
+  Print "450 frames (6 s): the boss threw"; nAliens; " (want about 7)  in flight now"; live
+
+  ' --- the dissolve
+  gameEvent = 0
+  t0 = Timer
+  DissolveSeq
+  Print "dissolve"; Timer - t0; " ms  (128 frames = 1707)"
+
+  rnum = 0 : bossHits = BOSS_HITS : NewRound
+  Print "bosscheck done"
+End Sub
+
+' =====================================================================
+Sub AlienCheck
+  Local INTEGER ax, ay, dy0, n0, j, idx
+  Print
+
+  ' --- 1. a ball.  The ball that kills one has its dy reversed.
+  aType(6) = &H16 : aX3(6) = 3 * 60 : aY3(6) = 3 * 120 : aDir(6) = 4
+  bact(1) = 1 : bx3(1) = 3 * 60 : by3(1) = 3 * 120 : bdy(1) = 3 : dy0 = bdy(1)
+  shotOn = 0
+  AlienChecks 6
+  Print "ball  : alien type &"; Hex$(aType(6)); " (want 1A)   ball dy "; Str$(dy0); " ->"; bdy(1); " (want reversed)"
+
+  ' --- 2. the bat
+  aType(7) = &H16 : aX3(7) = 3 * (batxi + 4) : aY3(7) = 3 * 30
+  bact(1) = 0
+  AlienChecks 7
+  Print "bat   : alien type &"; Hex$(aType(7)); " (want 1A)"
+
+  ' --- 3. the laser
+  aType(6) = &H16 : aX3(6) = 3 * 60 : aY3(6) = 3 * 120
+  shotOn = 1 : shotX = 60 : shotY3 = 3 * 115
+  AlienChecks 6
+  Print "laser : alien type &"; Hex$(aType(6)); " (want 1A)   shot gone "; Str$(1 - shotOn); " (want 1)"
+
+  ' --- 4. the laser takes out TWO bricks in one frame
+  aType(6) = -1 : aType(7) = -1
+  For j = 0 To 255 : fmap(j) = 0 : Next j
+  idx = 5 * 16 + 4
+  fmap(idx) = 3 : fmap(idx + 1) = 3
+  Tilemap Set 1, 4, 5, 3 : Tilemap Set 1, 5, 5, 3
+  bricksLeft = 99 : n0 = nDestroyed
+  shotOn = 1
+  shotX = 4 + 4 * 8 + 3                     ' 3 px into column 4, so >= 2
+  shotY3 = 3 * (&HDE - 5 * 8 - 20)
+  For j = 1 To 40
+    UpdateShot
+    If shotOn = 0 Then Exit For
+  Next j
+  Print "laser : bricks destroyed in one shot"; nDestroyed - n0; " (want 2)"
+
+  bact(1) = 1 : shotOn = 0 : bricksLeft = 0
+  LoadRound rnum
+  Print "aliencheck done"
+End Sub
+
+' =====================================================================
+Sub EffectsCheck
+  Local INTEGER t, j, nb2, s2
+  Local STRING ln
+  Print
+  Print "type  caught  batType batw speed  active  door  lives  balls"
+  For t = 0 To 6
+    batw = 0 : batType = 0 : speedLvl = 8 : doorArmed = 0 : doorStep = 0
+    activeCaps = -1 : lives = 3 : extraBalls = 0
+    bact(1) = 1 : bact(2) = 0 : bact(3) = 0
+    bx3(1) = 3 * 54 : by3(1) = 3 * 120 : bdx(1) = 2 : bdy(1) = 3 : bdir(1) = 5
+    ballHeld = 0
+    capOn = 1 : capType = t : capX = batxi + 4 : capY3 = 3 * 30
+    j = 0
+    Do While capOn And j < 80
+      UpdateCapsule
+      j = j + 1
+    Loop
+    nb2 = 0
+    For s2 = 1 To 3
+      If bact(s2) Then nb2 = nb2 + 1
+    Next s2
+    ln = Mid$("GDESLBP", t + 1, 1) + Str$(t) + "     " + Str$(1 - capOn)
+    ln = ln + "       " + Str$(batType) + "    " + Str$(batw) + "   " + Str$(speedLvl)
+    ln = ln + "     " + Str$(activeCaps) + "      " + Str$(doorArmed)
+    ln = ln + "     " + Str$(lives) + "      " + Str$(nb2)
+    Print ln
+  Next t
+  ' --- and the escape itself, the three conditions of
+  Print
+  gameEvent = 0 : doorArmed = 0 : doorStep = 0 : batw = 0 : batxi = BAT_MAXX
+  CheckEscape
+  Print "at wall, no door armed        -> gameEvent"; gameEvent; " (want 0)"
+  gameEvent = 0 : doorArmed = 1 : doorStep = 3
+  CheckEscape
+  Print "at wall, door still animating -> gameEvent"; gameEvent; " (want 0)"
+  gameEvent = 0 : doorStep = 0 : batxi = BAT_MAXX - 1
+  CheckEscape
+  Print "door open, bat one short      -> gameEvent"; gameEvent; " (want 0)"
+  gameEvent = 0 : batxi = BAT_MAXX
+  CheckEscape
+  Print "door open, bat at the wall    -> gameEvent"; gameEvent; " (want 3)"
+  gameEvent = 0
+
+  ' put it back to something sane
+  batw = 0 : batType = 0 : speedLvl = 0 : doorArmed = 0 : doorStep = 0
+  activeCaps = -1 : lives = 3 : extraBalls = 0 : capOn = 0
+  bact(2) = 0 : bact(3) = 0
+  Print "effectscheck done"
+End Sub
+
+' =====================================================================
+Sub RollTest
+  Local INTEGER j, n, svA, svD, tot
+  n = 16000
+  Print
+  Print "capsule roll, "; n; " destroyed bricks each pass"
+  Print "want: types 0-4 = n/16 = "; n \ 16; "   types 5,6 = n/64 = "; n \ 64
+  svA = activeCaps : svD = doorArmed
+
+  activeCaps = -1 : doorArmed = 0
+  RollPass n
+  Print "  nothing in force  : ";
+  ShowCaps
+
+  activeCaps = 3 : doorArmed = 0
+  RollPass n
+  Print "  S in force        : ";
+  ShowCaps
+
+  activeCaps = -1 : doorArmed = 1
+  RollPass n
+  Print "  door already armed: ";
+  ShowCaps
+
+  activeCaps = svA : doorArmed = svD : capOn = 0
+  Print "rolltest done"
+End Sub
+
+Sub RollPass(n As INTEGER)
+  Local INTEGER j
+  For j = 0 To 6 : nCaps(j) = 0 : Next j
+  For j = 1 To n
+    capOn = 0
+    CapsuleRoll 1, 60, 200
+  Next j
+  capOn = 0
+End Sub
+
+Sub ShowCaps
+  Local INTEGER j, tot
+  Local STRING ln
+  tot = 0
+  ln = ""
+  For j = 0 To 6
+    ln = ln + Mid$("GDESLBP", j + 1, 1) + Str$(nCaps(j)) + " "
+    tot = tot + nCaps(j)
+  Next j
+  Print ln + "  total" + Str$(tot)
+End Sub
+
+' =====================================================================
+Sub ForceCapsule
+  Local INTEGER n
+  n = activeCaps + 1
+  If n > 6 Then n = 0
+  capOn = 1 : capType = n
+  capX = batxi + 4 : capY3 = 3 * 60
+  Print "forced capsule "; Mid$("GDESLBP", n + 1, 1); " (type"; n; ")"
+End Sub
+
+' =====================================================================
+Sub DeathCheck
+  Local INTEGER t0, t1, t2
+  speedLvl = &H18 : bounceCnt = 99 : batw = 4
+  Print
+  Print "before death: speed"; speedLvl \ 8; " bounces"; bounceCnt; " batw"; batw
+  t0 = Timer
+  DeathSeq
+  t1 = Timer
+  NewLife
+  RoundIntro
+  t2 = Timer
+  Print "DeathSeq   "; t1 - t0; " ms  (want 110 fields = 2200)"
+  Print "RoundIntro "; t2 - t1; " ms  (want 140 fields = 2800)"
+  Print "after  death: speed"; speedLvl \ 8; " bounces"; bounceCnt; " batw"; batw
+  Print "bricks left"; bricksLeft; " - the ones you broke stay broken"
+  Print "deathcheck done"
+End Sub
+
+
+' =====================================================================
+'  CAPSULE RELEASE.  Only an ordinary brick drops one - value 1
+'  to 8, so never silver and never gold, and note that a silver brick
+'  does not drop one even on the hit that finally breaks it, because
+'  brickValue is still negative and the unsigned CMP #9 rejects it.
+'  Slot 5 must be free and no extra balls may be in play.
+'
+'  Then: a random 0-15 must land below 7, and must differ from the
+'  capsule currently in force, so the same one never appears twice
+'  running.  Types 5 and 6 need a second roll of 1 in 4 on top, and 5 is
+'  refused outright while a door is already armed.
+' =====================================================================
+Sub CapsuleRoll(v As INTEGER, bxp As INTEGER, byp As INTEGER)
+  Local INTEGER r
+  If v < 1 Or v > 8 Then Exit Sub
+  If capOn Then Exit Sub
+  If extraBalls > 0 Then Exit Sub
+
+  r = Int(Rnd * 16)
+  If r >= 7 Then Exit Sub
+  If r = activeCaps Then Exit Sub
+  If r >= 5 Then
+    If Int(Rnd * 4) <> 0 Then Exit Sub
+    If r = 5 And doorArmed Then Exit Sub
+  End If
+
+  capType = r
+  capX = bxp
+  capY3 = 3 * byp
+  capOn = 1
+  nCaps(r) = nCaps(r) + 1
+End Sub
+
+' =====================================================================
+'  UPDATE THE CAPSULE.
+'  It falls one pixel a field, is catchable only between y 14 and 25,
+'  and the catch window is the bat plus eight pixels either side.
+' =====================================================================
+Sub UpdateCapsule
+  Local INTEGER cy, dx
+  If rnum = BOSS_ROUND Then Exit Sub
+  If capOn = 0 Then Exit Sub
+
+  capY3 = capY3 - 2                           ' 1 px per field = 2 thirds per frame
+  If capY3 <= 0 Then
+    capOn = 0
+    Exit Sub
+  End If
+
+  cy = capY3 \ 3
+  If cy >= CAP_YTOP Or cy < CAP_YBOT Then Exit Sub
+
+  dx = capX - batxi + 8
+  If dx < 0 Or dx > &H16 + batw Then Exit Sub
+
+  CatchCapsule
+End Sub
+
+' =====================================================================
+'  Catching one is worth a thousand and ALWAYS cancels whatever was in
+'  force before the new effect is applied - the bat goes back to normal
+'  width and the normal sprite first.  Get that ordering wrong and the
+'  effects stack.
+' =====================================================================
+Sub CatchCapsule
+  Local INTEGER s, lead, ix, a
+  capOn = 0
+  nCapsCaught = nCapsCaught + 1
+  AddScore 1000
+  Launch                                      ' ReflectBall: releases a held ball
+
+  batw = 0 : batType = 0                      ' cancel, then apply
+  ' ( nudges batX by two to keep a widening bat centred; under mouse
+  '  control the bat position is recomputed from the mouse every frame and
+  '  the clamp already allows for batw, so there is nothing to undo.)
+  activeCaps = capType
+
+  Select Case capType
+    Case 0                                    ' G - Grab.  Passive: BatTest
+      ' does the work when activeCaps = 0.
+    Case 1                                    ' D - Disruption, three balls
+      lead = 0
+      For s = 3 To 1 Step -1
+        If bact(s) Then
+          lead = s
+          Exit For
+        End If
+      Next s
+      If lead = 0 Then Exit Sub
+      a = bdir(lead)
+      If a < 4 Then a = a Xor 7
+      ix = a + speedLvl
+      If bdx(lead) < 0 Then ix = ix Xor 7
+      SpawnBall 1, ix,     bx3(lead), by3(lead), bdy(lead)
+      SpawnBall 2, ix - 1, bx3(lead), by3(lead), bdy(lead)
+      SpawnBall 3, ix + 1, bx3(lead), by3(lead), bdy(lead)
+      extraBalls = 2
+    Case 2                                    ' E - Enlarge
+      batType = 1 : batw = 4
+      Snd 4                                   ' noise on channel 0 ...
+      Snd 5                                   ' ... swept by the tone on channel 1
+
+    Case 3                                    ' S - Slow
+      If speedLvl > 0 Then
+        speedLvl = speedLvl - 8
+        SetBallVels
+      End If
+    Case 4                                    ' L - Laser (firing is phase 5)
+      batType = 2
+    Case 5                                    ' B - Break: open the door
+      doorStep = 1 : doorArmed = 1
+    Case 6                                    ' P - Player, an extra life
+      lives = lives + 1
+      Snd 6 : Snd 7
+  End Select
+End Sub
+
+' =====================================================================
+'  Set one slot's direction and velocity from table index ix and copy the
+'  source ball's position across.  Note that ix - the direction PLUS the
+'  speed level - is what goes into bdir, so a later speed-up adds the
+'  level a second time.  Left as it is: it only ever nudges a cloned ball
+'  into a neighbouring block and it cannot leave the table.
+' =====================================================================
+Sub SpawnBall(s As INTEGER, ix As INTEGER, sx3 As INTEGER, sy3 As INTEGER, sdy As INTEGER)
+  Local INTEGER j
+  j = ix
+  If j < 0 Then j = 0
+  If j > 31 Then j = 31
+  bact(s) = 1
+  bx3(s) = sx3 : by3(s) = sy3
+  bdir(s) = j
+  bdx(s) = velx(j)
+  If sdy < 0 Then bdy(s) = -vely(j) Else bdy(s) = vely(j)
+End Sub
+
+' =====================================================================
+'  THE DOOR.  Four steps, the two halves separating vertically in the
+'  right wall beside the bat.  Once the animation finishes doorStep
+'  returns to zero and the escape is live.
+' =====================================================================
+Sub AnimateDoor
+  If doorStep = 0 Then Exit Sub
+  If doorStep >= 5 Then
+    doorStep = 0
+    Exit Sub
+  End If
+  doorStep = doorStep + 1
+End Sub
+
+Sub DrawDoor
+  Local INTEGER st, ly, ry
+  If doorArmed = 0 Then Exit Sub
+  st = doorStep
+  If st = 0 Then st = 5                       ' fully open
+  ly = st * 2 + &H1E
+  ry = (&H0B - st) * 2
+  Blit Flash artSlot, F, S_DOORL_X, S_DOORL_Y, 2 * DOOR_X, SCRY0 - ly, S_DOORL_W, S_DOORL_H, 0
+  Blit Flash artSlot, F, S_DOORR_X, S_DOORR_Y, 2 * DOOR_X, SCRY0 - ry, S_DOORR_W, S_DOORR_H, 0
+End Sub
+
+
+' =====================================================================
+'  UPDATE THE ALIENS.  Slots 6 and 7 - two at most.
+'
+'  A fresh alien has objDir = &FF and descends; once it is below y &8C it
+'  switches to drift, where a 5-bit direction is incremented every step
+'  and its top three bits index the tables at/.  An alien that
+'  falls below alienFloorY is removed.
+'
+'  alienFloorTab is indexed by roundNumber AND 3, so it cycles
+'  16, 13, 12, 13 every four rounds - not once per group of eight.
+' =====================================================================
+Sub UpdateAliens
+  Local INTEGER s
+
+  If rnum = BOSS_ROUND Then
+    UpdateBoss
+    Exit Sub
+  End If
+
+  alienAnim = alienAnim - 1
+  If alienAnim < 0 Then alienAnim = ANIM_RELOAD
+  If alienHold > 0 Then alienHold = alienHold - 1
+
+  For s = 6 To 7
+    If aType(s) < 0 Then
+      AlienRelease s
+      Continue For
+    End If
+
+    If aType(s) >= &H1A Then                  ' exploding
+      aBoom(s) = aBoom(s) - 1
+      If aBoom(s) <= 0 Then
+        aType(s) = aType(s) + 1
+        If aType(s) >= &H1D Then
+          aType(s) = -1
+        Else
+          aBoom(s) = BOOM_FRAMES
+        End If
+      End If
+      Continue For
+    End If
+
+    If alienAnim = 0 Then                     ' &16 &17 &18 &19 &16 ...
+      If aType(s) = &H19 Then aType(s) = &H16 Else aType(s) = aType(s) + 1
+    End If
+
+    MoveAlien s
+  Next s
+End Sub
+
+' =====================================================================
+'  RELEASE.  One in 128 per field per free slot, throttled by
+'  alienHoldOff.  The entry point is chosen from the bat: it always comes
+'  in through the door FURTHEST from the player.
+' =====================================================================
+Sub AlienRelease(s As INTEGER)
+  If alienHold > 0 Then Exit Sub
+  If Int(Rnd * ALIEN_ODDS) <> 0 Then Exit Sub
+  alienHold = ALIEN_HOLD
+  aType(s) = &H16
+  aY3(s) = 3 * &HF0
+  aDY(s) = -1
+  aDX(s) = 0
+  aDir(s) = -1
+  aBoom(s) = 0
+  If batxi < &H30 Then aX3(s) = 3 * &H4E Else aX3(s) = 3 * &H1C
+  nAliens = nAliens + 1
+End Sub
+
+' =====================================================================
+Sub MoveAlien(s As INTEGER)
+  Local INTEGER ox3, oy3, ax, ay, d, ny, r
+
+  ox3 = aX3(s) : oy3 = aY3(s)
+  ax = aX3(s) \ 3 : ay = aY3(s) \ 3
+
+  If aDir(s) < 0 And ay >= &H8C Then
+    ' ---------------------------------------------------- descend
+    r = Int(Rnd * 256)
+    If r < 5 And aDY(s) >= 0 Then
+      If (Int(Rnd * 256) And &H1E) = 0 Then
+        AlienBounce s, ox3, oy3
+        Exit Sub
+      End If
+    End If
+
+    ny = ay + aDY(s)
+    If ny >= &HF4 Then
+      AlienBounce s, ox3, oy3
+      Exit Sub
+    End If
+    If ny < alienFloor Then
+      aType(s) = -1
+      Exit Sub
+    End If
+
+    aY3(s) = 3 * ny
+    aX3(s) = aX3(s) + 3 * aDX(s)
+    ax = aX3(s) \ 3
+    If ax < 4 Or ax >= &H66 Then
+      AlienBounce s, ox3, oy3
+      Exit Sub
+    End If
+    ' two probe points, so a tall sprite cannot clip through a brick
+    If TestBrick(ax, ny - alienFloor, 0) Then
+      AlienBounce s, ox3, oy3
+      Exit Sub
+    End If
+    If TestBrick(ax, ny, 0) Then
+      AlienBounce s, ox3, oy3
+      Exit Sub
+    End If
+  Else
+    ' ------------------------------------------------------ drift
+    If aDir(s) < 0 Then
+      If ax >= &H2D Then aDir(s) = 0 Else aDir(s) = &H10
+    Else
+      aDir(s) = (aDir(s) + 1) And &H1F
+    End If
+    d = aDir(s) \ 4
+    aX3(s) = aX3(s) + 2 * dirtX(d)
+    aY3(s) = aY3(s) + 2 * dirtY(d)
+    If (aY3(s) \ 3) < alienFloor Then
+      aType(s) = -1
+      Exit Sub
+    End If
+  End If
+
+  AlienChecks s
+End Sub
+
+' =====================================================================
+'.  Undo the move and pick a new direction: straight down if it
+'  was heading down, otherwise one axis at random.
+' =====================================================================
+Sub AlienBounce(s As INTEGER, ox3 As INTEGER, oy3 As INTEGER)
+  Local INTEGER t
+  aX3(s) = ox3 : aY3(s) = oy3
+  If aDY(s) >= 0 Then
+    aDX(s) = 0 : aDY(s) = -1
+    Exit Sub
+  End If
+  t = 1
+  If Int(Rnd * 2) = 0 Then t = -1
+  If Int(Rnd * 2) = 0 Then
+    aDX(s) = 0 : aDY(s) = t
+  Else
+    aDX(s) = t : aDY(s) = 0
+  End If
+End Sub
+
+' =====================================================================
+'  The three ways an alien dies: the bat, the laser and a ball.  A ball
+'  that kills one has its dy reversed.  All three score 100.
+' =====================================================================
+Sub AlienChecks(s As INTEGER)
+  Local INTEGER ax, ay, t, b, sy
+
+  ax = aX3(s) \ 3 : ay = aY3(s) \ 3
+
+  If ay < &H22 Then                           ' near the bat
+    t = ax - batxi + 4
+    If t >= 0 And t < &H14 Then
+      KillAlien s
+      Exit Sub
+    End If
+  End If
+
+  If shotOn Then
+    sy = shotY3 \ 3
+    t = ax - shotX + 8
+    If t >= 0 And t < &H10 Then
+      t = ay - sy
+      If t >= 0 And t < alienFloor Then
+        shotOn = 0
+        KillAlien s
+        Exit Sub
+      End If
+    End If
+  End If
+
+  For b = 3 To 1 Step -1
+    If bact(b) = 0 Then Continue For
+    t = ax - (bx3(b) \ 3) + 8
+    If t < 0 Or t >= &H0C Then Continue For
+    t = ay - (by3(b) \ 3) + 4
+    If t < 0 Or t >= &H0E Then Continue For
+    bdy(b) = -bdy(b)
+    KillAlien s
+    Exit Sub
+  Next b
+End Sub
+
+Sub KillAlien(s As INTEGER)
+  Snd &H10
+  aType(s) = &H1A
+  aBoom(s) = BOOM_FRAMES
+  aDX(s) = 0
+  AddScore 100
+  nAlienKills = nAlienKills + 1
+End Sub
+
+' =====================================================================
+'  THE LASER.  Slot 8, six pixels a field, one shot at a time.
+'  It tests the cell it is in and - whether or not that one was there -
+'  the cell to the RIGHT, so a single shot can take out two bricks.
+' =====================================================================
+Sub UpdateShot
+  Local INTEGER sy, col, idx
+  If shotOn = 0 Then Exit Sub
+
+  shotY3 = shotY3 + SHOT_STEP
+  sy = shotY3 \ 3
+  If sy >= &HFC Then
+    shotOn = 0
+    Exit Sub
+  End If
+
+  If sy >= ZONE_TOP Or sy < ZONE_BOT Then Exit Sub
+  col = (shotX - BAT_MINX) \ 8
+  idx = (((ROW0_Y - sy) \ 8) * 16) + col
+  If idx < 0 Or idx > 254 Then Exit Sub
+
+  If fmap(idx) <> 0 Then
+    brickVal = fmap(idx)
+    scanIdx = idx
+    BrickHit
+    shotOn = 0
+  End If
+
+  If fmap(idx + 1) = 0 Then Exit Sub
+  If ((shotX - BAT_MINX) And 7) < 2 Then Exit Sub
+  brickVal = fmap(idx + 1)
+  scanIdx = idx + 1
+  BrickHit
+End Sub
+
+Sub FireShot
+  If activeCaps <> 4 Then Exit Sub
+  If shotOn Then Exit Sub
+  shotOn = 1
+  shotX = batxi + 4
+  shotY3 = 3 * &H18
+  Snd 8
+End Sub
+
+' =====================================================================
+Sub DrawAliens
+  Local INTEGER s, sx, sy, sxs
+  For s = 6 To 7
+    If aType(s) < 0 Then Continue For
+    sx = 2 * (aX3(s) \ 3)
+    sy = SCRY0 - (aY3(s) \ 3)
+    If sy < -16 Or sy > SCRH Then Continue For
+    Select Case aType(s)
+      Case &H16 : Blit Flash artSlot, F, S_ALIEN0_X, S_ALIEN0_Y, sx, sy, S_ALIEN0_W, S_ALIEN0_H, 0
+      Case &H17 : Blit Flash artSlot, F, S_ALIEN1_X, S_ALIEN1_Y, sx, sy, S_ALIEN1_W, S_ALIEN1_H, 0
+      Case &H18 : Blit Flash artSlot, F, S_ALIEN2_X, S_ALIEN2_Y, sx, sy, S_ALIEN2_W, S_ALIEN2_H, 0
+      Case &H19 : Blit Flash artSlot, F, S_ALIEN3_X, S_ALIEN3_Y, sx, sy, S_ALIEN3_W, S_ALIEN3_H, 0
+      Case &H1A : Blit Flash artSlot, F, S_BOOM0_X, S_BOOM0_Y, sx, sy, S_BOOM0_W, S_BOOM0_H, 0
+      Case &H1B : Blit Flash artSlot, F, S_BOOM1_X, S_BOOM1_Y, sx, sy, S_BOOM1_W, S_BOOM1_H, 0
+      Case &H1C : Blit Flash artSlot, F, S_BOOM2_X, S_BOOM2_Y, sx, sy, S_BOOM2_W, S_BOOM2_H, 0
+    End Select
+  Next s
+  If shotOn Then
+    Blit Flash artSlot, F, S_SHOT_X, S_SHOT_Y, 2 * shotX, SCRY0 - (shotY3 \ 3), S_SHOT_W, S_SHOT_H, 0
+  End If
+End Sub
+
+
+' =====================================================================
+'  THE BOSS'S PROJECTILES.  On the boss round UpdateAliens
+'  takes a different path entirely: every forty fields the boss throws one
+'  into a free slot 5, 6 or 7.  It falls three pixels a field and drifts
+'  sideways at a rate fixed from where the bat was when it was thrown -
+'  objDY is reused as a doubled x accumulator, objX being objDY >> 1.
+'  One that reaches the bat costs a life.
+' =====================================================================
+Sub UpdateBoss
+  Local INTEGER s, found, px, py, t
+
+  If bossFlash > 0 Then bossFlash = bossFlash - 1
+  If fieldTick = 0 Then Exit Sub
+
+  alienHold = alienHold - 1
+  If alienHold <= 0 Then
+    found = -1
+    For s = 5 To 7
+      If aType(s) < 0 Then
+        found = s
+        Exit For
+      End If
+    Next s
+    If found < 0 Then
+      alienHold = 1
+    Else
+      aType(found) = &H1F
+      aDY(found) = &H6E                       ' the x accumulator
+      aX3(found) = 3 * &H36
+      aY3(found) = 3 * &H78
+      aDX(found) = ((batxi + 6) \ 16) - 3
+      alienHold = &H28
+      nAliens = nAliens + 1
+    End If
+  End If
+
+  For s = 5 To 7
+    If aType(s) < 0 Then Continue For
+    aType(s) = aType(s) Xor 1                 ' &1E <-> &1F, a two-frame flicker
+    aDY(s) = aDY(s) + aDX(s)
+    aX3(s) = 3 * (aDY(s) \ 2)
+    aY3(s) = aY3(s) - 9                       ' 3 px per field
+    py = aY3(s) \ 3
+    If py < &H0B Then
+      aType(s) = -1
+      Continue For
+    End If
+    If py >= &H18 Then Continue For
+    px = aX3(s) \ 3
+    t = px - batxi + 4
+    If t >= 0 And t < &H10 Then gameEvent = 2
+  Next s
+End Sub
+
+' =====================================================================
+'  THE END-OF-ROUND DISSOLVE.  A hundred and twenty-eight steps,
+'  each strobing the background colour forty times while the video ULA's
+'  palette register is written directly with a falling value.  On RGB121
+'  that is MAP: fade all sixteen slots to black.  The map on this build is
+'  staged as RGB555, so 32 levels a channel - ample for a smooth fade.
+'
+'  NO strobe and NO framebuffer copy inside the loop.  MAP works on the
+'  physical display and the picture is static once it has been drawn, so
+'  the loop only moves the palette.  An earlier version jittered the fade
+'  factor to stand in for a 50 Hz forty palette writes a step; that
+'  strobes all sixteen slots at once and just looks like bad flashing.
+'  The design only ever strobed logical colour 8, the playfield background,
+'  which this port does not use yet.
+' =====================================================================
+Sub DissolveSeq
+  Local INTEGER k, n, cx, cy
+
+  ' THE END-OF-ROUND DISSOLVE: a hundred and twenty-eight steps of forty
+  ' events each, every event blacking out one 8x8 block at random.  5120
+  ' blocks over 1200 cells covers 98.6% of the screen and the CLS finishes
+  ' it, so the screen breaks up rather than fading - which a sixteen-slot
+  ' palette cannot do smoothly anyway.  One frame a step, because there is
+  ' no MAP SET in the loop to wait for a second one.
+  For k = 0 To 127
+    For n = 1 To 40
+      cx = Int(Rnd * 40)
+      cy = Int(Rnd * 30)
+      Box cx * 8, cy * 8, 8, 8, 0, RGB(0,0,0), RGB(0,0,0)
+    Next n
+    FrameBuffer Copy F, N, B
+  Next k
+  CLS RGB(0, 0, 0)
+  FrameBuffer Copy F, N, B
+End Sub
+
+
+' =====================================================================
+'  PlaySound.  Every effect block sets the flush bit in its
+'  channel word, so nothing queues up and a burst can never stall the
+'  frame; only the title tune's two blocks queue, and that is phase 8.
+'
+'  Channel 0 is the noise generator and its pitches 3 and 7 are clocked
+'  by channel 1's pitch.  The Enlarge capsule uses exactly that pairing -
+'  block 4 is noise on channel 0, block 5 the tone on channel 1 that
+'  sweeps it - so channel 1 is left alone for it.
+' =====================================================================
+'  Play all seventeen blocks in turn, named.  The only way to check a
+'  sound is to hear it, so this prints what each one is meant to be.
+'  Blocks 4+5, 6+7, 9+10 and 14+15 are pairs and are played together.
+' =====================================================================
+Sub SoundTest
+  Local INTEGER sv
+  sv = sndOn : sndOn = 1
+  Print
+  Print "sound test - 17 blocks, 11 envelopes"
+  SndSay 0,  "brick destroyed / boss hit"
+  SndSay 1,  "ball off the bat, and launch"
+  SndSay 2,  "indestructible brick struck"
+  SndSay 3,  "ball caught by Grab"
+  SndPair 4, 5, "capsule: Enlarge (noise swept from channel 1)"
+  SndPair 6, 7, "extra life"
+  SndSay 8,  "laser fired"
+  SndPair 9, &H0A, "life lost"
+  SndSay &H0B, "title tune, rest"
+  SndSay &H0C, "title tune, note"
+  SndSay &H0D, "block 13 - never played by the game"
+  SndPair &H0E, &H0F, "escape through the door"
+  SndSay &H10, "alien destroyed"
+  sndOn = sv
+  Print "soundtest done"
+End Sub
+
+Sub SndSay(n As INTEGER, what$ As STRING)
+  Print "  "; Str$(n); "  ch &"; Hex$(sndCh(n), 2); "  amp"; sndAmp(n); "  pitch"; sndPitch(n); "  dur"; sndDur(n); "   "; what$
+  Snd n
+  Pause 900
+End Sub
+
+Sub SndPair(a As INTEGER, b As INTEGER, what$ As STRING)
+  Print "  "; Str$(a); "+"; Str$(b); "                                        "; what$
+  Snd a
+  Snd b
+  Pause 900
+End Sub
+
+' =====================================================================
+Sub Snd(n As INTEGER)
+  If sndOn = 0 Then Exit Sub
+  Play BBC Sound sndCh(n), sndAmp(n), sndPitch(n), sndDur(n)
+End Sub
+
+
+' =====================================================================
+'  THE ATTRACT SCREEN.  The eight high scores, and SPACE to start.
+'
+'  Holding P, J and A together here sets continueFlag.  That
+'  needs three keys at once, so it wants a USB keyboard and KEYDOWN;
+'  over the serial console, C does the same job.
+' =====================================================================
+Sub TitleScreen
+  Local INTEGER k, ph
+  Local STRING c
+
+  ph = 0
+  Do
+    CLS RGB(0,0,0)
+
+    ' The real title screen, unpacked from the RLE in $.Ark - the BASIC
+    ' loader's own bitmap, which Ark2 later loads straight over.  It
+    ' alternates with the high-score table, about four seconds each.
+    If haveTitle And (ph And 512) = 0 Then
+      Blit Flash artSlot, F, TITLE_X, TITLE_Y, 0, 0, TITLE_W, TITLE_H
+      If (ph And 32) < 20 Then Text 160, 120, "PRESS SPACE", "CM", 1, 2, C_TEXT
+      Text 160, 232, "P+J+A (or C) continue     Q quit", "CM", 7, 1, C_DIM
+      ph = (ph + 1) And 1023
+      FrameBuffer Copy F, N, B
+      c = UCase$(Inkey$)
+      If c = " " Then Exit Sub
+      If c = "C" Then contFlag = 1 : Exit Sub
+      If c = "Q" Then quitAll = 1 : Exit Sub
+      If c = "S" Then Save Image homeDir$ + "picshot.bmp"
+      If Device(MOUSE MOUSEDEV, L) Then Exit Sub
+      Continue Do
+    End If
+
+    Box 0, 0, WALL, SCRH, 0, C_WALL, C_WALL
+    Box PANEL_X - WALL, 0, WALL, SCRH, 0, C_WALL, C_WALL
+    Box 0, 0, PANEL_X, WALL, 0, C_WALL, C_WALL
+
+    Text 112, 20, "PICANOID", "CM", 1, 2, C_ACC
+    Text 112, 40, "HIGH SCORES", "CM", 7, 1, C_DIM
+
+    For k = 0 To 7
+      Text 30, 60 + k * 14, Str$(k + 1), "LT", 7, 1, C_DIM
+      Text 48, 60 + k * 14, hiName$(k), "LT", 7, 1, C_TEXT
+      Text 200, 60 + k * 14, Str$(hiScore(k)), "RT", 7, 1, C_ACC
+    Next k
+
+    ph = (ph + 1) And 1023
+    If (ph And 63) < 40 Then Text 112, 186, "PRESS SPACE", "CM", 7, 1, C_TEXT
+    Text 112, 204, "P+J+A (or C) to continue", "CM", 7, 1, C_DIM
+    Text 112, 218, "Q to quit", "CM", 7, 1, C_DIM
+
+    Text PANEL_X + 8, 30, "HIGH", "LT", 7, 1, C_TEXT
+    Text PANEL_X + 8, 42, "SCORES", "LT", 7, 1, C_TEXT
+    Blit Flash artSlot, F, S_BAT_X, S_BAT_Y, PANEL_X + 4, 90, S_BAT_W, S_BAT_H, 0
+    Blit Flash artSlot, F, S_CAPS2_X, S_CAPS2_Y, PANEL_X + 8, 110, 16, 8, 0
+    Blit Flash artSlot, F, S_ALIEN0_X, S_ALIEN0_Y, PANEL_X + 32, 106, S_ALIEN0_W, S_ALIEN0_H, 0
+
+    FrameBuffer Copy F, N, B
+
+    c = UCase$(Inkey$)
+    If c = " " Then Exit Sub
+    If c = "C" Then contFlag = 1 : Exit Sub
+    If c = "Q" Then quitAll = 1 : Exit Sub
+    If c = "S" Then Save Image homeDir$ + "picshot.bmp"
+    If Device(MOUSE MOUSEDEV, L) Then Exit Sub
+  Loop
+End Sub
+
+' =====================================================================
+'  P + J + A held together.  KEYDOWN(0) is how many keys are down and
+'  KEYDOWN(1..) are the codes, so it needs a USB keyboard; with none
+'  attached it simply never fires.
+' =====================================================================
+Function ContinueChord() As INTEGER
+  Local INTEGER n, j, c, gotP, gotJ, gotA
+  ContinueChord = 0
+  On Error Skip 2
+  n = KEYDOWN(0)
+  If MM.ErrNo <> 0 Then
+    On Error Clear
+    Exit Function
+  End If
+  On Error Clear
+  If n < 3 Then Exit Function
+  For j = 1 To n
+    c = KEYDOWN(j)
+    If c = Asc("P") Or c = Asc("p") Then gotP = 1
+    If c = Asc("J") Or c = Asc("j") Then gotJ = 1
+    If c = Asc("A") Or c = Asc("a") Then gotA = 1
+  Next j
+  If gotP And gotJ And gotA Then ContinueChord = 1
+End Function
+
+' =====================================================================
+'  GAME OVER.  If the score beats the eighth place it goes into the
+'  table, name first.
+' =====================================================================
+Sub GameOverSeq
+  Local INTEGER k, j
+  Local STRING nm
+
+  For k = 1 To 40
+    Text 112, 110, "GAME OVER", "CM", 1, 2, C_ACC
+    FrameBuffer Copy F, N, B
+  Next k
+
+  If score <= hiScore(7) Then Exit Sub
+
+  k = 7
+  Do While k > 0
+    If score <= hiScore(k - 1) Then Exit Do
+    hiScore(k) = hiScore(k - 1)
+    hiName$(k) = hiName$(k - 1)
+    k = k - 1
+  Loop
+  hiScore(k) = score
+  hiName$(k) = NameEntry$(k)
+End Sub
+
+' =====================================================================
+Function NameEntry$(slot As INTEGER)
+  Local STRING nm, c
+  Local INTEGER ph
+  nm = ""
+  ph = 0
+  Do
+    CLS RGB(0,0,0)
+    Text 112, 60, "CONGRATULATIONS", "CM", 7, 1, C_TEXT
+    Text 112, 80, Str$(score), "CM", 1, 2, C_ACC
+    Text 112, 110, "RANK" + Str$(slot + 1), "CM", 7, 1, C_TEXT
+    Text 112, 136, "ENTER YOUR NAME", "CM", 7, 1, C_DIM
+    ph = (ph + 1) And 31
+    c = nm
+    If ph < 20 Then c = c + "_"
+    Text 112, 156, c, "CM", 1, 2, C_TEXT
+    Text 112, 190, "RETURN when done", "CM", 7, 1, C_DIM
+    FrameBuffer Copy F, N, B
+
+    c = Inkey$
+    If c = Chr$(13) Then Exit Do
+    If c = Chr$(1) Then Save Image homeDir$ + "picshot.bmp"
+    If c = Chr$(8) Or c = Chr$(127) Then
+      If Len(nm) > 0 Then nm = Left$(nm, Len(nm) - 1)
+    ElseIf c >= " " And c <= "z" Then
+      If Len(nm) < 8 Then nm = nm + UCase$(c)
+    End If
+  Loop
+  If nm = "" Then nm = "PICOMITE"
+  NameEntry$ = nm
+End Function
+
+' =====================================================================
+'  THE PAUSE.  Holding DELETE stops the game.  From there one key
+'  abandons it, a three-key chord skips the round outright, and another
+'  resumes.  Both are in the game code, not the crack.
+' =====================================================================
+Sub PauseLoop
+  Local STRING c
+  paused = 1
+  Do
+    DrawAll
+    Text 112, 110, "PAUSED", "CM", 1, 2, C_TEXT
+    Text 112, 132, "SPACE resume   N skip   Q abandon", "CM", 7, 1, C_DIM
+    FrameBuffer Copy F, N, B
+    c = UCase$(Inkey$)
+    If c = " " Then Exit Do
+    If c = "N" Then gameEvent = 1 : Exit Do
+    If c = "S" Then Save Image homeDir$ + "picshot.bmp"
+    If c = "Q" Then quitAll = 1 : Exit Do
+  Loop
+  paused = 0
+End Sub
+
+' =====================================================================
+Sub NewRound
+  LoadRound rnum
+  NewLife
+End Sub
+
+' The block, which the life-loss path at also falls through:
+' losing a life puts the ball speed back to level 0 and the bat back to
+' normal width.  It is not only the ball that is reset.
+Sub NewLife
+  Local INTEGER s
+  gameEvent = 0
+  extraBalls = 0
+  speedLvl = 0 : bounceCnt = 0 : batw = 0
+  activeCaps = -1 : capOn = 0 : batType = 0
+  doorStep = 0 : doorArmed = 0
+  aType(6) = -1 : aType(7) = -1
+  alienHold = ALIEN_HOLD : alienAnim = ANIM_RELOAD
+  shotOn = 0 : fireEdge = 0
+  aType(5) = -1
+  alienFloor = afloor(rnum And 3)
+  ' the boss's face is all gold, so bricksLeft must never reach zero there
+  If rnum = BOSS_ROUND Then bricksLeft = 9999
+  For s = 1 To 3 : bact(s) = 0 : Next s
+  bact(1) = 1
+  batx3 = 3 * &H30 : batxi = &H30
+  heldOff = 3 * 6                             ' a 50 Hz held-ball offset
+  bx3(1) = batx3 + heldOff
+  by3(1) = 3 * &H19
+  bdx(1) = 1 : bdy(1) = 2 : bdir(1) = 4       ' a 50 Hz launch vector
+  ballHeld = HOLD_FRAMES
+End Sub
+
+' =====================================================================
+Sub LoadRound(rn As INTEGER)
+  Local INTEGER p, j, kp, t, v, x, src, ro, co, cnt, lim, tval
+
+  p = 0
+  For j = 0 To rn - 1 : p = p + rlen(j) : Next j
+  lim = p + rlen(rn)
+  For j = 0 To 255 : fmap(j) = 0 : Next j
+
+  x = 0 : kp = p
+  Do While kp < lim
+    t = rdat(kp) : kp = kp + 1
+    v = t And &H0F
+    If v = &H0F Then
+      src = x - (t And &HF0)
+      Do
+        fmap(x) = fmap(src) : x = x + 1 : src = src + 1
+      Loop Until (src And &H0F) = 0
+    ElseIf v = &H0E Then
+      For ro = 0 To 15
+        For co = 0 To 5
+          fmap(ro * 16 + 7 + (5 - co)) = fmap(ro * 16 + co)
+        Next co
+      Next ro
+    Else
+      cnt = (t \ 16) + 1
+      For j = 1 To cnt
+        If x < 256 Then fmap(x) = v
+        x = x + 1
+      Next j
+    End If
+  Loop
+
+  ' a cell holding 9 is SILVER: substitutes 254 - (round >> 3),
+  ' i.e. -2 .. -5, and HardenBrick counts it back up to zero
+  nb = 0 : ns = 0 : ng = 0
+  For ro = 0 To FLD_ROWS - 1
+    For co = 0 To FLD_COLS - 1
+      v = fmap(ro * 16 + co)
+      tval = v
+      If v = 9 Then
+        fmap(ro * 16 + co) = -(2 + rn \ 8)
+        tval = 9 : ns = ns + 1 : nb = nb + 1
+      ElseIf v = 10 Then
+        ng = ng + 1
+      ElseIf v > 0 Then
+        nb = nb + 1
+      End If
+      Tilemap Set 1, co, ro, tval
+    Next co
+  Next ro
+  ' columns 13-15 of the map are never drawn; make sure nothing lurks there
+  For ro = 0 To 15
+    For co = FLD_COLS To 15 : fmap(ro * 16 + co) = 0 : Next co
+  Next ro
+  bricksLeft = nb
+End Sub
+
+' =====================================================================
+Sub DrawBoss
+  Local INTEGER s, sx, sy
+  For s = 5 To 7
+    If aType(s) < 0 Then Continue For
+    sx = 2 * (aX3(s) \ 3)
+    sy = SCRY0 - (aY3(s) \ 3)
+    If sy < 0 Or sy > SCRH - 8 Then Continue For
+    ' the two-frame flicker uses the two score-popup shapes
+    If aType(s) And 1 Then
+      Blit Flash artSlot, F, S_POPUPA_X, S_POPUPA_Y, sx, sy, S_POPUPA_W, S_POPUPA_H, 0
+    Else
+      Blit Flash artSlot, F, S_POPUPB_X, S_POPUPB_Y, sx, sy, S_POPUPB_W, S_POPUPB_H, 0
+    End If
+  Next s
+End Sub
+
+' =====================================================================
+Sub DrawCapsule
+  Local INTEGER sx, sy, cx
+  sx = 2 * capX
+  sy = SCRY0 - (capY3 \ 3)
+  If sy < 0 Or sy > SCRH - 8 Then Exit Sub
+  cx = S_CAPS0_X
+  Select Case capType
+    Case 1 : cx = S_CAPS1_X
+    Case 2 : cx = S_CAPS2_X
+    Case 3 : cx = S_CAPS3_X
+    Case 4 : cx = S_CAPS4_X
+    Case 5 : cx = S_CAPS5_X
+    Case 6 : cx = S_CAPS6_X
+  End Select
+  Select Case capType
+    Case 0 : Blit Flash artSlot, F, S_CAPS0_X, S_CAPS0_Y, sx, sy, 16, 8, 0
+    Case 1 : Blit Flash artSlot, F, S_CAPS1_X, S_CAPS1_Y, sx, sy, 16, 8, 0
+    Case 2 : Blit Flash artSlot, F, S_CAPS2_X, S_CAPS2_Y, sx, sy, 16, 8, 0
+    Case 3 : Blit Flash artSlot, F, S_CAPS3_X, S_CAPS3_Y, sx, sy, 16, 8, 0
+    Case 4 : Blit Flash artSlot, F, S_CAPS4_X, S_CAPS4_Y, sx, sy, 16, 8, 0
+    Case 5 : Blit Flash artSlot, F, S_CAPS5_X, S_CAPS5_Y, sx, sy, 16, 8, 0
+    Case 6 : Blit Flash artSlot, F, S_CAPS6_X, S_CAPS6_Y, sx, sy, 16, 8, 0
+  End Select
+End Sub
+
+
+' =====================================================================
+'  Read the console once a frame and queue what it gives us.
+'
+'  This is called from DrawAll, so it runs inside the death animation and
+'  the round intro as well as the main loop.  Those block for a couple of
+'  seconds each, and until this existed anything typed during them was
+'  lost when the console buffer filled - which is a bug for a player
+'  pressing fire, and fatal for a scripted demo.
+'
+'  Captions are taken here too: Ctrl-B starts one, RETURN ends it.
+' =====================================================================
+Sub PollInput
+  Local STRING c
+  c = Inkey$
+  If c = "" Then Exit Sub
+  If capMode Then
+    If c = Chr$(13) Then
+      capMode = 0 : capTimer = CAP_FRAMES
+    Else
+      capTxt$ = capTxt$ + c
+    End If
+    Exit Sub
+  End If
+  If c = Chr$(2) Then
+    capMode = 1 : capTxt$ = "" : capTimer = 0
+    Exit Sub
+  End If
+  If Len(keyQ$) < 40 Then keyQ$ = keyQ$ + c
+End Sub
+
+' =====================================================================
+Sub DrawAll
+  Local INTEGER s, sx, sy
+
+  PollInput
+  CLS C_BLACK
+  Box 0, 0, WALL, SCRH, 0, C_WALL, C_WALL
+  Box PANEL_X - WALL, 0, WALL, SCRH, 0, C_WALL, C_WALL
+  Box 0, 0, PANEL_X, WALL, 0, C_WALL, C_WALL
+  Box 0, WALL, WALL, 2, 0, C_LIT, C_LIT
+  Box PANEL_X - WALL, WALL, WALL, 2, 0, C_LIT, C_LIT
+
+  Tilemap Draw 1, F, 0, 0, FLD_X, FLD_Y, FLD_COLS * TILEW, FLD_ROWS * TILEH
+
+  DrawDoor
+  If batVis Then
+    Select Case batType
+      Case 1
+        Blit Flash artSlot, F, S_BATBIG_X, S_BATBIG_Y, (2 * batx3) \ 3, SCRY0 - batRise, S_BATBIG_W, S_BATBIG_H, 0
+      Case 2
+        Blit Flash artSlot, F, S_BATLAS_X, S_BATLAS_Y, (2 * batx3) \ 3, SCRY0 - batRise, S_BATLAS_W, S_BATLAS_H, 0
+      Case Else
+        Blit Flash artSlot, F, S_BAT_X, S_BAT_Y, (2 * batx3) \ 3, SCRY0 - batRise, S_BAT_W, S_BAT_H, 0
+    End Select
+  End If
+  If capOn Then DrawCapsule
+  DrawAliens
+  If rnum = BOSS_ROUND Then DrawBoss
+
+  For s = 1 To 3
+    If bact(s) = 0 Then Continue For
+    sx = (2 * bx3(s)) \ 3
+    sy = SCRY0 - (by3(s) \ 3)
+    Blit Flash artSlot, F, S_BALL_X, S_BALL_Y, sx, sy, S_BALL_W, S_BALL_H, 0
+  Next s
+
+  Text PANEL_X + 8, 10, "SCORE", "LT", 7, 1, C_TEXT
+  Text PANEL_X + 8, 22, Str$(score), "LT", 7, 1, C_ACC
+  Text PANEL_X + 8, 42, "ROUND", "LT", 7, 1, C_TEXT
+  Text PANEL_X + 8, 54, Str$(rnum + 1), "LT", 7, 1, C_ACC
+  If rnum = BOSS_ROUND Then
+    Text PANEL_X + 8, 74, "BOSS", "LT", 7, 1, C_TEXT
+    Text PANEL_X + 8, 86, Str$(bossHits), "LT", 7, 1, C_ACC
+  Else
+    Text PANEL_X + 8, 74, "BRICKS", "LT", 7, 1, C_TEXT
+    Text PANEL_X + 8, 86, Str$(bricksLeft), "LT", 7, 1, C_ACC
+  End If
+  Text PANEL_X + 8, 106, "SPEED", "LT", 7, 1, C_TEXT
+  Text PANEL_X + 8, 118, Str$(speedLvl \ 8) + "  b" + Str$(bounceCnt), "LT", 7, 1, C_ACC
+  Text PANEL_X + 8, 138, "LIVES", "LT", 7, 1, C_TEXT
+  For s = 1 To lives
+    Blit Flash artSlot, F, S_BAT_X, S_BAT_Y, PANEL_X + 4, 150 + (s - 1) * 10, S_BAT_W, S_BAT_H, 0
+  Next s
+  If ballHeld > 0 Then Text PANEL_X + 8, 200, "LAUNCH", "LT", 7, 1, C_TEXT
+  If introFlash > 0 And (introFlash And 8) Then Text 112, 120, "ROUND" + Str$(rnum + 1), "CM", 1, 2, C_TEXT
+  If activeCaps >= 0 Then Text PANEL_X + 8, 186, "GDESLBP", "LT", 7, 1, C_DIM
+  If activeCaps >= 0 Then Text PANEL_X + 8 + activeCaps * 6, 186, Mid$("GDESLBP", activeCaps + 1, 1), "LT", 7, 1, C_ACC
+
+  If capTimer > 0 Then
+    capTimer = capTimer - 1
+    Box WALL, 190, PANEL_X - 2 * WALL, 13, 0, RGB(0,0,0), RGB(0,0,0)
+    Text (PANEL_X \ 2), 192, capTxt$, "CM", 7, 1, C_TEXT
+  End If
+
+  FrameBuffer Copy F, N, B
+End Sub
+
+' =====================================================================
+'  The numeric self-test the plan asks for.  With the field cleared, ten
+'  steps at direction d and speed level s must displace the ball by
+'  exactly 20 x the table entry in thirds, in both axes, for all 24
+'  combinations.  Nothing here may round.
+' =====================================================================
+Sub SelfTest
+  Local INTEGER sv(255), s, d, ix, j, x0, y0, wx, wy, bad, tot
+  Local STRING ln
+  Local INTEGER svx3, svy3, svdx, svdy, svheld
+
+  For j = 0 To 255 : sv(j) = fmap(j) : fmap(j) = 0 : Next j
+  svx3 = bx3(1) : svy3 = by3(1) : svdx = bdx(1) : svdy = bdy(1) : svheld = ballHeld
+  ballHeld = 0
+  bad = 0 : tot = 0
+
+  Print
+  Print "phase 3 self-test: 10 steps, empty field, displacement in thirds"
+  Print "spd,dir,dx,dy,wantx3,wanty3,gotx3,goty3"
+  For s = 0 To 24 Step 8
+    For d = 1 To 6
+      ix = d + s
+      bx3(1) = 3 * 54 : by3(1) = 3 * 128
+      bdx(1) = velx(ix) : bdy(1) = vely(ix)
+      x0 = bx3(1) : y0 = by3(1)
+      For j = 1 To 10 : MoveOneBall 1 : Next j
+      wx = 20 * velx(ix) : wy = 20 * vely(ix)
+      tot = tot + 1
+      If (bx3(1) - x0) <> wx Or (by3(1) - y0) <> wy Then bad = bad + 1
+      ln = Str$(s) + "," + Str$(d) + "," + Str$(velx(ix)) + "," + Str$(vely(ix))
+      ln = ln + "," + Str$(wx) + "," + Str$(wy)
+      ln = ln + "," + Str$(bx3(1) - x0) + "," + Str$(by3(1) - y0)
+      Print ln
+    Next d
+  Next s
+  Print "combinations"; tot; "   mismatches"; bad
+
+  ' and a wall bounce: fired left from x=20 it must reverse the frame its
+  ' integer x first leaves the band at WALL_L
+  bx3(1) = 3 * 20 : by3(1) = 3 * 128 : bdx(1) = -3 : bdy(1) = 0
+  For j = 1 To 12
+    MoveOneBall 1
+    If bdx(1) > 0 Then Exit For
+  Next j
+  Print "left wall: reversed after"; j; " steps, x ="; bx3(1) \ 3; " (band starts at"; WALL_L; ")"
+
+  For j = 0 To 255 : fmap(j) = sv(j) : Next j
+  bx3(1) = svx3 : by3(1) = svy3 : bdx(1) = svdx : bdy(1) = svdy : ballHeld = svheld
+  Print "self-test done"
+End Sub
+
+' =====================================================================
+Sub InstallImage(slot As INTEGER, f$ As STRING, wantW As INTEGER, wantH As INTEGER)
+  Local INTEGER a
+  Local STRING e$
+  ' A RAM slot holds nothing across a reset, so there is no question to ask:
+  ' read the file every time.  A flash slot keeps what it was given, so probe
+  ' it first and only spend an erase cycle when it is not already ours.
+  If slot <= 3 Then
+    a = MM.Info(FLASH ADDRESS slot)
+    If Peek(WORD a) = wantW And Peek(WORD a + 4) = wantH Then Exit Sub
+    Print "installing "; f$; " into flash slot"; slot
+  Else
+    Print "loading "; f$; " into RAM slot"; slot - 3
+  End If
+  On Error Clear
+  On Error Skip 1
+  Flash LOAD IMAGE slot, f$, O
+  e$ = MM.ErrMsg$
+  On Error Clear
+  If e$ <> "" Then Error e$
+  ' Whatever it came from, it has to be the image this build expects.
+  a = MM.Info(FLASH ADDRESS slot)
+  If Peek(WORD a) <> wantW Or Peek(WORD a + 4) <> wantH Then
+    Error "reinstall the game: " + f$ + " is " + Str$(Peek(WORD a)) + "x" + Str$(Peek(WORD a + 4)) + ", not " + Str$(wantW) + "x" + Str$(wantH)
+  End If
+End Sub
