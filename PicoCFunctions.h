@@ -100,7 +100,9 @@
 #define Vector_DrawBitmap *(unsigned int *)(BaseAddress + 0x3c)			   // void DrawBitmap(int x1, int y1, int width, int height, int scale, int fg, int bg, unsigned char *bitmap )
 #define Vector_DrawLine (*(unsigned int *)(BaseAddress + 0x40))			   // void DrawLine(int x1, int y1, int x2, int y2, int w, int C))
 #define Vector_FontTable (*(unsigned int *)(BaseAddress + 0x44))		   // const unsigned char *FontTable[FONT_NBR]
-#define Vector_ExtCurrentConfig (*(unsigned int *)(BaseAddress + 0x48))	   // int ExtCurrentConfig[NBRPINS + 1];
+// What SETPIN made each pin - EXT_DIG_IN, EXT_ANA_IN and the rest, indexed by pin
+// number. The slot holds the array's ADDRESS, so the macro reads it live.
+#define Vector_ExtCurrentConfig (*(unsigned int *)(BaseAddress + 0x48))	   // volatile int ExtCurrentConfig[NBRPINS + 1]
 #define Vector_HRes (*(unsigned int *)(BaseAddress + 0x4C))				   // HRes
 #define Vector_VRes (*(unsigned int *)(BaseAddress + 0x50))				   // VRes
 #define Vector_SoftReset (*(unsigned int *)(BaseAddress + 0x54))		   // void SoftReset(void)
@@ -213,12 +215,11 @@
 #define Vector_gui_bcolour (*(unsigned int *)(BaseAddress + 0x1B4))
 // PIN(n) and PIN(n) = v, with MMBasic's own mode dispatch behind them - a digital
 // level, a raw ADC count, a filtered voltage or a frequency, whatever SETPIN made
-// the pin. Neither can raise an error, so an invalid or non-input pin reads 0.
+// the pin. Neither can raise an error - it would longjmp out of the CSUB - so an
+// invalid or non-input pin reads 0, and a write to anything that is not DOUT, CIN
+// or unconfigured does nothing. Branch on ExtCurrentConfig[] if that matters.
 #define Vector_PinVal (*(unsigned int *)(BaseAddress + 0x1B8))
 #define Vector_PinPut (*(unsigned int *)(BaseAddress + 0x1BC))
-// What SETPIN made each pin - EXT_DIG_IN, EXT_ANA_IN and the rest, indexed by pin
-// number. The slot holds the array's ADDRESS, so the macro reads it live.
-#define Vector_ExtCurrentConfig (*(unsigned int *)(BaseAddress + 0x1C0))
 
 // Macros to call each function.
 #define uSec(a) ((void (*)(unsigned long long))Vector_uSec)(a)
@@ -245,13 +246,12 @@
 #define DrawBitmapVector (*(unsigned int *)Vector_DrawBitmap)
 #define DrawLine(a, b, c, d, e, f) ((void (*)(int, int, int, int, int, int))Vector_DrawLine)(a, b, c, d, e, f)
 #define FontTable (void *)((int *)(Vector_FontTable))
-#define ExtCurrentConfig ((int *)Vector_ExtCurrentConfig)
+#define ExtCurrentConfig ((volatile int *)Vector_ExtCurrentConfig)
 #define HRes (*(unsigned int *)Vector_HRes)
 #define gui_fcolour (*(int *)Vector_gui_fcolour)
 #define gui_bcolour (*(int *)Vector_gui_bcolour)
 #define PinVal(a) ((MMFLOAT(*)(int))Vector_PinVal)(a)
 #define PinPut(a, b) ((void (*)(int, int))Vector_PinPut)(a, b)
-#define ExtCurrentConfig ((volatile int *)Vector_ExtCurrentConfig)
 #define VRes (*(unsigned int *)Vector_VRes)
 #define SoftReset(SOFT_RESET) ((void (*)(void))Vector_SoftReset)()
 #define error(a) ((void (*)(char *))Vector_error)(a)

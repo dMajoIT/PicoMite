@@ -2178,7 +2178,21 @@ void PinPut(int pin, int val)
 {
     if (IsInvalidPin(pin))
         return;
-    ExtSet(pin, val);
+    /* ExtSet ends in error() for a pin that is not an output, and error() longjmps -
+       out of the CSUB and past whatever it was in the middle of. So only the three
+       states ExtSet handles without complaint get through: a pin already configured
+       as an output, an unconfigured pin (which ExtSet turns into one), and a counter,
+       where the write sets the count rather than the pin. */
+    switch (ExtCurrentConfig[pin])
+    {
+    case EXT_NOT_CONFIG:
+    case EXT_DIG_OUT:
+    case EXT_CNT_IN:
+        ExtSet(pin, val);
+        return;
+    default:
+        return; /* not an output - the interpreter errors here, a CSUB cannot */
+    }
 }
 
 void fun_pin(void)

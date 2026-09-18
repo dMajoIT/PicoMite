@@ -607,11 +607,6 @@ uint8_t PSRAMpin;
         // BASIC; watching or driving one in a tight loop is what a CSUB is for.
         (void *)PinVal, // 0x1b8 MMFLOAT PinVal(int pin)        PIN(n)
         (void *)PinPut, // 0x1bc void PinPut(int pin, int val)  PIN(n) = v
-        // What SETPIN made each pin: EXT_DIG_IN, EXT_ANA_IN and the rest, indexed
-        // by pin number. An address, like &HRes - a CSUB that wants to branch on a
-        // pin's mode, or check one is an input before reading it, needs to see the
-        // live array rather than a value captured when the blob was built.
-        (void *)ExtCurrentConfig, // 0x1c0 volatile int[NBRPINS + 1]
     };
 #ifdef rp2350
     // this is a frig to place the calltable at 0x1000023C as in previous releases

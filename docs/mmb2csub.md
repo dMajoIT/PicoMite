@@ -487,10 +487,34 @@ routine and the original produce the same image byte for byte.
 `PIN` is worth a word. Setting a pin up — `SETPIN`, `OPTION` — stays in BASIC,
 where it happens once; what converts is the reading and writing, which is the
 part that goes in a loop. It reads whatever the pin's mode means, through the
-interpreter's own routine, so a CSUB and `PIN(n)` cannot disagree. The one
-difference is that a CSUB cannot raise an error: an invalid pin, or one that
-is not an input, reads 0 instead of stopping the program. Needs firmware
-6.03.02b10.
+interpreter's own routine, so a CSUB and `PIN(n)` cannot disagree. Needs
+firmware 6.03.02b10.
+
+Which modes that covers, for `PIN(n)`:
+
+| `SETPIN` mode | `PIN(n)` gives you |
+|---|---|
+| `DIN`, `INTH`, `INTL`, `INTB` | 0 or 1 |
+| `DOUT`, and a PIO output | the level the pin is driving |
+| `CIN` | the count |
+| `FIN`, `PIN` | frequency, period — the pin must be one of the four `INT` pins |
+| `AIN` | volts, filtered exactly as the interpreter filters them |
+| `AINRAW` | the raw count, 0 to 4095 |
+
+and for `PIN(n) = v`: a pin set `DOUT`, a pin not configured at all (which
+becomes an output, as in BASIC), and `CIN`, where the write sets the counter
+rather than the pin.
+
+Anything else — a pin assigned to a UART, SPI, I2C, PWM or an `INT`, a
+heartbeat, a pin number that does not exist on the board — is where the
+difference from BASIC shows. A CSUB cannot raise an error, because the error
+would longjmp out of the middle of it, so instead a read gives 0 and a write
+does nothing. Check the mode in BASIC before you call, or read
+`ExtCurrentConfig[]` from the CSUB if you want to branch on it.
+
+`PIN(TEMP)` and `PIN(BOOTSEL)` do not convert. They are keywords rather than
+pin numbers and the firmware handles them before any pin exists; leave them in
+BASIC.
 
 **Not yet:** string *arrays* as parameters; `INPUT`; `ON ERROR`; interrupt
 handlers; file I/O; user-defined `TYPE`s; `MAP`; `SETPIN`; and the graphics
