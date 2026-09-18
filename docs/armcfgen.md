@@ -698,6 +698,28 @@ The lower-level `ExtSet`, `ExtInp`, `ExtCfg`, `PinRead` and `PinSetBit` are
 also available (see Console, formatting and program control above) and bypass
 the mode dispatch; use `PinVal` unless you know exactly what the pin is.
 
+**`PinSetBit` is the fast path, and it is worth knowing about.** `PIN(n) = v`
+goes through `ExtSet`, which checks the pin's mode and then calls
+`PinSetBit(LATSET)` or `PinSetBit(LATCLR)` — and each of *those* re-establishes
+the pull configuration before writing the level, three SDK calls a write.
+`PinSetBit(pin, LATINV)` is one `gpio_xor_mask64` and nothing else. There is no
+MMBasic statement for it, because `PIN(n) = v` has to name a level, so it is
+reachable only from a CSUB.
+
+Measured on an RP2040 at 315 MHz, toggling one DOUT pin (`Bas/pinbench.bas`,
+which times an empty loop too so the pin cost is separated from the loop's):
+
+| | ns per transition | cycles | rate |
+|---|---|---|---|
+| interpreted `PIN(n) = v` | 7135 | 2248 | 126 kHz |
+| CSUB, `PIN(n) = v` | 572 | 180 | 1.6 MHz |
+| CSUB, `PinSetBit(pin, LATINV)` | 134 | 42 | **5.5 MHz** |
+
+53x over the interpreter, and 4.3x over the converted `PIN(n) = v`. Use it when
+the pin is a known `DOUT` and you are toggling rather than setting a level —
+`ExtSet`'s bookkeeping is what you are skipping, so skip it only when you know
+it does not matter.
+
 ### MMBasic strings
 
 Added in 6.03.02b9. An MMBasic string is a **length byte followed by the
