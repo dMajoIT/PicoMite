@@ -321,7 +321,7 @@ extern "C"
 #define FLASH_TARGET_OFFSET (1424 * 1024)
 #define HEAP_MEMORY_SIZE (256 * 1024)
 #else
-#define FLASH_TARGET_OFFSET (1088 * 1024)
+#define FLASH_TARGET_OFFSET (1104 * 1024)
    /* See note above PICOUSBRP2350 HEAP_MEMORY_SIZE. */
 #define HEAP_MEMORY_SIZE (300 * 1024)
 #define MagicKey 0x29672F8B
