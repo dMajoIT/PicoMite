@@ -514,7 +514,16 @@ extern "C"
 #define NBRPINS 62
 #define PSRAMbase 0x11000000
 #define PSRAMblock (PSRAMbase + PSRAMsize + 0x60000)
-#define PSRAMblocksize 0x1C0000
+/* The five RAM slots, and nothing more.  This was a fixed 0x1C0000 (1792 KB),
+   which is 128 KB MORE than the 2 MB reserve leaves above PSRAMblock once the
+   384 KB context-save area at its base is accounted for (2048 - 384 = 1664).
+   Its one user is the memset behind RAM ERASE ALL, so that command ran off the
+   end of the part - and the QMI window is 16 MB against an 8 MB chip, so the
+   overrun aliased back to PSRAMbase and cleared the bottom of the heap.  Sized
+   from the slots themselves it cannot drift again: five slots of MAX_PROG_SIZE
+   is 1500 KB at the largest heap any variant has. */
+#define PSRAMblocksize (MAXRAMSLOTS * MAX_PROG_SIZE)
+
 #else
 #ifndef PICOMITEWEB
 #define PIOMAX 2

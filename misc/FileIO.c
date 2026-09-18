@@ -692,6 +692,11 @@ void MIPS16 cmd_drive(void)
 extern unsigned int mmap[HEAP_MEMORY_SIZE / PAGESIZE / PAGESPERWORD];
 extern unsigned int psmap[7 * 1024 * 1024 / PAGESIZE / PAGESPERWORD];
 static void PrintImageSlotHeader(int *pp); /* defined with cmd_flash below */
+/* The slots and the 384 KB context-save area below them share a fixed 2 MB
+   reserved off the top of the PSRAM, so a future heap increase could push the
+   last slot past the end of the part.  Fail the build rather than the board. */
+_Static_assert(0x60000 + MAXRAMSLOTS * MAX_PROG_SIZE <= 2 * 1024 * 1024,
+               "the RAM slots no longer fit the 2 MB PSRAM reserve");
 void MIPS16 cmd_psram(void)
 {
     if (!PSRAMsize)
