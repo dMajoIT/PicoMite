@@ -69,14 +69,17 @@ is called - the game finds everything beside itself.  Then:
 
 That is the only command needed.
 
-The first run installs the game's kernel into the library and its
-two tilesets into flash slots 1 and 2.  That takes about a minute,
-and if the board already holds a library belonging to another
-program it will ask once before replacing it.  Every run after that
-starts in a second or two, because both are already there.
+The first run installs the game's kernel into the library, and if
+the board already holds a library belonging to another program it
+will ask once before replacing it.
 
-The tilesets stay in flash between runs and between programs.  To
-take them out again:
+On a board with PSRAM (the PicoComputer 3 has it) the two tilesets
+are loaded into RAM at every start, which takes a moment and leaves
+the flash slots alone.  On a board without PSRAM the first run
+writes them into flash slots 1 and 2 instead, which takes about a
+minute; every run after that starts in a second or two, because they
+are already there.  They stay in flash between runs and between
+programs, and to take them out again:
 
     FLASH ERASE 1
     FLASH ERASE 2
@@ -185,9 +188,11 @@ Please say which version you are running - it is printed as the game
 loads - where you were, and what you were doing.
 
 If the planet itself looks wrong, rather than the creatures in it,
-another program has probably left an image in the flash slots.  The
-game checks for this and says so, but if it starts and the scenery
-is nonsense, try:
+the tileset files in the folder are probably from another version of
+the game: reinstall the folder.  On a board without PSRAM another
+program may instead have left an image in the flash slots.  The game
+checks for both and says so, but if it starts and the scenery is
+nonsense, try:
 
     FLASH ERASE 1
     FLASH ERASE 2

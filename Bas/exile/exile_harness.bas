@@ -39,7 +39,7 @@ Option BASE 0
 ' the screen is the game's; what is printed goes to the serial console
 Option CONSOLE SERIAL
 
-Const VERSION$ = "0.9"
+Const VERSION$ = "0.9.1"
 ' The firmware this needs.  MM.VER turns "6.03.02b7" into 6.030207 - and a
 ' FINAL release into 6.0302, which is LOWER than any of its own betas, so one
 ' comparison cannot do it.  Anything after 6.03.02 is fine (6.0303 and 6.04 are
@@ -47,6 +47,7 @@ Const VERSION$ = "0.9"
 Const MINVER = 6.030206                ' the game needs b7: every later beta is above this
 Const RELVER = 6.0302                  ' the 6.03.02 release itself
 Const VEREPS = 0.0000005               ' half a step: 6.030201 is a whole one away
+Const RAMVER = 6.030210                ' RAM image slots arrived in b11
 Const TW = 32, TH = 32                 ' a square is 16 x 32 BBC pixels, drawn 2:1
 Const VIEWW = 256, VIEWH = 240         ' the play area, 8 by 7.5 squares
 Const PANELX = 256, PANELW = 64        ' the panel beside it
@@ -58,6 +59,7 @@ Const SHOTAT = 0                       ' >0 saves one screenshot at that tick, f
 
 Dim obj(287), game(NGAME - 1), world(25599), tbl(511), feed(7)
 Dim part(255)                          ' the particle system, eight words a particle
+Dim tilesSlot, objSlot                 ' the image slots: flash 1 and 2, or RAM 4 and 5 with PSRAM
 Dim sheet(OS_N - 1)
 Dim wlx(4)
 Dim pcol(7)                            ' the eight colours a particle can be
@@ -171,18 +173,29 @@ Sub LoadAll
   CLS
   FRAMEBUFFER CREATE
   Print "Exile "; VERSION$
-  ' The two tilesets live in flash slots 1 and 2 and stay there between runs.
-  ' FLASH LOAD IMAGE without OVERWRITE refuses with "Already programmed" when
-  ' the slot is in use, so a skipped error is how the program asks whether the
-  ' work has been done: the quarter of a megabyte only gets written on a board
-  ' that has not run the game before.  FLASH ERASE 1, 2 undoes it.
-  LoadTileset 1, "exile_tiles1.bmp", SLOT1W, SLOT1H
-  LoadTileset 2, "exile_slot2.bmp", SLOT2W, SLOT2H
+  ' Image slots 1 to 3 are flash; from 6.03.02b11 on, a board with PSRAM also
+  ' has slots 4 to 8, the RAM slots 1 to 5, and BLIT FLASH, TILEMAP and
+  ' MM.INFO(FLASH ADDRESS) take either kind by the same number.  A RAM slot is
+  ' wiped at every reset, so on such a board the two tilesets are simply loaded
+  ' into RAM at every start - a few hundred milliseconds from the drive, no
+  ' flash wear, and the flash slots are left to whoever else wants them.
+  ' Without PSRAM the tilesets live in flash slots 1 and 2 and stay there
+  ' between runs: FLASH LOAD IMAGE without OVERWRITE refuses with "Already
+  ' programmed" when the slot is in use, so a skipped error is how the program
+  ' asks whether the work has been done, and the quarter of a megabyte only
+  ' gets written on a board that has not run the game before.  FLASH ERASE 1, 2
+  ' undoes it.
+  tilesSlot = 1 : objSlot = 2
+  If MM.Info(PSRAM SIZE) > 0 And (MM.VER > RAMVER Or Abs(MM.VER - RELVER) < VEREPS) Then
+    tilesSlot = 4 : objSlot = 5
+  EndIf
+  LoadTileset tilesSlot, "exile_tiles1.bmp", SLOT1W, SLOT1H
+  LoadTileset objSlot, "exile_slot2.bmp", SLOT2W, SLOT2H
   CheckTilesets
   Tilemap CLOSE
   t0 = Timer
-  Tilemap LOAD homeDir$ + "exile_w1.map", 1, 1, TW, TH, 8
-  Tilemap LOAD homeDir$ + "exile_w2.map", 2, 2, TW, TH, 8
+  Tilemap LOAD homeDir$ + "exile_w1.map", 1, tilesSlot, TW, TH, 8
+  Tilemap LOAD homeDir$ + "exile_w2.map", 2, objSlot, TW, TH, 8
   Print "the planet in "; Int(Timer - t0); " ms"
   Open homeDir$ + "world_types.bin" For Input As #1
   MEMORY INPUT 1, 204800, world()
@@ -211,12 +224,20 @@ End Sub
 ' BMPs, because what FLASH LOAD IMAGE stores is worked out from them exactly:
 ' eight bytes of width and height, then the picture top row first, two pixels
 ' a byte with the left one in the low nibble, each colour through RGB121().
+' The probes name the sheet (1 or 2); the slot it sits in is whichever LoadAll
+' chose.  In a RAM slot the image IS the file just read, so a failed probe there
+' means the folder holds a sheet from another build, not that flash is stale.
 Sub CheckTilesets
-  Local i, slot, off, want
+  Local i, sheet, slot, off, want
   Restore TilesetProbes
   For i = 1 To NPROBE
-    Read slot, off, want
+    Read sheet, off, want
+    If sheet = 2 Then slot = objSlot Else slot = tilesSlot
     If Peek(WORD MM.INFO(FLASH ADDRESS slot) + off) <> want Then
+      If slot > 3 Then
+        Print "  tileset "; Str$(sheet); " in this folder is from another build"
+        Error "reinstall the game: its tileset files are from another build"
+      EndIf
       Print "  slot "; Str$(slot); " holds a tileset from another build"
       Error "FLASH ERASE " + Str$(slot) + ", then run again"
     EndIf
@@ -226,17 +247,24 @@ End Sub
 
 Sub LoadTileset(slot, file$, wantW, wantH)
   Local e$, a, w, h
-  On Error Clear                       ' so a stale error cannot be read as ours
-  On Error Skip 1
-  Flash LOAD IMAGE slot, homeDir$ + file$
-  e$ = MM.ERRMSG$
-  On Error Clear
-  If e$ = "" Then
-    Print "  slot "; Str$(slot); ": "; file$; " written to flash"
-  ElseIf InStr(e$, "Already programmed") Then
-    Print "  slot "; Str$(slot); ": already there";
+  If slot > 3 Then
+    ' a RAM slot: nothing survives a reset, so this is not a question but the
+    ' load itself, and OVERWRITE because a RUN without a reset leaves it full
+    Flash LOAD IMAGE slot, homeDir$ + file$, O
+    Print "  RAM slot "; Str$(slot - 3); ": "; file$; " loaded";
   Else
-    Error e$                           ' a missing file must not pass for a full slot
+    On Error Clear                     ' so a stale error cannot be read as ours
+    On Error Skip 1
+    Flash LOAD IMAGE slot, homeDir$ + file$
+    e$ = MM.ERRMSG$
+    On Error Clear
+    If e$ = "" Then
+      Print "  slot "; Str$(slot); ": "; file$; " written to flash"
+    ElseIf InStr(e$, "Already programmed") Then
+      Print "  slot "; Str$(slot); ": already there";
+    Else
+      Error e$                         ' a missing file must not pass for a full slot
+    EndIf
   EndIf
   ' A slot that is programmed is not necessarily programmed with OURS.  A flash
   ' image begins with its width and height as two 32-bit words - the same two
@@ -250,9 +278,10 @@ Sub LoadTileset(slot, file$, wantW, wantH)
     ' MMBasic clips an error message at about sixty characters, so the part
     ' that says what to do has to come early enough to survive
     Print "slot "; Str$(slot); " holds a "; Str$(w); "x"; Str$(h); " image; Exile needs "; Str$(wantW); "x"; Str$(wantH)
+    If slot > 3 Then Error "reinstall the game: " + file$ + " is from another build"
     Error "FLASH ERASE " + Str$(slot) + ", then run again: slot holds another image"
   EndIf
-  If e$ <> "" Then Print " ("; Str$(w); "x"; Str$(h); ", verified)"
+  If e$ <> "" Or slot > 3 Then Print " ("; Str$(w); "x"; Str$(h); ", verified)"
 End Sub
 
 ' ---------------------------------------------------------------- saved games
@@ -476,7 +505,7 @@ Sub DrawObjects(vx, vy)
           ' sprite may hang off any edge.  What it cannot do is stop at the
           ' view's right-hand edge, but the panel is drawn over that after.
           If sx > -ow And sx < VIEWW And sy > -oh And sy < VIEWH Then
-            Blit FLASH 2, F, ox, oy, sx, sy, ow, oh, 2
+            Blit FLASH objSlot, F, ox, oy, sx, sy, ow, oh, 2
           EndIf
         EndIf
       EndIf
