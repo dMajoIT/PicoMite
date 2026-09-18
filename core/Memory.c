@@ -155,7 +155,7 @@ unsigned char *FrameBuf = NULL;
 
 unsigned int mmap[HEAP_MEMORY_SIZE / PAGESIZE / PAGESPERWORD] = {0};
 #ifdef rp2350
-unsigned int psmap[6 * 1024 * 1024 / PAGESIZE / PAGESPERWORD] = {0};
+unsigned int psmap[PSMAPWORDS] = {0};
 unsigned int SBitsGet(unsigned char *addr);
 void SBitsSet(unsigned char *addr, int bits);
 #endif

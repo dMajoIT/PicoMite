@@ -65,6 +65,17 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #define PLAST 2 // Last page in allocation
 #define PAGESPERWORD ((sizeof(unsigned int) * 8) / PAGEBITS)
 
+/* The PSRAM heap's page bitmap, psmap[], has to cover PSRAMsize: the detected
+   part less the 2 MB reserved off its top, so 6 MB for the 8 MB devices these
+   boards carry.  Sized here once because it was written out three times and
+   they disagreed - Memory.c declared the array for 6 MB while the externs in
+   Commands.c and FileIO.c said 7 MB.  SaveContext and RestoreContext copy
+   sizeof(psmap), which is the extern's, so a restore wrote 1 KB past the end
+   of the array into whatever BSS followed it.  That runs on every
+   RAM FILE LOAD, which is how a launcher loads an overlay. */
+#define PSRAMHEAPMAX (6 * 1024 * 1024)
+#define PSMAPWORDS (PSRAMHEAPMAX / PAGESIZE / PAGESPERWORD)
+
 /* ============================================================================
  * Macros - Memory alignment
  * ============================================================================ */

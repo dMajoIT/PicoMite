@@ -4349,13 +4349,36 @@ void cmd_end(void)
 	longjmp(mark, 1); // jump back to the input prompt
 }
 extern unsigned int mmap[HEAP_MEMORY_SIZE / PAGESIZE / PAGESPERWORD];
-extern unsigned int psmap[7 * 1024 * 1024 / PAGESIZE / PAGESPERWORD];
+extern unsigned int psmap[PSMAPWORDS];
 extern struct s_hash g_hashlist[MAXLOCALVARS];
 extern int g_hashlistpointer;
 extern int g_StrTmpIndex;
 extern bool g_TempMemoryIsChanged;
 extern char *g_StrTmp[MAXTEMPSTRINGS];			// used to track temporary string space on the heap
 extern char g_StrTmpLocalIndex[MAXTEMPSTRINGS]; // used to track the g_LocalIndex for each temporary string space on the heap
+#if defined(rp2350)
+/* Everything SaveContext writes below goes into the 384 KB at the base of the
+   2 MB PSRAM reserve, immediately under RAM slot 1, and nothing checked that it
+   fits - an overflow would run into that slot in silence.  heap_memory_size is
+   a variable, but the only paths that change it are the boot-time resolution
+   resizes, which trade heap for a bigger framebuffer and so only ever shrink
+   it; HEAP_MEMORY_SIZE is therefore its ceiling.  Keep this list in step with
+   the copies below. */
+_Static_assert(sizeof(g_StrTmpIndex) + sizeof(g_TempMemoryIsChanged) +
+                       sizeof(g_StrTmp) + sizeof(g_StrTmpLocalIndex) +
+                       sizeof(g_LocalIndex) + sizeof(g_OptionBase) +
+                       sizeof(g_DimUsed) + sizeof(g_varcnt) +
+                       sizeof(g_Globalvarcnt) + sizeof(g_Localvarcnt) +
+                       sizeof(g_hashlistpointer) + sizeof(g_forindex) +
+                       sizeof(g_doindex) +
+                       sizeof(struct s_forstack) * MAXFORLOOPS +
+                       sizeof(struct s_dostack) * MAXDOLOOPS +
+                       sizeof(struct s_vartbl) * MAXVARS +
+                       sizeof(struct s_hash) * MAXLOCALVARS +
+                       (HEAP_MEMORY_SIZE + 256) + sizeof(mmap) + sizeof(psmap) <=
+                   0x60000,
+               "the SaveContext image no longer fits below the RAM slots");
+#endif
 void SaveContext(void)
 {
 	CloseAudio(1);
