@@ -58,7 +58,13 @@ PACKAGE_PATHS = [
 # Work in progress that never reaches a uf2 and so cannot block a release.
 # Listed at the end of the run so it stays visible rather than silently
 # dropped.  docs/Exile_* are the working notes for the Exile port.
-WIP_PATHS = ["Bas", "Testfiles", "docs/Exile_*"]
+WIP_PATHS = ["Bas", "Testfiles", "docs/Exile_*",
+             # A port plan or review is working notes for a game, reaches no
+             # uf2 and is shipped in nothing, so an unfinished one must not
+             # block a release - which is exactly what an untracked Prince of
+             # Persia review did to b11.  The Exile entry above is the same
+             # thing named for one port; these two generalise it.
+             "docs/*_Port_Plan.html", "docs/*_Port_Review.html"]
 
 fails = []
 def check(name, ok, detail=""):
