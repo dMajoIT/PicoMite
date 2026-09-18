@@ -1,9 +1,9 @@
 **Beta for testing.** This is the release after b9 — b10 was an interim build
 and was never published, so everything below has accumulated since b9. Please
 try it on programs you already have and report anything that behaves
-differently; that is the most useful testing there is. **Three RP2040 variants
-move their A: drive this time** — see the upgrade note at the end before you
-flash one of those.
+differently; that is the most useful testing there is. **Four variants move
+their A: drive this time** — see the upgrade note at the end before you flash
+one of those.
 
 ## New: image slots in PSRAM
 
@@ -121,10 +121,16 @@ suits onto the A: drive as `help.txt`:
 
 ## Upgrade note
 
-The flash layout grew by 16 KB on **PicoMiteRP2040VGA, PicoMiteRP2040VGAUSB
-and PicoMiteRP2040USB**, so on those three the A: drive moves and is
-reformatted by the first boot. Back up anything on A: before flashing them.
-Every other variant keeps its drive.
+The flash region grew by 16 KB on four variants:
+
+- **PicoMiteRP2350** (the plain RP2350 build — not USB, BT or BTH)
+- **PicoMiteRP2040VGA**
+- **PicoMiteRP2040VGAUSB**
+- **PicoMiteRP2040USB**
+
+On those four the A: drive moves with it and is reformatted by the first boot,
+so back up anything on A: before flashing one of them. Every other variant
+keeps its drive and its files.
 
 ## For anyone building from source
 
