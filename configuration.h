@@ -395,6 +395,11 @@ extern "C"
    1..MAXFLASHSLOTS are the flash slots, the next MAXRAMSLOTS are the RAM slots 1..5 in
    PSRAM.  See ImageSlotAddress() in FileIO.c. */
 #define MAXIMAGESLOTS (MAXFLASHSLOTS + MAXRAMSLOTS)
+/* LIBRARY LOAD file$, RAM puts the library in the last RAM slot (image slot
+   MAXIMAGESLOTS) and shadows the flash library until END or the next RUN.  The
+   slot's last eight bytes hold this magic and the file's hash, so a repeat
+   load of the same file skips the tokenising. */
+#define RAMLIB_MAGIC 0x42494C52u
 #else
 #define MAXIMAGESLOTS MAXFLASHSLOTS
 #endif

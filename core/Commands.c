@@ -2512,7 +2512,7 @@ void MIPS16 do_run(unsigned char *cmdline, bool CMM2mode)
 	Mstrcpy(cmdlinebuff, pcmd_args);
 	IgnorePIN = false;
 	//	uint8_t *dummy __attribute((unused))=GetMemory(STRINGSIZE);
-	if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+	if (LibPresent())
 		ExecuteProgram(LibMemory); // run anything that might be in the library
 	if (*ProgMemory != T_NEWLINE)
 		return; // no program to run
@@ -3469,7 +3469,7 @@ void MIPS16 IfTableBuild(void)
 {
 	IfTableFree();
 
-	if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && LibMemory)
+	if (LibPresent() && LibMemory)
 	{
 		iftab_build_region(LibMemory);
 		iftab_lib_count = iftab_count;
@@ -4114,6 +4114,7 @@ static void perf_print(const char *s, int *cnt)
 
 void cmd_end(void)
 {
+	RamLibRelease(); /* a RAM library is the program's: END gives the flash library back */
 	// ---- Performance counter report (gated by OPTION PROFILING ON) -----
 	if (g_option_profiling)
 	{
@@ -4597,7 +4598,7 @@ void MIPS16 do_chain(unsigned char *cmdline)
 	//    memcpy(cmdlinebuff, pcmd_args, *pcmd_args + 1); // *** THW 16/4/23
 	Mstrcpy(cmdlinebuff, pcmd_args);
 	IgnorePIN = false;
-	if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+	if (LibPresent())
 		ExecuteProgram(LibMemory); // run anything that might be in the library
 	if (*ProgMemory != T_NEWLINE)
 		return; // no program to run
@@ -7927,7 +7928,7 @@ void cmd_endfun(void)
    end really is the end.  Returns true if the scan was moved. */
 static int DataFallToLibrary(unsigned char **p, unsigned char **lineptr)
 {
-	if (Option.LIBRARY_FLASH_SIZE != MAX_PROG_SIZE || LibMemory == NULL)
+	if (!LibPresent() || LibMemory == NULL)
 		return 0;
 	if (*p >= LibMemory && *p < LibMemory + MAX_PROG_SIZE)
 		return 0; // already scanning the library

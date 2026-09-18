@@ -6162,7 +6162,7 @@ LIBRARY DISK SAVE fname$
 or
 LIBRARY DISK LOAD fname$
 or
-LIBRARY LOAD fname$ [, O]
+LIBRARY LOAD fname$ [, O] [, RAM]
 
 The library is a special segment of program memory that can contain program
 code such as subroutines, functions and CFunctions.  These routines are not
@@ -6201,6 +6201,15 @@ therefore use it on every run at no cost.  If a different library is already
 installed MMBasic will ask for confirmation before replacing it; the option O
 (or OVERWRITE) suppresses the question.  After a library has been installed
 the program is restarted automatically so that the new library is initialised.
+RAM asks for the library to go into RAM slot 5 (image slot 8) in PSRAM instead
+of flash, which is possible on an RP2350 with OPTION PSRAM.  While it is there
+it takes the place of the flash library, which is left exactly as it was, so a
+game can bring a large kernel of its own without disturbing the routines the
+user keeps in flash.  It lasts until END or the next RUN, so a program does
+this at every start; the file's hash is kept in the slot and a repeat load of
+the same file is immediate.  No question is asked and O is not needed.
+Without PSRAM the RAM keyword is ignored and the library goes to flash as
+described above.
 
 ~LINE
 LINE  x1, y1, x2, y2 [,[-] LW [, C]]

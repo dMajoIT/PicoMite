@@ -1663,7 +1663,7 @@ void MIPS16 cmd_memory(void)
     // Get the library size
     LibrarySizeK = LibraryPercent = 0;
     LibraryMaxK = MAX_PROG_SIZE / 1024;
-    if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+    if (LibPresent())
     {
         i = 0;
         // first count the normal program code residing in the Library

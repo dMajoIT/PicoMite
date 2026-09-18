@@ -310,6 +310,24 @@ static inline void ResetLocalFrames(void)
 }
 #endif
 unsigned char *LibMemory; // This is where the library is stored. At the last flash slot (4)
+#ifdef rp2350
+/* A RAM library (LIBRARY LOAD file$, RAM) lives in the last RAM slot in PSRAM
+   and shadows the flash library: LibMemory points at it while it is active.
+   It is released by END and by ClearRuntime (so every RUN starts on the flash
+   library and the program's first statement attaches its own again), and the
+   prompt's PrepareProgram rebuilds the CSUB table from whichever is current. */
+unsigned char *RamLibMemory = NULL;
+extern const uint8_t *flash_libmemory;
+void RamLibRelease(void)
+{
+    if (RamLibMemory)
+    {
+        RamLibMemory = NULL;
+        LibMemory = (unsigned char *)flash_libmemory;
+        CFunctionLibrary = NULL;
+    }
+}
+#endif
 int multi = false;
 unsigned char *ProgMemory; // program memory, this is where the program is stored
 int PSize;                 // the size of the program stored in ProgMemory[]
@@ -420,7 +438,7 @@ static void SetPreprogramError(const char *msg, unsigned char *linePtr)
         StartEditPoint = FindLineStart(linePtr, ProgMemory);
         StartEditChar = 0;
     }
-    else if (linePtr && Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE &&
+    else if (linePtr && LibPresent() &&
              linePtr >= LibMemory && linePtr < LibMemory + MAX_PROG_SIZE)
     {
         // In library - can't edit, but still set for display purposes
@@ -451,7 +469,7 @@ void PrintPreprogramError(void)
         unsigned char *memEnd = ProgMemory + MAX_PROG_SIZE;
         int isLibrary = 0;
 
-        if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE &&
+        if (LibPresent() &&
             linePtr >= LibMemory && linePtr < LibMemory + MAX_PROG_SIZE)
         {
             memStart = LibMemory;
@@ -761,7 +779,7 @@ int MIPS16 PrepareProgram(int ErrAbort)
 
     NbrFuncts = 0;
     CFunctionFlash = CFunctionLibrary = NULL;
-    if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+    if (LibPresent())
     {
         NbrFuncts = PrepareProgramExt(LibMemory, 0, &CFunctionLibrary, ErrAbort);
         if (NbrFuncts < 0)
@@ -867,7 +885,7 @@ int MIPS16 PrepareProgram(int ErrAbort)
         funtbl[hash].index = i;
         memcpy(funtbl[hash].name, printvar, (namelen == MAXVARLEN ? namelen : namelen + 1));
     }
-    if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+    if (LibPresent())
     {
         hashlabels(LibMemory, ErrAbort);
         // if(!ErrAbort) return;
@@ -3511,7 +3529,7 @@ unsigned char MIPS16 *findline(int nbr, int mustfind)
     int i, j = 0;
     p = ProgMemory;
     next = LibMemory;
-    if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+    if (LibPresent())
     {
         if (CurrentLinePtr >= LibMemory && CurrentLinePtr <= LibMemory + MAX_PROG_SIZE)
         {
@@ -3524,7 +3542,7 @@ unsigned char MIPS16 *findline(int nbr, int mustfind)
         if (p[0] == 0 && p[1] == 0)
         {
 
-            if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+            if (LibPresent())
             {
                 if (j == 0)
                 {
@@ -3785,7 +3803,7 @@ unsigned char MIPS16 *findlabel(unsigned char *labelptr)
 
     p = (char *)ProgMemory;
     next = (char *)LibMemory;
-    if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+    if (LibPresent())
     {
         if (CurrentLinePtr >= LibMemory && CurrentLinePtr <= LibMemory + MAX_PROG_SIZE)
         {
@@ -3799,7 +3817,7 @@ unsigned char MIPS16 *findlabel(unsigned char *labelptr)
     {
         if (p[0] == 0 && p[1] == 0)
         { // end of the program
-            if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+            if (LibPresent())
             {
                 if (j == 0)
                 {
@@ -5865,10 +5883,10 @@ void MIPS16 error(char *msg, ...)
     if (CurrentLinePtr)
     {
         tp = p = (char *)ProgMemory;
-        if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && CurrentLinePtr < LibMemory + MAX_PROG_SIZE)
+        if (LibPresent() && CurrentLinePtr < LibMemory + MAX_PROG_SIZE)
             tp = p = (char *)LibMemory;
         // if(*CurrentLinePtr != T_NEWLINE && CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) {
-        if (*CurrentLinePtr != T_NEWLINE && ((CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) || (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && CurrentLinePtr < LibMemory + MAX_PROG_SIZE)))
+        if (*CurrentLinePtr != T_NEWLINE && ((CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) || (LibPresent() && CurrentLinePtr < LibMemory + MAX_PROG_SIZE)))
         {
             // normally CurrentLinePtr points to a T_NEWLINE token but in this case it does not
             // so we have to search for the start of the line and set CurrentLinePtr to that
@@ -6567,6 +6585,7 @@ void MIPS16 ClearRuntime(bool all)
      * garbage.  ProfilingFree() NULLs the pointers; if profiling stays on,
      * ResetPerfCounters()/ProfilingAlloc() will reallocate before RUN.   */
     ProfilingFree();
+    RamLibRelease(); /* a RAM library lasts until END or the next RUN */
     /* Reset the master flag so a program WITHOUT "OPTION PROFILING ON"
      * runs un-profiled even if a previous run enabled it.  The program's
      * own OPTION line (if present) executes after ClearRuntime and will

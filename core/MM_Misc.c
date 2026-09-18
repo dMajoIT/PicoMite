@@ -1934,6 +1934,10 @@ void MIPS16 cmd_library(void)
             return;
         checkend(p);
         ClearRuntime(true);
+        /* That released any RAM library, which drops CFunctionLibrary; the flash
+           library's own CSUBs are copied below through it, so rebuild it first */
+        if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && CFunctionLibrary == NULL)
+            PrepareProgram(false);
         TempPtr = m = MemBuff = GetTempMainMemory(EDIT_BUFFER_SIZE);
 
         rem = GetCommandValue((unsigned char *)"Rem");
@@ -2252,8 +2256,11 @@ void MIPS16 cmd_library(void)
     ********************************************************************************************************************/
     if ((tp = checkstring(cmdline, (unsigned char *)"LOAD")))
     {
-        int overwrite = 0, haslib;
-        uint32_t hash = 0;
+        int overwrite = 0, haslib, wantram = 0, loaded;
+        uint32_t hash = 0, skiphash = 0;
+#ifdef rp2350
+        unsigned char *rambase = NULL;
+#endif
         unsigned char *image = NULL, *libbin = NULL;
         uint32_t libbinlen = 0;
         int libnfix = 0;
@@ -2263,13 +2270,15 @@ void MIPS16 cmd_library(void)
            command it no longer says anything about where we are.  We need it
            both to know we are in a program at all and to put it back. */
         unsigned char *savedline = CurrentLinePtr;
-        getcsargs(&tp, 3);
-        if (!(argc == 1 || argc == 3))
+        getcsargs(&tp, 5);
+        if (!(argc == 1 || argc == 3 || argc == 5))
             SyntaxError();
-        if (argc == 3)
+        for (int k = 2; k < argc; k += 2)
         {
-            if (checkstring(argv[2], (unsigned char *)"O") || checkstring(argv[2], (unsigned char *)"OVERWRITE"))
+            if (checkstring(argv[k], (unsigned char *)"O") || checkstring(argv[k], (unsigned char *)"OVERWRITE"))
                 overwrite = 1;
+            else if (checkstring(argv[k], (unsigned char *)"RAM"))
+                wantram = 1; /* prefer the RAM library slot; flash when there is no PSRAM */
             else
                 SyntaxError();
         }
@@ -2306,16 +2315,65 @@ void MIPS16 cmd_library(void)
                 error("Must be the first statement in the program");
         }
         haslib = (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE);
-        if (!haslib)
+#ifdef rp2350
+        /* RAM: the library goes into the last RAM slot in PSRAM and shadows the
+           flash library - which is left exactly as it was - until END or the
+           next RUN.  Nothing survives a reset as far as the interpreter knows,
+           so the program does this at every start; the slot keeps the file's
+           hash in its last eight bytes, and when it still matches the load is
+           just a re-attach: no file read beyond the hash, no tokenising. */
+        if (wantram && PSRAMsize)
         {
-            /* The library shares the last flash slot. */
-            uint32_t *c = (uint32_t *)(flash_progmemory - MAX_PROG_SIZE);
-            if (*c != 0xFFFFFFFF)
-                error("Flash Slot % already in use", MAXFLASHSLOTS);
+            rambase = ImageSlotAddress(MAXIMAGESLOTS);
+            uint32_t *tag = (uint32_t *)(rambase + MAX_PROG_SIZE - 8);
+            if (tag[0] == RAMLIB_MAGIC)
+                skiphash = tag[1];
         }
-        if (!FileLoadLibrary(argv[0], &hash, &image, &libbin, &libbinlen, &libnfix))
+        else
+#endif
+        {
+            if (!haslib)
+            {
+                /* The library shares the last flash slot. */
+                uint32_t *c = (uint32_t *)(flash_progmemory - MAX_PROG_SIZE);
+                if (*c != 0xFFFFFFFF)
+                    error("Flash Slot % already in use", MAXFLASHSLOTS);
+            }
+            if (haslib)
+                skiphash = Option.LIBRARY_HASH;
+        }
+        loaded = FileLoadLibrary(argv[0], &hash, &image, &libbin, &libbinlen, &libnfix, skiphash);
+#ifdef rp2350
+        if (rambase)
+        {
+            if (!loaded && RamLibMemory == rambase)
+                return; /* attached already: this is the restarted program's second pass */
+            if (loaded)
+            {
+                SaveLibraryImage(image, libbin, libbinlen, libnfix, rambase);
+                uint32_t *tag = (uint32_t *)(rambase + MAX_PROG_SIZE - 8);
+                tag[0] = RAMLIB_MAGIC;
+                tag[1] = hash;
+            }
+            CurrentLinePtr = savedline;
+            if (savedline)
+                ClearRuntime(true); /* as RUN does - and this releases any RAM library */
+            RamLibMemory = rambase;
+            LibMemory = rambase;
+            if (PrepareProgram(true))
+            {
+                PrintPreprogramError();
+                return;
+            }
+            if (savedline)
+            {
+                ExecuteProgram(LibMemory);
+                nextstmt = (unsigned char *)ProgMemory;
+            }
             return;
-        if (haslib && Option.LIBRARY_HASH && Option.LIBRARY_HASH == hash)
+        }
+#endif
+        if (!loaded)
             return; /* already have exactly this one - nothing to do */
         if (haslib && !overwrite)
         {
@@ -2341,7 +2399,7 @@ void MIPS16 cmd_library(void)
            the binary built from it, about 3.4x the blob, which is what stopped a
            large CSUB fitting a library it would otherwise sit in comfortably. The
            reader above has already split the two; only the binary goes down. */
-        SaveLibraryImage(image, libbin, libbinlen, libnfix);
+        SaveLibraryImage(image, libbin, libbinlen, libnfix, NULL);
         CurrentLinePtr = savedline;
         Option.LIBRARY_FLASH_SIZE = MAX_PROG_SIZE;
         Option.LIBRARY_HASH = hash;
@@ -2411,18 +2469,18 @@ void MIPS16 cmd_library(void)
     {
         if (CurrentLinePtr)
             StandardError(10);
-        if (Option.LIBRARY_FLASH_SIZE != MAX_PROG_SIZE)
+        if (!LibPresent())
             return;
-        ListProgram(ProgMemory - Option.LIBRARY_FLASH_SIZE, true);
+        ListProgram(LibMemory, true);
         return;
     }
     if (checkstring(cmdline, (unsigned char *)"LIST"))
     {
         if (CurrentLinePtr)
             StandardError(10);
-        if (Option.LIBRARY_FLASH_SIZE != MAX_PROG_SIZE)
+        if (!LibPresent())
             return;
-        ListProgram(ProgMemory - Option.LIBRARY_FLASH_SIZE, false);
+        ListProgram(LibMemory, false);
         return;
     }
     if ((tp = checkstring(cmdline, (unsigned char *)"DISK SAVE")))
@@ -2436,7 +2494,7 @@ void MIPS16 cmd_library(void)
         int fnbr = FindFreeFileNbr();
         if (!InitSDCard())
             return;
-        if (Option.LIBRARY_FLASH_SIZE != MAX_PROG_SIZE)
+        if (!LibPresent())
             error("No library to store");
         char *pp = (char *)getFstring(argv[0]);
         AppendDefaultExtension((char *)pp, ".lib");

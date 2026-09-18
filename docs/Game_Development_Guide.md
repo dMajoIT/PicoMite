@@ -1807,10 +1807,12 @@ exceed program memory. Put it in the library instead - and have the program
 install its own, rather than relying on the user having run `LIBRARY SAVE`:
 
 ```basic
-LIBRARY LOAD MM.INFO(PATH) + "mygame_lib.bas"
+LIBRARY LOAD MM.INFO(PATH) + "mygame_lib.bas", RAM
 OPTION EXPLICIT
 ' ... the rest of the program ...
 ```
+
+`RAM` puts the library into RAM slot 5 in PSRAM on a board that has it (firmware 6.03.02b11 on), where it takes the place of the flash library until `END` or the next `RUN`. The user's own flash library is never touched, no question is asked, and a repeat load of the same file is immediate because the slot keeps the file's hash. Without PSRAM the keyword is ignored and the load goes to flash as described below.
 
 Three rules come with it:
 

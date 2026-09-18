@@ -699,17 +699,22 @@ void MIPS16 cmd_psram(void)
     unsigned char *p;
     if ((p = checkstring(cmdline, (unsigned char *)"ERASE ALL")))
     {
+        RamLibRelease();
         memset((void *)PSRAMblock, 0, PSRAMblocksize);
     }
     else if ((p = checkstring(cmdline, (unsigned char *)"ERASE")))
     {
         int i = getint(p, 1, MAXRAMSLOTS);
         uint8_t *j = (uint8_t *)PSRAMblock + ((i - 1) * MAX_PROG_SIZE);
+        if (i == MAXRAMSLOTS)
+            RamLibRelease(); /* erasing the library's slot lets it go */
         memset(j, 0, MAX_PROG_SIZE);
     }
     else if ((p = checkstring(cmdline, (unsigned char *)"OVERWRITE")))
     {
         int i = getint(p, 1, MAXRAMSLOTS);
+        if (i == MAXRAMSLOTS && RamLibMemory)
+            error("RAM slot % holds the library", MAXRAMSLOTS);
         uint8_t *j = (uint8_t *)PSRAMblock + ((i - 1) * MAX_PROG_SIZE);
         memset(j, 0, MAX_PROG_SIZE);
         uint8_t *q = ProgMemory;
@@ -757,7 +762,9 @@ void MIPS16 cmd_psram(void)
                         PInt(i);
                         MMPrintString(" in use");
                         pp--;
-                        if ((unsigned char)*pp == T_NEWLINE)
+                        if (i == MAXRAMSLOTS && RamLibMemory)
+                            MMPrintString(": the RAM library\r\n");
+                        else if ((unsigned char)*pp == T_NEWLINE)
                         {
                             char *p = (char *)pp;
                             MMPrintString(": \"");
@@ -798,6 +805,8 @@ void MIPS16 cmd_psram(void)
                 SyntaxError();
             ;
         }
+        if (i == MAXRAMSLOTS && RamLibMemory)
+            error("RAM slot % holds the library", MAXRAMSLOTS);
         uint8_t *c = (uint8_t *)(PSRAMblock + ((i - 1) * MAX_PROG_SIZE));
         if (*(uint32_t *)c != 0 && overwrite == 0)
             error("Already programmed");
@@ -830,6 +839,8 @@ void MIPS16 cmd_psram(void)
     else if ((p = checkstring(cmdline, (unsigned char *)"SAVE")))
     {
         int i = getint(p, 1, MAXRAMSLOTS);
+        if (i == MAXRAMSLOTS && RamLibMemory)
+            error("RAM slot % holds the library", MAXRAMSLOTS);
         uint8_t *c = (uint8_t *)(PSRAMblock + ((i - 1) * MAX_PROG_SIZE));
         if (*(uint32_t *)c != 0)
             error("Already programmed");
@@ -914,7 +925,7 @@ void MIPS16 cmd_psram(void)
         }
         // Create a global constant MM.CMDLINE$ containing the empty string.
         //        (void) findvar((unsigned char *)"MM.CMDLINE$", V_FIND | V_DIM_VAR | T_CONST);
-        if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+        if (LibPresent())
             ExecuteProgram(LibMemory); // run anything that might be in the library
         nextstmt = (unsigned char *)ProgMemory;
     }
@@ -1132,6 +1143,10 @@ void MIPS16 cmd_flash(void)
            ImageSlotAddress() errors if there is no PSRAM. */
         bool toram = (i > MAXFLASHSLOTS);
         uint32_t *c = (uint32_t *)ImageSlotAddress(i);
+#ifdef rp2350
+        if (i == MAXIMAGESLOTS && RamLibMemory)
+            error("RAM slot % holds the library", MAXRAMSLOTS);
+#endif
         if (!toram && Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && i == MAXFLASHSLOTS)
             StandardErrorParam(25, MAXFLASHSLOTS);
         if ((toram ? *c != 0 : *c != 0xFFFFFFFF) && overwrite == false)
@@ -1515,7 +1530,7 @@ void MIPS16 cmd_flash(void)
         }
         // Create a global constant MM.CMDLINE$ containing the empty string.
         //        (void) findvar((unsigned char *)"MM.CMDLINE$", V_FIND | V_DIM_VAR | T_CONST);
-        if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+        if (LibPresent())
             ExecuteProgram(LibMemory); // run anything that might be in the library
         nextstmt = (unsigned char *)ProgMemory;
     }
@@ -3992,7 +4007,7 @@ static int MIPS16 lib_scan(int fnbr, uint32_t *hashout, unsigned char *text, uin
 /* Read the file, and hand back the BASIC with every hex body removed, the binary those bodies
    became, and a hash of the file. Touches no flash: the caller decides whether to write. */
 int MIPS16 FileLoadLibrary(unsigned char *fname, uint32_t *hashout, unsigned char **image,
-                           unsigned char **binout, uint32_t *binlenout, int *nfixout)
+                           unsigned char **binout, uint32_t *binlenout, int *nfixout, uint32_t skiphash)
 {
     int fnbr, fsize, nfix;
     unsigned char *bin = NULL, *text;
@@ -4017,11 +4032,12 @@ int MIPS16 FileLoadLibrary(unsigned char *fname, uint32_t *hashout, unsigned cha
         return false;
     lib_scan(fnbr, hashout, NULL, &textlen, NULL, &binlen, 0xFFFFFFFF, &nfix);
     FileClose(fnbr);
-    /* A zero hash means the slot was written by some route other than LIBRARY
-       LOAD (LIBRARY SAVE, or a DELETE), so it cannot be claimed to hold this
-       file and the work must be done. */
-    if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE && Option.LIBRARY_HASH &&
-        Option.LIBRARY_HASH == *hashout)
+    /* skiphash is the hash of what the target already holds - the option's
+       record for flash, the tag in the slot for a RAM library - and zero when
+       it was written by some route other than LIBRARY LOAD (LIBRARY SAVE, or a
+       DELETE), so it cannot be claimed to hold this file and the work must be
+       done. */
+    if (skiphash && skiphash == *hashout)
         return false; /* already exactly this - nothing to do, and nothing allocated */
 
     text = GetTempMemory(textlen + 4);
@@ -4041,18 +4057,36 @@ int MIPS16 FileLoadLibrary(unsigned char *fname, uint32_t *hashout, unsigned cha
 }
 
 /* Write what FileLoadLibrary produced: the BASIC, then the bodies' binary behind it. */
-void MIPS16 SaveLibraryImage(unsigned char *pm, unsigned char *bin, uint32_t binlen, int nfix)
+/* base == NULL writes the flash library (erase, block-buffered programming);
+   otherwise (RP2350) the image goes into the RAM slot at base with the same
+   layout - the text, zero padding to a 256-byte block, the 0xFFFFFFFF marker,
+   the CSUB records, a 0xFFFFFFFF terminator - so PrepareProgramExt reads both
+   alike.  The last 16 bytes of a RAM slot are kept for the hash tag. */
+#define LIBPUT(c)              \
+    do                         \
+    {                          \
+        if (w)                 \
+            *w++ = (c);        \
+        else                   \
+            FlashWriteByte(c); \
+    } while (0)
+void MIPS16 SaveLibraryImage(unsigned char *pm, unsigned char *bin, uint32_t binlen, int nfix, unsigned char *base)
 {
     unsigned char *p, buf[STRINGSIZE];
     unsigned short tkn;
     int i, prevchar = 0;
+    unsigned char *w = base;
+    unsigned char *lib = base ? base : LibMemory;
 
     memcpy(buf, tknbuf, STRINGSIZE); /* tokenise() writes through tknbuf */
     initFonts();
     clearrepeat();
-    FlashWriteInit(LIBRARY_FLASH);
-    safe_flash_range_erase(realflashpointer, MAX_PROG_SIZE);
+    if (w)
+        memset(base, 0, MAX_PROG_SIZE);
+    else
     {
+        FlashWriteInit(LIBRARY_FLASH);
+        safe_flash_range_erase(realflashpointer, MAX_PROG_SIZE);
         int j = MAX_PROG_SIZE / 4;
         int *pp = (int *)LibMemory;
         while (j--)
@@ -4081,18 +4115,28 @@ void MIPS16 SaveLibraryImage(unsigned char *pm, unsigned char *bin, uint32_t bin
         p = tknbuf;
         while (!(p[0] == 0 && p[1] == 0))
         {
-            FlashWriteByte(*p++);
-            if ((int)((char *)realflashpointer - (char *)LibMemory) >= MAX_PROG_SIZE - 5)
+            LIBPUT(*p++);
+            if (w ? (w - base) >= MAX_PROG_SIZE - 16 - 512 : (int)((char *)realflashpointer - (char *)LibMemory) >= MAX_PROG_SIZE - 5)
                 error("Library too big");
         }
-        FlashWriteByte(0);
+        LIBPUT(0);
     }
-    FlashWriteByte(0);
-    FlashWriteAlign(); /* pads the block AND writes the 0xffffffff that marks the binaries */
+    LIBPUT(0);
+    if (w)
+    { /* pad the block and write the 0xffffffff that marks the binaries */
+        while ((w - base) & 0xFF)
+            *w++ = 0;
+        memset(w, 0xFF, 4);
+        w += 4;
+        if ((w - base) + binlen > MAX_PROG_SIZE - 16)
+            error("Library too big");
+    }
+    else
+        FlashWriteAlign(); /* pads the block AND writes the 0xffffffff that marks the binaries */
 
     /* A routine's address is the offset of its token in the image, knowable only now the text
        is down. Fonts already carry their number and are skipped. */
-    p = (unsigned char *)LibMemory;
+    p = lib;
     i = 0;
     while (!(p[0] == 0 && p[1] == 0) && i < nfix)
     {
@@ -4110,7 +4154,7 @@ void MIPS16 SaveLibraryImage(unsigned char *pm, unsigned char *bin, uint32_t bin
         tkn |= (unsigned short)((p[1] & 0x7f) << 7);
         if (tkn == cmdCSUB)
         {
-            uint32_t addr = (uint32_t)(p - (unsigned char *)LibMemory);
+            uint32_t addr = (uint32_t)(p - lib);
             /* the first record still waiting for one - fonts carry their number
                already, so they are never 0xffffffff and are stepped over */
             uint32_t k = 0;
@@ -4133,10 +4177,14 @@ void MIPS16 SaveLibraryImage(unsigned char *pm, unsigned char *bin, uint32_t bin
     }
 
     for (i = 0; i < (int)binlen; i++)
-        FlashWriteByte(bin[i]);
-    FlashWriteClose();
+        LIBPUT(bin[i]);
+    if (w)
+        memset(w, 0xFF, 4); /* the terminator erased flash supplies for free */
+    else
+        FlashWriteClose();
     memcpy(tknbuf, buf, STRINGSIZE);
 }
+#undef LIBPUT
 
 int FileLoadProgram(unsigned char *fname, bool chain, bool crunch)
 {
@@ -4696,8 +4744,8 @@ void MIPS16 loadCMM2(unsigned char *p, bool autorun, bool message)
             return;
         }
         IgnorePIN = false;
-        if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
-            ExecuteProgram(ProgMemory - Option.LIBRARY_FLASH_SIZE); // run anything that might be in the library
+        if (LibPresent())
+            ExecuteProgram(LibMemory); // run anything that might be in the library
         nextstmt = ProgMemory;
     }
     return;
@@ -4936,8 +4984,8 @@ void MIPS16 cmd_load(void)
             return;
         }
         IgnorePIN = false;
-        if (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
-            ExecuteProgram(ProgMemory - Option.LIBRARY_FLASH_SIZE); // run anything that might be in the library
+        if (LibPresent())
+            ExecuteProgram(LibMemory); // run anything that might be in the library
         nextstmt = ProgMemory;
     }
     SetFont(oldfont);

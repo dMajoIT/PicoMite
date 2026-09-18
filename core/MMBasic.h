@@ -480,6 +480,16 @@ extern "C"
     extern int ProgramChanged;
 
     extern unsigned char *LibMemory;
+    /* Is a library active - the flash one, or (RP2350) a RAM library loaded by
+       LIBRARY LOAD file$, RAM, which shadows the flash library while it lasts. */
+#ifdef rp2350
+    extern unsigned char *RamLibMemory;
+#define LibPresent() (RamLibMemory != NULL || Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+    void RamLibRelease(void);
+#else
+#define LibPresent() (Option.LIBRARY_FLASH_SIZE == MAX_PROG_SIZE)
+#define RamLibRelease() ((void)0)
+#endif
     extern unsigned char *ProgMemory;
     extern int PSize;
 
