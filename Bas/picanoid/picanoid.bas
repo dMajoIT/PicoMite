@@ -240,12 +240,14 @@ Const C_ACC   = RGB(255,64,64)
 Const C_DIM   = RGB(120,120,140)
 
 Const MOUSEDEV = 2
-' Image slots 4 to 8 - the RAM slots - arrived in 6.03.02b11.  MM.VER counts
-' a beta as a fraction below the release, so 6.03.02 itself is GREATER than
-' any b-number and has to be tested for separately.
+' The game needs 6.03.02b11, which brought the RAM image slots.  MM.VER
+' numbers a beta ABOVE the release it precedes - b11 is 6.030211 while the
+' 6.03.02 release itself is only 6.0302 - and everything issued after that,
+' 6.0303 and 6.04, is above the beta numbers again.  So one > test catches
+' b11 and all later betas, and only 6.03.02 has to be named separately.
+Const MINVER = 6.030210              ' b11 and every later beta is above this
 Const RELVER = 6.0302                ' the 6.03.02 release itself
 Const VEREPS = 0.0000005             ' half a step: 6.030201 is a whole one away
-Const RAMVER = 6.030210              ' RAM image slots arrived in b11
 Const HOLD_FRAMES = 75               ' a 50 Hz 50 fields, x 3/2
 Const SPEEDUP_AT = 180               ' brick contacts - event driven, unscaled
 Const GRAB_FRAMES = 225              ' a 50 Hz 150 fields, x 3/2
@@ -298,6 +300,7 @@ Const BOSS_HITS = &H14               ' twenty, set once per game at
 Dim STRING kk
 
 ' ---------------------------------------------------------------- setup
+CheckFirmware                        ' before the display is touched
 Restore ArkRoundLen  : For i = 0 To N_ROUNDS - 1 : Read rlen(i) : Next i
 Restore ArkRoundData : For i = 0 To RND_BYTES - 1 : Read rdat(i) : Next i
 Restore ArkBallVX    : For i = 0 To 31 : Read velx(i) : Next i
@@ -329,12 +332,11 @@ If homeDir$ = "NONE" Then homeDir$ = "A:/"
 ' RAM: it loads in a few tens of milliseconds, costs no flash wear, and
 ' leaves all three flash slots - including slot 3, which LIBRARY uses - to
 ' whoever else wants them.  A RAM slot is wiped by a reset, so the image is
-' read from the drive at every start rather than once.  Without PSRAM, or on
-' firmware older than b11, it goes into flash slot 1 exactly as before.
+' read from the drive at every start rather than once.  CheckFirmware has
+' already insisted on b11, so the only question left is whether this board
+' has the PSRAM; without it the image goes into flash slot 1.
 artSlot = 1
-If MM.Info(PSRAM SIZE) > 0 And (MM.VER > RAMVER Or Abs(MM.VER - RELVER) < VEREPS) Then
-  artSlot = 4
-End If
+If MM.Info(PSRAM SIZE) > 0 Then artSlot = 4
 InstallImage artSlot, homeDir$ + "pic_art.bmp", ART_W, ART_H
 haveTitle = 1
 
@@ -2169,6 +2171,19 @@ Sub SelfTest
 End Sub
 
 ' =====================================================================
+' =====================================================================
+'  The RAM image slots arrived in 6.03.02b11 and the game is built around
+'  them, so refuse anything older rather than fail later and obscurely.
+'  Two arms because of how MM.VER numbers a beta - see MINVER above.
+Sub CheckFirmware
+  If MM.VER > MINVER Then Exit Sub
+  If Abs(MM.VER - RELVER) < VEREPS Then Exit Sub
+  Option CONSOLE BOTH
+  Print "Picanoid needs PicoMite firmware 6.03.02b11 or later."
+  Print "This board is running "; Str$(MM.VER, 1, 6); "."
+  Error "firmware too old for this game"
+End Sub
+
 Sub InstallImage(slot As INTEGER, f$ As STRING, wantW As INTEGER, wantH As INTEGER)
   Local INTEGER a
   Local STRING e$

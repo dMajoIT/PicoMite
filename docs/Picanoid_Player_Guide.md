@@ -22,16 +22,18 @@ the bottom two rows.*
 
 - A PicoMite running **MODE 2** — 320 × 240, 16 colours — on an RP2350. The
   brick field is a `TILEMAP`, which is RP2350 only.
-- Firmware **V6.03.02b8 or later**.
+- Firmware **V6.03.02b11 or later** — the release that brought the RAM
+  image slots. The game checks on startup and refuses to run on anything
+  older rather than failing later and obscurely.
 - **A mouse.** The bat follows it. Keys will not do: this is a spinner game
   and the mouse is the spinner.
 - **One** image slot free. The bricks, every sprite and the title screen are
-  a single image. On a board with PSRAM (the PicoComputer 3 has it) running
-  6.03.02b11 or later it is loaded into **RAM slot 1** at every start, which
-  takes a few tens of milliseconds and leaves the flash alone entirely.
-  Otherwise it is written into **flash slot 1** the first time you run the
-  game and checked — not rewritten — after that. Flash slots 2 and 3 are
-  left alone either way, so a `LIBRARY` and this game can live together.
+  a single image. On a board with PSRAM (the PicoComputer 3 has it) it is
+  loaded into **RAM slot 1** at every start, which takes a few tens of
+  milliseconds and leaves the flash alone entirely. Without PSRAM it is
+  written into **flash slot 1** the first time you run the game and checked —
+  not rewritten — after that. Flash slots 2 and 3 are left alone either way,
+  so a `LIBRARY` and this game can live together.
 
 ## Loading it
 
