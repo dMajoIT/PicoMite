@@ -261,6 +261,11 @@ rather than keeping a list, so a collective added later is hidden automatically.
 It prints what it hid on every run. The user-facing spellings all keep their own
 topics; only the internal names are suppressed.
 
+`BASE$` is the exception and is documented, because it is the only way to reach
+a base other than 2, 8 or 16 - `BASE$(12, 100)` prints `84`. No manual covers
+it, so its topic is hand-written in `HANDWRITTEN` in the generator, and being
+in that table is what un-hides it.
+
 A second harvester covers the supplementary manuals, where the User Manual
 carries only a pointer row - see `docs/Help_Coverage_Review.md`. It contributes
 291 of the topics.

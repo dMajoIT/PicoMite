@@ -367,12 +367,13 @@ MAP MAXIMITE                          YMODEM SEND
 ~FUNCTIONS
 MMBasic functions
 
-ABS                         MATH(SUM)
-ACOS                        MATH(TANH)
-ASC                         MAX
-ASIN                        MM.INFO(KEYBOARD)
-ATAN2                       OCT$
-ATN                         PEEK(BP)
+ABS                         MATH(SINH)
+ACOS                        MATH(SUM)
+ASC                         MATH(TANH)
+ASIN                        MAX
+ATAN2                       MM.INFO(KEYBOARD)
+ATN                         OCT$
+BASE$                       PEEK(BP)
 BIN$                        PEEK(BYTE)
 BIN2STR$                    PEEK(CFUNADDR)
 BOUND                       PEEK(PROGMEM)
@@ -472,7 +473,6 @@ MATH(MIN)                   TOUCH(X)
 MATH(PID)                   TRIM$
 MATH(RAND)                  UCASE$
 MATH(SD)                    VAL
-MATH(SINH)
 
 ~OPTIONS
 OPTION settings
@@ -797,6 +797,12 @@ BACKLIGHT n [,FreqInHz]
 NOT VGA OR HDMI VERSIONS Sets the display backlight, valid values are 0 to
 100. If DEFAULT is specified then the firmware will automatically set the
 backlight to that level on power-up.
+
+~BASE$
+BASE$(base, number [, chars])
+
+Returns 'number' written in the number base 'base', which may be 2 to 36.
+Digits above 9 use the letters A to Z, so base 36 counts 0-9 then A-Z.
 
 ~BEZIER
 BEZIER x%(),y%() [,n] [,colour]

@@ -977,6 +977,43 @@ Indexes of every topic in this file:
     HELP VARIABLES    HELP OBSOLETE\
 """
 
+# Entries no manual documents, written here.  A collective token is hidden
+# unless it appears in this table - writing the topic is the statement that the
+# name is one users may type.
+HANDWRITTEN = {
+    "BASE$": ("FUNCTION", ["BASE$(base, number [, chars])"], """\
+Returns 'number' written in the number base 'base', which may be 2 to 36.
+Digits above 9 use the letters A to Z, so base 36 counts 0-9 then A-Z.
+
+'chars' is the minimum number of characters to return.  A shorter result is
+padded on the left with zeros; a longer one is returned in full, so the number
+is never truncated.  If 'chars' is omitted no padding is added.
+
+  PRINT BASE$(12, 100)      ' 84    - one hundred in base 12
+  PRINT BASE$(36, 1295)     ' ZZ
+  PRINT BASE$(3, 42, 6)     ' 001120
+  PRINT BASE$(2, 5)         ' 101
+
+In any base but 10 the number is treated as an unsigned 64-bit value, so
+BASE$(2, -1) returns sixty-four 1s - the same convention as HEX$().
+
+BIN$(), OCT$() and HEX$() are shortcuts for BASE$(2, ...), BASE$(8, ...) and
+BASE$(16, ...).  Use BASE$ directly for any other base.
+
+See also: BIN$, OCT$, HEX$, STR$, VAL"""),
+}
+
+
+def add_handwritten(by_name):
+    for name, (section, syntax, body) in HANDWRITTEN.items():
+        if name.upper() in by_name:
+            continue                  # a manual documents it now - prefer that
+        t = Topic(name, section)
+        t.add(syntax, body.split("\n"))
+        t.always = True
+        by_name[name.upper()] = t
+
+
 INDEX_TOPICS = [
     ("COMMANDS", "COMMAND", "MMBasic commands"),
     ("FUNCTIONS", "FUNCTION", "MMBasic functions"),
@@ -1088,6 +1125,7 @@ def main():
     topics, stats = harvest(args.manual)
     by_name = merge(topics)
     add_extra_topics(Document(args.manual), by_name)
+    add_handwritten(by_name)
     documented = set(by_name)
     hidden = internal_tokens(os.path.join(ROOT, "core", "MMBasic.c"),
                              documented, firmware_tokens(args.tokens))
