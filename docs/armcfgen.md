@@ -671,6 +671,33 @@ still `double`, so convert at the boundary: `DtoS` the incoming `pf()` values to
 > than software double, but not FPU‑accelerated. The double routines above use
 > the DCP coprocessor on RP2350.
 
+### Pins
+
+`SETPIN` and the rest of the configuration belong in BASIC, where they happen
+once. What a CSUB is for is watching or driving a pin in a tight loop, and
+these are the interpreter's own routines behind `PIN(n)` and `PIN(n) = v`, so
+a CSUB and BASIC cannot read a pin differently.
+
+`PinVal` returns whatever the pin's mode means — a digital level, a raw ADC
+count, a filtered voltage, a frequency or a period — exactly as `PIN(n)` does.
+The pin number is the one `PIN()` takes, which for a `GPnn` is
+`MM.INFO(PINNO GPnn)`.
+
+**Neither can report an error**, because a routine reachable from a CSUB must
+not call `error()`. An invalid pin, a pin that is not an input, or an ADC busy
+with a DMA transfer reads **0** rather than stopping the program. `PIN()` in
+BASIC still raises all of those.
+
+| Name | Offset | Prototype / use |
+|---|---|---|
+| `PinVal` | 0x1B8 | `MMFLOAT PinVal(int pin)` — `PIN(n)` |
+| `PinPut` | 0x1BC | `void PinPut(int pin, int val)` — `PIN(n) = v` |
+| `ExtCurrentConfig` | 0x1C0 | `volatile int *` — what `SETPIN` made each pin (`EXT_DIG_IN`, `EXT_ANA_IN` …), indexed by pin number |
+
+The lower-level `ExtSet`, `ExtInp`, `ExtCfg`, `PinRead` and `PinSetBit` are
+also available (see Console, formatting and program control above) and bypass
+the mode dispatch; use `PinVal` unless you know exactly what the pin is.
+
 ### MMBasic strings
 
 Added in 6.03.02b9. An MMBasic string is a **length byte followed by the

@@ -265,6 +265,18 @@ static void mmg_box(MMINTEGER bx, MMINTEGER by, MMINTEGER bw, MMINTEGER bh,
         DrawRectangle(x1 + w, y1 + w, x2 - w, y2 - w, fil);
 }
 
+/* PIN(n) and PIN(n) = v. Setting a pin up - SETPIN, OPTION and the rest - stays
+   in BASIC, where it happens once; what a CSUB is for is watching or driving a
+   pin in a tight loop. PinVal returns whatever the pin's mode means: a digital
+   level, a raw ADC count, a filtered voltage, a frequency. Both are the
+   interpreter's own routines, so a CSUB and PIN(n) cannot disagree.
+
+   Neither can report an error - a core must not call error() - so an invalid
+   pin, or one that is not an input, reads 0 rather than stopping the program.
+   Firmware 6.03.02b10. */
+#define mmg_pin_get(p) PinVal((int)(p))
+#define mmg_pin_put(p, v) PinPut((int)(p), (int)(v))
+
 /* Deliberately absent: mm_map_get (the MAP() function). The colour map has no
    CallTable slot, and in a fixed mode its sixteen values are constants - so
    pass them in as an INTEGER array and index that instead.

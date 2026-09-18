@@ -475,7 +475,8 @@ strings; `STATIC`s, which the wrapper keeps for you; recursion; `IF`/`FOR`/`DO`/
 ATAN2 ASIN ACOS POWER INT FIX ABS SGN RND TIMER`, `LEFT$ RIGHT$ MID$ UCASE$
 LCASE$ CHR$ SPACE$ STRING$ INSTR STR$ VAL LEN ASC`, `RGB` (including the
 colour names), `MM.HRES` and `MM.VRES`, `PRINT`, and the drawing statements
-`PIXEL`, `LINE`, `BOX`, `CIRCLE` and `TRIANGLE`.
+`PIXEL`, `LINE`, `BOX`, `CIRCLE` and `TRIANGLE`; and `PIN(n)` and `PIN(n) = v`
+for reading and driving a pin.
 
 `RGB` costs nothing at all: the translator works it out where it stands, so
 `RGB(red)` becomes a constant and `RGB(r, g, b)` becomes the shift-and-or it
@@ -483,9 +484,17 @@ always was. The drawing statements call the same firmware routines the
 interpreter calls, so what you get on screen is identical — a converted
 routine and the original produce the same image byte for byte.
 
+`PIN` is worth a word. Setting a pin up — `SETPIN`, `OPTION` — stays in BASIC,
+where it happens once; what converts is the reading and writing, which is the
+part that goes in a loop. It reads whatever the pin's mode means, through the
+interpreter's own routine, so a CSUB and `PIN(n)` cannot disagree. The one
+difference is that a CSUB cannot raise an error: an invalid pin, or one that
+is not an input, reads 0 instead of stopping the program. Needs firmware
+6.03.02b10.
+
 **Not yet:** string *arrays* as parameters; `INPUT`; `ON ERROR`; interrupt
-handlers; file I/O; user-defined `TYPE`s; `MAP`; and the graphics beyond the
-list above — `RBOX`, `POLYGON`, sprites, framebuffers, and a `LINE` with a
+handlers; file I/O; user-defined `TYPE`s; `MAP`; `SETPIN`; and the graphics
+beyond the list above — `RBOX`, `POLYGON`, sprites, framebuffers, and a `LINE` with a
 width, which is four different algorithms in the firmware and has no
 CallTable slot of its own.
 

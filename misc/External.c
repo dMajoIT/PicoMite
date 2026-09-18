@@ -2086,9 +2086,104 @@ bool __no_inline_not_in_flash_func(bb_get_bootsel_button)()
 }
 /*  @endcond */
 
+/***********************************************************************************************
+ * PinVal / PinPut - what PIN(n) and PIN(n) = v do, with the parsing taken out.
+ *
+ * Exposed on the CallTable so a CSUB can watch or drive a pin at machine speed. Setting a pin
+ * up is a one-off and belongs in BASIC; reading and writing one in a tight loop is exactly what
+ * a CSUB is for.
+ *
+ * Neither may call error(): it longjmps, which would abandon the CSUB's stack frame. So they
+ * check and return a defined answer instead - 0 for a pin that is invalid, is not an input, or
+ * whose ADC is busy with a DMA transfer. That is the same division the string cores use: the
+ * core clamps, the wrapper validates. fun_pin below still raises every error it always did.
+ ***********************************************************************************************/
+MMFLOAT PinVal(int pin)
+{
+    int i, j, t, b[ANA_AVERAGE];
+
+    if (IsInvalidPin(pin))
+        return 0;
+    switch (ExtCurrentConfig[pin])
+    {
+    case EXT_DIG_IN:
+    case EXT_CNT_IN:
+    case EXT_INT_HI:
+    case EXT_INT_LO:
+    case EXT_INT_BOTH:
+    case EXT_DIG_OUT:
+    case EXT_PIO0_OUT:
+    case EXT_PIO1_OUT:
+#ifdef rp2350
+    case EXT_PIO2_OUT:
+#endif
+        return (MMFLOAT)ExtInp(pin);
+#ifdef rp2350
+    case EXT_FAST_TIMER:
+        return (MMFLOAT)INT5Value * (MMFLOAT)1000.0 / (MMFLOAT)INT5InitTimer;
+#endif
+    case EXT_PER_IN: /* the count, averaged over the number of cycles */
+        if (pin == Option.INT1pin)
+            return (MMFLOAT)ExtInp(pin) / (MMFLOAT)INT1InitTimer;
+        if (pin == Option.INT2pin)
+            return (MMFLOAT)ExtInp(pin) / (MMFLOAT)INT2InitTimer;
+        if (pin == Option.INT3pin)
+            return (MMFLOAT)ExtInp(pin) / (MMFLOAT)INT3InitTimer;
+        if (pin == Option.INT4pin)
+            return (MMFLOAT)ExtInp(pin) / (MMFLOAT)INT4InitTimer;
+        return 0;
+    case EXT_FREQ_IN: /* the count, scaled */
+        if (pin == Option.INT1pin)
+            return (MMFLOAT)(ExtInp(pin)) * (MMFLOAT)1000.0 / (MMFLOAT)INT1InitTimer;
+        if (pin == Option.INT2pin)
+            return (MMFLOAT)(ExtInp(pin)) * (MMFLOAT)1000.0 / (MMFLOAT)INT2InitTimer;
+        if (pin == Option.INT3pin)
+            return (MMFLOAT)(ExtInp(pin)) * (MMFLOAT)1000.0 / (MMFLOAT)INT3InitTimer;
+        if (pin == Option.INT4pin)
+            return (MMFLOAT)(ExtInp(pin)) * (MMFLOAT)1000.0 / (MMFLOAT)INT4InitTimer;
+        return 0;
+    case EXT_ADCRAW:
+        if (ADCDualBuffering || dmarunning)
+            return 0; /* a DMA transfer owns the ADC - fun_pin errors, this cannot */
+        return (MMFLOAT)ExtInp(pin);
+    case EXT_ANA_IN:
+        if (ADCDualBuffering || dmarunning)
+            return 0;
+        for (i = 0; i < ANA_AVERAGE; i++)
+        {
+            b[i] = ExtInp(pin); /* get the value */
+            for (j = i; j > 0; j--)
+            { /* and sort it into position */
+                if (b[j - 1] < b[j])
+                {
+                    t = b[j - 1];
+                    b[j - 1] = b[j];
+                    b[j] = t;
+                }
+                else
+                    break;
+            }
+        }
+        /* discard the top and bottom ANA_DISCARD samples, add up the rest */
+        for (j = 0, i = ANA_DISCARD; i < ANA_AVERAGE - ANA_DISCARD; i++)
+            j += b[i];
+        /* and average and scale the total */
+        return FMul((MMFLOAT)j, VCC) / (MMFLOAT)(4095 * (ANA_AVERAGE - ANA_DISCARD * 2));
+    default:
+        return 0; /* not an input - fun_pin errors, this cannot */
+    }
+}
+
+void PinPut(int pin, int val)
+{
+    if (IsInvalidPin(pin))
+        return;
+    ExtSet(pin, val);
+}
+
 void fun_pin(void)
 {
-    int pin, i, j, b[ANA_AVERAGE];
+    int pin;
     MMFLOAT t;
     if (checkstring(ep, (unsigned char *)"TEMP"))
     {
@@ -2115,6 +2210,10 @@ void fun_pin(void)
     }
 
     pin = getpinarg(ep);
+    /* The value of each mode comes from PinVal, which is also what a CSUB calls
+       through the CallTable, so there is ONE implementation of the ADC filter and
+       the frequency scaling. What stays here is what PinVal deliberately cannot do:
+       choose between an integer and a float result, and raise an error. */
     switch (ExtCurrentConfig[pin])
     {
     case EXT_DIG_IN:
@@ -2133,30 +2232,10 @@ void fun_pin(void)
         return;
 #ifdef rp2350
     case EXT_FAST_TIMER:
-        fret = (MMFLOAT)INT5Value * (MMFLOAT)1000.0 / (MMFLOAT)INT5InitTimer;
-        targ = T_NBR;
-        return;
 #endif
-    case EXT_PER_IN: // if period measurement get the count and average it over the number of cycles
-        if (pin == Option.INT1pin)
-            fret = (MMFLOAT)ExtInp(pin) / (MMFLOAT)INT1InitTimer;
-        else if (pin == Option.INT2pin)
-            fret = (MMFLOAT)ExtInp(pin) / (MMFLOAT)INT2InitTimer;
-        else if (pin == Option.INT3pin)
-            fret = (MMFLOAT)ExtInp(pin) / (MMFLOAT)INT3InitTimer;
-        else if (pin == Option.INT4pin)
-            fret = (MMFLOAT)ExtInp(pin) / (MMFLOAT)INT4InitTimer;
-        targ = T_NBR;
-        return;
-    case EXT_FREQ_IN: // if frequency measurement get the count and scale the reading
-        if (pin == Option.INT1pin)
-            fret = (MMFLOAT)(ExtInp(pin)) * (MMFLOAT)1000.0 / (MMFLOAT)INT1InitTimer;
-        else if (pin == Option.INT2pin)
-            fret = (MMFLOAT)(ExtInp(pin)) * (MMFLOAT)1000.0 / (MMFLOAT)INT2InitTimer;
-        else if (pin == Option.INT3pin)
-            fret = (MMFLOAT)(ExtInp(pin)) * (MMFLOAT)1000.0 / (MMFLOAT)INT3InitTimer;
-        else if (pin == Option.INT4pin)
-            fret = (MMFLOAT)(ExtInp(pin)) * (MMFLOAT)1000.0 / (MMFLOAT)INT4InitTimer;
+    case EXT_PER_IN:  /* the count over the number of cycles */
+    case EXT_FREQ_IN: /* the count, scaled */
+        fret = PinVal(pin);
         targ = T_NBR;
         return;
     case EXT_ADCRAW:
@@ -2168,27 +2247,7 @@ void fun_pin(void)
     case EXT_ANA_IN:
         if (ADCDualBuffering || dmarunning)
             error("ADC in use");
-        for (i = 0; i < ANA_AVERAGE; i++)
-        {
-            b[i] = ExtInp(pin); // get the value
-            for (j = i; j > 0; j--)
-            { // and sort into position
-                if (b[j - 1] < b[j])
-                {
-                    t = b[j - 1];
-                    b[j - 1] = b[j];
-                    b[j] = t;
-                }
-                else
-                    break;
-            }
-        }
-        // we then discard the top ANA_DISCARD samples and the bottom ANA_DISCARD samples and add up the remainder
-        for (j = 0, i = ANA_DISCARD; i < ANA_AVERAGE - ANA_DISCARD; i++)
-            j += b[i];
-
-        // the total is averaged and scaled
-        fret = FMul((MMFLOAT)j, VCC) / (MMFLOAT)(4095 * (ANA_AVERAGE - ANA_DISCARD * 2));
+        fret = PinVal(pin); /* the sort-and-discard filter lives there */
         targ = T_NBR;
         return;
 

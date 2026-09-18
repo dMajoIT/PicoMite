@@ -421,6 +421,10 @@ int GetPinBit(int pin);
 volatile unsigned int GetPinStatus(int pin);
 int CheckPin(int pin, int action);
 int IsInvalidPin(int pin);
+/* PIN(n) and PIN(n) = v with the parsing taken out, for the CallTable. Neither
+   calls error(); they return 0 / do nothing for a pin they cannot serve. */
+MMFLOAT PinVal(int pin);
+void PinPut(int pin, int val);
 
 /* ============================================================================
  * Function declarations - Timer functions
