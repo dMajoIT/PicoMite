@@ -1,6 +1,6 @@
 ' Elite for the PicoMite, built by elite_tools/build.py from src/*.bas.
 ' Comments and indentation are stripped to fit program memory - read src/.
-LIBRARY LOAD MM.INFO(PATH) + "elite_lib.bas"
+LIBRARY LOAD MM.INFO(PATH) + "elite_lib.bas", RAM
 IF MM.INFO(PSRAM SIZE) > 0 THEN OPTION TRACECACHE ON 256 ELSE OPTION TRACECACHE ON 128
 OPTION CACHE SUB DrawStardust, DrawScanner
 OPTION EXPLICIT

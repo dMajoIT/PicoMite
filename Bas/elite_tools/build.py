@@ -423,10 +423,12 @@ def main():
 
     proghead = [
         "' Elite for the PicoMite.  The declarations and the ship data live in",
-        "' " + os.path.basename(OUTLIB) + ", which this installs as the library on",
-        "' its first run; after that the command finds the library already matches",
-        "' and does nothing.  It must be the first statement in the program.",
-        "LIBRARY LOAD MM.INFO(PATH) + " + chr(34) + LIBNAME + chr(34),
+        "' " + os.path.basename(OUTLIB) + ", which this loads as the library.  RAM",
+        "' puts it in RAM slot 5 on a board with PSRAM (firmware 6.03.02b11 on), where",
+        "' it shadows the flash library and leaves it alone; without PSRAM it is",
+        "' installed in flash on the first run and found already there after that.",
+        "' It must be the first statement in the program.",
+        "LIBRARY LOAD MM.INFO(PATH) + " + chr(34) + LIBNAME + chr(34) + ", RAM",
         "",
     ]
     if moved:

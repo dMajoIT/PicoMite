@@ -8,9 +8,9 @@ come from the published 6502 source, so Lave is the Lave you remember.
 
 You need a PicoMite with a screen - an HDMI or VGA build is what it was written
 for, and it also runs on a PicoCalc - and the firmware must be
-**version 6.03.02b6 or above**. `PRINT MM.VER` at the prompt: it must report
-6.030206 or more. b5 is where `LIBRARY LOAD` arrived, and the program's first
-line is one, so nothing earlier will get past it at all; b6 is where
+**version 6.03.02b11 or above**. `PRINT MM.VER` at the prompt: it must report
+6.030211 or more. b11 is where `LIBRARY LOAD ..., RAM` arrived, and the
+program's first line is one, so nothing earlier will get past it at all; b6 is where
 `PLAY BBC SOUND` arrived, which is what the sound is made of now, and where
 the noise channel learned the BBC's tuned settings, which is what the
 explosion is made of. Earlier firmware would not
@@ -75,10 +75,13 @@ commander beside itself, so a directory of your own on the A: drive or a B:
 drive works just as well as the root - use the same directory in all four
 lines above and it will find everything.
 
-The first `RUN` installs the library and starts again by itself - that takes a
-second or two. Every run after that finds the library already matches and goes
-straight into the game. Nothing else to do: the program's first line is
-`LIBRARY LOAD`, so it looks after its own library.
+On a board with PSRAM (the PicoComputer 3 has it) every `RUN` loads the
+library into RAM slot 5 and starts again by itself - the first time takes a
+second or two, after that the slot still holds it and the start is immediate -
+and the flash library is never touched, so whatever you keep there stays.
+Without PSRAM the first `RUN` installs the library in flash instead, and every
+run after that finds it already matches. Nothing else to do: the program's
+first line is `LIBRARY LOAD`, so it looks after its own library.
 
 ## Starting
 

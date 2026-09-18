@@ -48,7 +48,7 @@ Const VERSION$ = "0.9.1"
 ' FINAL release into 6.0302, which is LOWER than any of its own betas, so one
 ' comparison cannot do it.  Anything after 6.03.02 is fine (6.0303 and 6.04 are
 ' both above the beta numbers), so only that one release has to be named.
-Const MINVER = 6.030206                ' the game needs b7: every later beta is above this
+Const MINVER = 6.030210                ' the game needs b11: every later beta is above this
 Const RELVER = 6.0302                  ' the 6.03.02 release itself
 Const VEREPS = 0.0000005               ' half a step: 6.030201 is a whole one away
 Const RAMVER = 6.030210                ' RAM image slots arrived in b11
@@ -149,7 +149,7 @@ RepeatingKeys:
 End Sub
 
 ' ---------------------------------------------------------------- loading
-' The game needs 6.03.02b7.  Two arms are needed because MM.VER turns a beta
+' The game needs 6.03.02b11 (LIBRARY LOAD ..., RAM).  Two arms are needed because MM.VER turns a beta
 ' into a number ABOVE the release it belongs to: b7 is 6.030207 while the
 ' 6.03.02 release itself is 6.0302.  Everything issued after that - 6.0303,
 ' 6.04 - is above the beta numbers again, so only 6.03.02 has to be named.
@@ -159,7 +159,7 @@ Sub CheckFirmware
   If MM.VER > MINVER Then Exit Sub
   If Abs(MM.VER - RELVER) < VEREPS Then Exit Sub
   Option CONSOLE BOTH
-  Print "Exile needs PicoMite firmware 6.03.02b7 or later."
+  Print "Exile needs PicoMite firmware 6.03.02b11 or later."
   Print "This board is running "; Str$(MM.VER, 1, 6); "."
   Error "firmware too old for this game"
 End Sub
