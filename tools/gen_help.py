@@ -699,7 +699,7 @@ def _drop_trailing_label(entry):
     return name, syntax, desc
 
 
-def harvest_supplementary(by_name, tokens_path=None):
+def harvest_supplementary(by_name, tokens_path=None, hidden=()):
     """Add every topic the supplementary manuals document. Returns a count."""
     added, weight = 0, {}
     # A name only counts if its first word is a real keyword; without this a
@@ -719,7 +719,7 @@ def harvest_supplementary(by_name, tokens_path=None):
                        + list(md_table_entries(path)))
         for name, syntax, desc in entries:
             key = name.upper()
-            if key.split("(")[0].split()[0] not in families:
+            if key in hidden or key.split("(")[0].split()[0] not in families:
                 continue
             cur = by_name.get(key)
             if cur is not None and not cur.is_stub and not cur.family:
@@ -804,6 +804,53 @@ ALIAS_SKIP = {
 
 TOKEN_RE = re.compile(r'\{\(unsigned char \*\)"([^"]+)"\s*,\s*T_')
 
+# tokenise() rewrites the name the user types into the token that implements it:
+#     STR_REPLACE((char *)inpbuf, "LEFT$(", "SCHANGE$(E,", 2);
+# Several user-facing functions share one token this way, to keep the function
+# token table under the 128 a 7-bit token allows.  The right-hand names -
+# BASE$, SCHANGE$, TOPBOTTOM - are implementation detail: nobody can type them
+# and they must never appear as a topic.  Parsed rather than listed so that a
+# collective added later is hidden automatically.
+REWRITE_RE = re.compile(
+    r'STR_REPLACE\(\(char \*\)inpbuf,\s*"([^"]+)"\s*,\s*"([^"]+)"')
+
+
+def internal_tokens(mmbasic_c, documented, tokens):
+    """Rewrite targets that no manual documents, i.e. the collective tokens.
+
+    'documented' is the set of names harvested from the manuals, which keeps
+    genuine aliases (SPRITE MEMORY -> BLIT MEMORY, MM.INFO$ -> MM.INFO) out of
+    the result.
+    """
+    if not os.path.exists(mmbasic_c):
+        return set()
+    src = open(mmbasic_c, encoding="utf-8", errors="replace").read()
+    m = re.search(r"void\s+(?:MIPS16\s+)?tokenise\s*\([^)]*\)\s*\{", src)
+    if not m:                       # only the rewrites tokenise() itself does:
+        return set()                # elsewhere STR_REPLACE handles board names
+    depth, i = 1, m.end()
+    while i < len(src) and depth:
+        depth += (src[i] == "{") - (src[i] == "}")
+        i += 1
+    pairs = REWRITE_RE.findall(src[m.end():i])
+    typed = {u.split("(")[0].upper().rstrip(",") for u, _ in pairs}
+    hidden = set()
+    for user, internal in pairs:
+        if not (user[:1].isalpha() and internal[:1].isalpha()):
+            continue                # ">=" / "<=" are operators, not tokens
+        base = internal.split("(")[0].upper().rstrip(",")
+        if base not in tokens:
+            continue                # "GAME*MITE" -> "GAMEMITE": a board name
+        # The token itself is internal when nobody types it: PEEK survives
+        # because PEEK(BYTE is a source, SCHANGE$ does not because it is only
+        # ever a target.
+        if base not in typed and base not in documented:
+            hidden.add(base)
+        spelling = canon_name(internal.rstrip("(,"))
+        if spelling and spelling.upper() not in documented:
+            hidden.add(spelling.upper())
+    return hidden
+
 
 def firmware_tokens(path):
     """Every command/function name in AllCommands.h, union of all variants."""
@@ -816,14 +863,14 @@ def firmware_tokens(path):
     return out
 
 
-def add_token_aliases(by_name, tokens):
+def add_token_aliases(by_name, tokens, hidden=()):
     """Make firmware keywords that have no entry of their own reachable.
 
     Returns the tokens that could not be placed - genuine documentation gaps.
     """
     gaps = []
     for tk in sorted(tokens):
-        if tk in by_name or tk in ALIAS_SKIP:
+        if tk in by_name or tk in ALIAS_SKIP or tk in hidden:
             continue
         target = None
         if tk in KEYWORD_ALIASES and KEYWORD_ALIASES[tk].upper() in by_name:
@@ -1041,10 +1088,16 @@ def main():
     topics, stats = harvest(args.manual)
     by_name = merge(topics)
     add_extra_topics(Document(args.manual), by_name)
-    supp = 0 if args.no_supplementary else harvest_supplementary(by_name, args.tokens)
+    documented = set(by_name)
+    hidden = internal_tokens(os.path.join(ROOT, "core", "MMBasic.c"),
+                             documented, firmware_tokens(args.tokens))
+    for key in hidden & set(by_name):
+        del by_name[key]          # a collective token is not a user-facing name
+    supp = (0 if args.no_supplementary
+            else harvest_supplementary(by_name, args.tokens, hidden))
     gaps = []
     if args.tokens and os.path.exists(args.tokens):
-        gaps = add_token_aliases(by_name, firmware_tokens(args.tokens))
+        gaps = add_token_aliases(by_name, firmware_tokens(args.tokens), hidden)
     add_seealso(by_name)
 
     default = "help.txt"
@@ -1063,6 +1116,8 @@ def main():
           % (len(blocks), real, len(by_name) - real))
     print("supplementary    : %d topics from the separate manuals" % supp)
     print("written          : %s  (%.1f KB)" % (out, size / 1024.0))
+    if hidden:
+        print("collective tokens hidden: %s" % "  ".join(sorted(hidden)))
     if gaps:
         print("firmware keywords with no entry in the manual (%d):" % len(gaps))
         print("    " + "  ".join(gaps))

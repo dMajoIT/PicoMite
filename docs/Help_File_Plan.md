@@ -252,6 +252,15 @@ Beyond the plain harvest the generator adds:
   `ENDIF`, `EXIT FOR` -> `EXIT DO`) or a family pointer (`HELP CPU` lists
   `CPU RESTART`, `CPU SLEEP`, `CPU SPEED`).
 
+**Collective tokens are excluded.** Several user-facing functions share one
+token so the function table stays under the 128 a 7-bit token allows -
+`BIN$`/`OCT$`/`HEX$` are all `BASE$`, `LCASE$`/`UCASE$`/`LEFT$`/`RIGHT$` are all
+`SCHANGE$`, `MIN`/`MAX` are `TOPBOTTOM`, and `PEEK(BYTE` is `PEEK(INT8`. The
+generator reads those rewrites out of `tokenise()` ([MMBasic.c:1270](../core/MMBasic.c#L1270))
+rather than keeping a list, so a collective added later is hidden automatically.
+It prints what it hid on every run. The user-facing spellings all keep their own
+topics; only the internal names are suppressed.
+
 A second harvester covers the supplementary manuals, where the User Manual
 carries only a pointer row - see `docs/Help_Coverage_Review.md`. It contributes
 291 of the topics.
