@@ -262,9 +262,11 @@ It prints what it hid on every run. The user-facing spellings all keep their own
 topics; only the internal names are suppressed.
 
 `BASE$` is the exception and is documented, because it is the only way to reach
-a base other than 2, 8 or 16 - `BASE$(12, 100)` prints `84`. No manual covers
-it, so its topic is hand-written in `HANDWRITTEN` in the generator, and being
-in that table is what un-hides it.
+a base other than 2, 8 or 16 - `BASE$(12, 100)` returns `84`. It now has a row
+in the User Manual's Functions table, between `ATAN2` and `BIN$`, so the help
+topic comes from there like any other. A collective with no manual entry can
+still be documented by adding it to `HANDWRITTEN` in the generator; being in
+that table, or in the manual, is what un-hides it.
 
 A second harvester covers the supplementary manuals, where the User Manual
 carries only a pointer row - see `docs/Help_Coverage_Review.md`. It contributes

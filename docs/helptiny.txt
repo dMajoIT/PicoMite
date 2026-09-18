@@ -712,27 +712,7 @@ BACKLIGHT n [,DEFAULT]
 BACKLIGHT n [,FreqInHz]
 
 ~BASE$
-BASE$(base, number [, chars])
-
-Returns 'number' written in the number base 'base', which may be 2 to 36.
-Digits above 9 use the letters A to Z, so base 36 counts 0-9 then A-Z.
-
-'chars' is the minimum number of characters to return.  A shorter result is
-padded on the left with zeros; a longer one is returned in full, so the number
-is never truncated.  If 'chars' is omitted no padding is added.
-
-  PRINT BASE$(12, 100)      ' 84    - one hundred in base 12
-  PRINT BASE$(36, 1295)     ' ZZ
-  PRINT BASE$(3, 42, 6)     ' 001120
-  PRINT BASE$(2, 5)         ' 101
-
-In any base but 10 the number is treated as an unsigned 64-bit value, so
-BASE$(2, -1) returns sixty-four 1s - the same convention as HEX$().
-
-BIN$(), OCT$() and HEX$() are shortcuts for BASE$(2, ...), BASE$(8, ...) and
-BASE$(16, ...).  Use BASE$ directly for any other base.
-
-See also: BIN$, OCT$, HEX$, STR$, VAL
+BASE$( base, number [, chars])
 
 ~BEZIER
 BEZIER x%(),y%() [,n] [,colour]

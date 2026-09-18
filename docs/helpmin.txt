@@ -799,10 +799,11 @@ NOT VGA OR HDMI VERSIONS Sets the display backlight, valid values are 0 to
 backlight to that level on power-up.
 
 ~BASE$
-BASE$(base, number [, chars])
+BASE$( base, number [, chars])
 
-Returns 'number' written in the number base 'base', which may be 2 to 36.
-Digits above 9 use the letters A to Z, so base 36 counts 0-9 then A-Z.
+Returns a string giving the value of 'number' in the number base 'base'.
+'base' can be from 2 to 36 with the digits above nine represented by the
+letters A to Z.
 
 ~BEZIER
 BEZIER x%(),y%() [,n] [,colour]
