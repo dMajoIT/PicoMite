@@ -6997,10 +6997,7 @@ void cmd_open(void)
             fnbr = FindFreeFileNbr();
             GPSfnbr = fnbr;
             FileTable[fnbr].com = fname[3] - '0';
-            if (mem_equal((unsigned char *)fname, (unsigned char *)"COM1:", 5))
-                GPSchannel = 1;
-            if (mem_equal((unsigned char *)fname, (unsigned char *)"COM2:", 5))
-                GPSchannel = 2;
+            GPSchannel = fname[3] - '0'; // 1-2 = UART, 3-6 = USB CDC host (is_comport already validated it)
             gpsbuf = gpsbuf1;
             gpscurrent = 0;
             gpscount = 0;

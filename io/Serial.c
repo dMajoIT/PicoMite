@@ -60,6 +60,37 @@ volatile int com2complete = 1;
 char com2_mode;				 // keeps track of the settings for com2
 unsigned char com2_bit9 = 0; // used to track the 9th bit
 
+// GPS NMEA line assembler, shared by the two UART interrupt handlers and the USB CDC
+// receive callback. Appends one byte to the current 128-byte double buffer; on a line
+// feed, or when the buffer is full, terminates the line, publishes it in gpsready and
+// swaps buffers. Returns true when a line was completed. The terminator needs a slot,
+// so the cut-off is 127 data bytes, not 128.
+static inline __attribute__((always_inline)) bool GPSrxByte(char cc)
+{
+	*gpsbuf = cc;
+	gpsbuf++;
+	gpscount++;
+	if (cc == 10 || gpscount == 127)
+	{
+		*gpsbuf = 0;
+		gpscount = 0;
+		if (gpscurrent)
+		{
+			gpscurrent = 0;
+			gpsbuf = gpsbuf1;
+			gpsready = gpsbuf2;
+		}
+		else
+		{
+			gpscurrent = 1;
+			gpsbuf = gpsbuf2;
+			gpsready = gpsbuf1;
+		}
+		return true;
+	}
+	return false;
+}
+
 // variables for USB CDC host ports (COM3-COM6)
 #ifdef USBKEYBOARD
 #include "tusb.h"
@@ -203,7 +234,19 @@ void tuh_cdc_rx_cb(uint8_t idx)
 	}
 	cdc_init_arrays();
 
-	if (*cdc_com_flag[idx] && *cdc_rx_buf[idx] != NULL)
+	if (GPSchannel == idx + 3 && *cdc_com_flag[idx])
+	{
+		// This port was opened AS GPS: feed the NMEA line assembler instead of the ring buffer,
+		// exactly as the UART interrupt handlers do. Nothing else happens here - parsing and
+		// the monitor print run from processgps() in the main loop. No I/O in USB callbacks.
+		uint32_t count;
+		while ((count = tuh_cdc_read(idx, buf, sizeof(buf))) > 0)
+		{
+			for (uint32_t i = 0; i < count; i++)
+				GPSrxByte(buf[i]);
+		}
+	}
+	else if (*cdc_com_flag[idx] && *cdc_rx_buf[idx] != NULL)
 	{
 		uint32_t count;
 		int bsize = *cdc_buf_size[idx];
@@ -248,28 +291,7 @@ void on_uart_irq0()
 		{
 			if (GPSchannel == 1 || PinDef[Option.GPSTX].mode & UART0TX)
 			{
-				*gpsbuf = cc;
-				gpsbuf++;
-				gpscount++;
-				if ((char)cc == 10 || gpscount == 128)
-				{
-					if (gpscurrent)
-					{
-						*gpsbuf = 0;
-						gpscurrent = 0;
-						gpscount = 0;
-						gpsbuf = gpsbuf1;
-						gpsready = gpsbuf2;
-					}
-					else
-					{
-						*gpsbuf = 0;
-						gpscurrent = 1;
-						gpscount = 0;
-						gpsbuf = gpsbuf2;
-						gpsready = gpsbuf1;
-					}
-				}
+				GPSrxByte(cc);
 			}
 			else
 			{
@@ -337,28 +359,7 @@ void on_uart_irq1()
 		{
 			if (GPSchannel == 2 || PinDef[Option.GPSTX].mode & UART1TX)
 			{
-				*gpsbuf = cc;
-				gpsbuf++;
-				gpscount++;
-				if ((char)cc == 10 || gpscount == 128)
-				{
-					if (gpscurrent)
-					{
-						*gpsbuf = 0;
-						gpscurrent = 0;
-						gpscount = 0;
-						gpsbuf = gpsbuf1;
-						gpsready = gpsbuf2;
-					}
-					else
-					{
-						*gpsbuf = 0;
-						gpscurrent = 1;
-						gpscount = 0;
-						gpsbuf = gpsbuf2;
-						gpsready = gpsbuf1;
-					}
-				}
+				GPSrxByte(cc);
 			}
 			else
 			{

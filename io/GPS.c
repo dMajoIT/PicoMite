@@ -453,7 +453,7 @@ timegm(const struct tm *tm)
 void fun_GPS(void)
 {
   sret = GetTempStrMemory(); // this will last for the life of the command
-  if (!(GPSchannel || PinDef[Option.GPSTX].mode & UART0TX || PinDef[Option.GPSTX].mode & UART1RX))
+  if (!(GPSchannel || PinDef[Option.GPSTX].mode & UART0TX || PinDef[Option.GPSTX].mode & UART1TX))
     error("GPS not activated");
   if (checkstring(ep, (unsigned char *)"LATITUDE") != NULL)
   {
@@ -541,11 +541,21 @@ void processgps(void)
   {
     GPSvalid = 0;
   }
+  // The monitor print inside GPS_parse goes through DisplayPutC, which calls
+  // routinechecks() per character, which calls processgps() again. Claim the line
+  // and clear gpsready BEFORE parsing, and refuse to nest, or that recursion runs
+  // until the stack overflows.
+  static bool busy = false;
+  if (busy)
+    return;
   if (gpsready != NULL)
   {
-    GPS_parse((char *)gpsready);
-    GPSTimer = 0;
+    char *line = (char *)gpsready;
     gpsready = NULL;
+    busy = true;
+    GPS_parse(line);
+    GPSTimer = 0;
+    busy = false;
   }
 }
 uint8_t parseHex(char c)
