@@ -984,12 +984,14 @@ BLUETOOTH CONNECT name$
 BLUETOOTH CONNECT addr$
 
 BLUETOOTH HOST VERSIONS ONLY Pairs with and connects to a Bluetooth speaker or
-headphones, or a Bluetooth Classic keyboard (one that BLUETOOTH SCAN marked
-'Keyboard'). 'name$' is the name of the device as listed by the last BLUETOOTH
-SCAN (upper and lower case are treated as the same).
+headphones, a Bluetooth Classic keyboard (one that BLUETOOTH SCAN marked
+'Keyboard') or a Bluetooth serial device, which becomes the serial port COM7.
+'name$' is the name of the device as listed by the last BLUETOOTH SCAN (upper
+and lower case are treated as the same).
 
 ~BLUETOOTH DISCONNECT
 BLUETOOTH DISCONNECT
+BLUETOOTH DISCONNECT SERIAL
 
 BLUETOOTH HOST VERSIONS ONLY Disconnects the speaker. It is not reconnected
 automatically until the next BLUETOOTH CONNECT or until the PicoMite is
@@ -1000,25 +1002,29 @@ BLUETOOTH FORGET [addr$]
 
 BLUETOOTH HOST VERSIONS ONLY Deletes stored Bluetooth pairing information.
 With no argument the pairings of every device are deleted - keyboards, mice,
-game controllers, the remembered Classic keyboard and the remembered speaker.
+game controllers, the remembered Classic keyboard, the remembered serial
+device and the remembered speaker.
 
 ~BLUETOOTH SCAN
 BLUETOOTH SCAN [seconds]
 
 BLUETOOTH HOST VERSIONS ONLY Searches for nearby Bluetooth Classic devices
-such as speakers, headphones and keyboards and lists the address, signal
-strength and name of each one found. Devices that describe themselves as audio
-devices are marked 'Audio' and keyboards 'Keyboard'.
+such as speakers, headphones, keyboards and serial devices (a Bluetooth GPS
+receiver, for example), and for Bluetooth LE serial devices, and lists the
+address, signal strength and name of each one found. Devices that describe
+themselves as audio devices are marked 'Audio', keyboards 'Keyboard' and
+Bluetooth LE serial devices 'BLE serial'.
 
 ~BLUETOOTH STATUS
 BLUETOOTH STATUS
 
 BLUETOOTH HOST VERSIONS ONLY Lists the state of the Bluetooth connections:
 whether a Bluetooth LE keyboard (or mouse or game controller) is connected,
-the Bluetooth Classic keyboard, the address of the connected speaker and
-whether audio is streaming to it (or the remembered speaker if it is not
-connected), and the format of the audio stream. The lines that follow are
-diagnostic information which may be useful when reporting a problem.
+the Bluetooth Classic keyboard, the serial device on COM7 (with the number of
+bytes received and sent), the address of the connected speaker and whether
+audio is streaming to it (or the remembered speaker if it is not connected),
+and the format of the audio stream. The lines that follow are diagnostic
+information which may be useful when reporting a problem.
 
 ~BOUND
 BOUND(array() [,dimension]
@@ -4559,8 +4565,8 @@ Described with the rest of its family:  HELP MM.INFO(BIOS)
 MM.INFO$(BLUETOOTH device)
 
 BLUETOOTH HOST VERSIONS ONLY Returns the address of the connected Bluetooth
-keyboard (or mouse) if 'device' is KEYBOARD or of the connected speaker if it
-is SPEAKER, or an empty string if there is none.
+keyboard (or mouse), speaker or serial device if 'device' is KEYBOARD, SPEAKER
+or SERIAL, or an empty string if there is none.
 
 ~MM.INFO$(BOOT COUNT)
 MM.INFO$(BOOT COUNT)

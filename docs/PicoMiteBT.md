@@ -648,8 +648,8 @@ for VS**, or `CMake: Select a Kit` and choose the Visual Studio kit.
 
 The other two Bluetooth builds work the other way round. Instead of
 being a Bluetooth device that a computer connects to, the PicoMite is the
-Bluetooth **host**, and keyboards, mice, game controllers and speakers
-connect to it.
+Bluetooth **host**, and keyboards, mice, game controllers, speakers and
+serial devices connect to it.
 
 - **PicoMiteRP2350BTH** is the PicoMite RP2350 build (LCD panels, touch,
   the GUI controls) with Bluetooth added. The console stays on USB. It
@@ -671,17 +671,18 @@ Everything below applies to both, unless it says otherwise.
 | Keyboards | Bluetooth LE and Bluetooth Classic | Bluetooth LE, Bluetooth Classic and USB |
 | Mice | Bluetooth LE, a Classic keyboard's touchpad, and PS/2 | Bluetooth LE, a Classic keyboard's touchpad, and USB |
 | Audio | a Bluetooth speaker or an I2S DAC | a Bluetooth speaker or an I2S DAC |
+| Serial ports | COM1, COM2, and a Bluetooth serial device as COM7 | COM1, COM2, USB serial devices as COM3 to COM6, and a Bluetooth serial device as COM7 |
 | CPU speed | 200 to 396 MHz, set with `OPTION CPUSPEED` | set by the HDMI resolution |
 | Largest program | 208 KB | 180 KB |
-| MMBasic heap | 320 KB | 224 KB |
+| MMBasic heap | 320 KB | 220 KB |
 
 ### Keyboards, mice and game controllers
 
 Keyboards, mice and game controllers that use Bluetooth LE (HID over GATT)
 pair by themselves, as described here. A Bluetooth Classic keyboard, the older kind,
 is paired with `BLUETOOTH CONNECT` instead (see *Bluetooth Classic keyboards*
-below). A Bluetooth LE keyboard, a Classic keyboard and a speaker can all be
-connected at once.
+below). A Bluetooth LE keyboard, a Classic keyboard, a speaker and a serial
+device can all be connected at once.
 
 To pair a Bluetooth LE device, put it into its pairing mode close to the
 PicoMite. It is found, paired and connected with nothing to type, and the
@@ -832,11 +833,86 @@ Some things to expect:
 `MM.INFO$(BLUETOOTH SPEAKER)` returns the address of the connected
 speaker, or an empty string.
 
+### Serial devices (COM7)
+
+A serial device can be connected over Bluetooth and used as the serial
+port `COM7`, much as a USB serial device is `COM3` to `COM6`. It can be:
+
+- a Bluetooth Classic device with a serial port (the Serial Port Profile),
+  such as a Bluetooth GPS receiver, or
+- a Bluetooth LE device with a serial service: the Nordic UART Service
+  (many modules, and the console of a PicoMiteRP2350BT), an HM-10 module's
+  `FFE0` service, or Microchip's Transparent UART.
+
+Make the device discoverable and scan. A Bluetooth LE serial device is
+listed as `BLE serial`; a Classic one is listed without a type:
+
+```
+> BLUETOOTH SCAN
+Scanning...
+28:CD:C1:1A:A7:D3  -59 dBm  BLE serial  "PicoMite-500D"
+00:19:01:2D:DC:BF  -81 dBm              "XGPS150-2DDCBF"
+2 devices found
+```
+
+Connect to it by that name or by its address:
+
+```
+> BLUETOOTH CONNECT "XGPS150-2DDCBF"
+Connected to serial device 00:19:01:2D:DC:BF (RFCOMM channel 1) as COM7
+```
+
+For a Classic device the PicoMite first asks it for its serial port (one
+without a serial port is tried as a speaker), then pairs with it,
+answering a PIN request with `0000`. A Bluetooth LE device is used without
+pairing unless it asks for it. The device is then remembered. One serial
+device is remembered at a time: connecting another replaces it.
+
+After that, `COM7` is used like any other serial port:
+
+```
+OPEN "COM7:" AS #1
+OPEN "COM7:" AS GPS
+```
+
+A baud rate may be given but is ignored, and so are `7BIT`, `EVEN`,
+`ODD`, `S2` and `INV`. A buffer size, an interrupt and its level work as
+they do for `COM1`. `PRINT #` ends each line with CR and LF.
+
+While `COM7` is open, the remembered device is reconnected whenever it is
+not connected: when the port is opened, after the device is switched off
+and on, and when it comes back into range. A Classic device is retried at
+intervals of up to a minute, a Bluetooth LE device as soon as it
+advertises. When the device comes or goes by itself, the console shows
+`Bluetooth serial device connected (COM7)` or `Bluetooth serial device
+disconnected (COM7)`. `CLOSE` leaves the device connected, and a closed
+port does not reconnect it.
+
+To let the device go, use `BLUETOOTH DISCONNECT SERIAL`: it is not
+reconnected until `COM7` is next opened or the next `BLUETOOTH CONNECT`.
+`BLUETOOTH STATUS` has a `Serial:` line with the bytes received and sent,
+and `MM.INFO$(BLUETOOTH SERIAL)` returns the connected device's address,
+or an empty string, so a program can wait for it.
+
+Things to know:
+
+- Some GPS receivers have a switch for use with an iPhone or iPad that
+  hides their serial port. Set it for other devices; on the Dual XGPS150
+  that is the position towards the USB connector.
+- A Bluetooth LE device that is switched off is noticed only when the
+  link times out, which can take several seconds (16 seconds with a
+  PicoMiteRP2350BT, which asks for a 10-second timeout).
+- Older GPS receivers can report a date 1024 weeks (19.6 years) too early,
+  a fault in their own firmware known as the GPS week rollover. The
+  XGPS150 is one of them.
+
 ### Pairings
 
-The pairings of up to four Bluetooth LE keyboards, mice or game
-controllers, and of up to four speakers and Classic keyboards together, are
-stored with the saved options, so they survive a power cycle. `BLUETOOTH FORGET` deletes all of them, and `BLUETOOTH FORGET
+The pairings of up to four Bluetooth LE devices (keyboards, mice, game
+controllers and serial devices), and of up to four Classic speakers,
+keyboards and serial devices together, are stored with the saved options,
+so they survive a power cycle, and so are the remembered speaker, Classic
+keyboard and serial device. `BLUETOOTH FORGET` deletes all of them, and `BLUETOOTH FORGET
 addr$` only those of one device (a connected device that is forgotten is
 disconnected). `OPTION RESET`, and a firmware update that resets the
 options, delete them too. The devices then have to be paired again.
@@ -896,3 +972,4 @@ pins must all be within GP0 to GP31 or all within GP16 to GP47.
 | `BTKeyboard.c` / `BTKeyboard.h` | Host builds: the BLE HID host - scanning, pairing, keyboards, mice and game controllers |
 | `BTAudio.c` / `BTAudio.h` | Host builds: the A2DP source for speakers and the `BLUETOOTH` command |
 | `BTClassicKeyboard.c` / `BTClassicKeyboard.h` | Host builds: Bluetooth Classic keyboards and their touchpads (btstack's `hid_host`, report protocol, the layout read from the HID descriptor) |
+| `BTSerial.c` / `BTSerial.h` | Host builds: a Bluetooth serial device as COM7 - Classic (SDP lookup, RFCOMM) or BLE (Nordic UART, HM-10, Microchip Transparent UART over GATT) |

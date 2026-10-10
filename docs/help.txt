@@ -1249,12 +1249,13 @@ BLUETOOTH CONNECT name$
 BLUETOOTH CONNECT addr$
 
 BLUETOOTH HOST VERSIONS ONLY
-Pairs with and connects to a Bluetooth speaker or headphones, or a Bluetooth
-Classic keyboard (one that BLUETOOTH SCAN marked 'Keyboard').  'name$' is the
-name of the device as listed by the last BLUETOOTH SCAN (upper and lower case
-are treated as the same).  'addr$' is its address in the form
-"AA:BB:CC:DD:EE:FF", which can be used without a scan.  If the scan found two
-devices with the same name the address must be used.
+Pairs with and connects to a Bluetooth speaker or headphones, a Bluetooth
+Classic keyboard (one that BLUETOOTH SCAN marked 'Keyboard') or a Bluetooth
+serial device, which becomes the serial port COM7.  'name$' is the name of the
+device as listed by the last BLUETOOTH SCAN (upper and lower case are treated
+as the same).  'addr$' is its address in the form "AA:BB:CC:DD:EE:FF", which
+can be used without a scan.  If the scan found two devices with the same name
+the address must be used.
 The command waits up to 30 seconds for the device to answer and then shows the
 format of the audio stream that has been agreed.  Only one speaker can be
 connected at a time.  For a keyboard it waits up to 60 seconds, as a passkey
@@ -1264,14 +1265,24 @@ reconnected automatically after a restart and when it is switched off and on
 again, so this command is normally needed only once.  Connecting to another
 speaker replaces the remembered one.  A Classic keyboard is remembered in the
 same way and reconnects by itself.
+A serial device is a Bluetooth Classic device with a serial port (the Serial
+Port Profile), for example a Bluetooth GPS receiver, or a Bluetooth LE device
+that BLUETOOTH SCAN marked 'BLE serial'.  It is remembered in the same way and
+is reconnected automatically while COM7 is open.  Only one serial device can
+be connected at a time and connecting another replaces the remembered one.
+See the chapter Bluetooth Versions.
 
 ~BLUETOOTH DISCONNECT
 BLUETOOTH DISCONNECT
+BLUETOOTH DISCONNECT SERIAL
 
 BLUETOOTH HOST VERSIONS ONLY
 Disconnects the speaker.  It is not reconnected automatically until the next
 BLUETOOTH CONNECT or until the PicoMite is restarted.  The pairing is kept
 (see BLUETOOTH FORGET).
+BLUETOOTH DISCONNECT SERIAL disconnects the serial device on COM7 instead.  It
+is not reconnected automatically until COM7 is opened again or the next
+BLUETOOTH CONNECT, and its pairing is kept.
 
 ~BLUETOOTH FORGET
 BLUETOOTH FORGET [addr$]
@@ -1279,23 +1290,26 @@ BLUETOOTH FORGET [addr$]
 BLUETOOTH HOST VERSIONS ONLY
 Deletes stored Bluetooth pairing information.  With no argument the pairings
 of every device are deleted - keyboards, mice, game controllers, the
-remembered Classic keyboard and the remembered speaker.  'addr$' deletes only
-those of the device with that address (as listed by BLUETOOTH STATUS or
-returned by MM.INFO$(BLUETOOTH device)).  A connected device that is forgotten
-is disconnected.
+remembered Classic keyboard, the remembered serial device and the remembered
+speaker.  'addr$' deletes only those of the device with that address (as
+listed by BLUETOOTH STATUS or returned by MM.INFO$(BLUETOOTH device)).  A
+connected device that is forgotten is disconnected.
 This can be used to clear a pairing that has stopped working, after which the
-device can be paired again.  A forgotten speaker or Classic keyboard is no
-longer reconnected automatically.  OPTION RESET also deletes all the pairings.
+device can be paired again.  A forgotten speaker, Classic keyboard or serial
+device is no longer reconnected automatically.  OPTION RESET also deletes all
+the pairings.
 
 ~BLUETOOTH SCAN
 BLUETOOTH SCAN [seconds]
 
 BLUETOOTH HOST VERSIONS ONLY
-Searches for nearby Bluetooth Classic devices such as speakers, headphones and
-keyboards and lists the address, signal strength and name of each one found.
-Devices that describe themselves as audio devices are marked 'Audio' and
-keyboards 'Keyboard'.  A device is only found while it is discoverable, which
-for most speakers and keyboards means while they are in pairing mode.
+Searches for nearby Bluetooth Classic devices such as speakers, headphones,
+keyboards and serial devices (a Bluetooth GPS receiver, for example), and for
+Bluetooth LE serial devices, and lists the address, signal strength and name
+of each one found.  Devices that describe themselves as audio devices are
+marked 'Audio', keyboards 'Keyboard' and Bluetooth LE serial devices 'BLE
+serial'.  A device is only found while it is discoverable, which for most
+speakers and keyboards means while they are in pairing mode.
 'seconds' is how long to search for (2 to 60 seconds, the default is 10).  The
 names are fetched after the search so the command can take a few seconds
 longer than this.
@@ -1308,8 +1322,9 @@ BLUETOOTH STATUS
 BLUETOOTH HOST VERSIONS ONLY
 Lists the state of the Bluetooth connections: whether a Bluetooth LE keyboard
 (or mouse or game controller) is connected, the Bluetooth Classic keyboard,
-the address of the connected speaker and whether audio is streaming to it (or
-the remembered speaker if it is not connected), and the format of the audio
+the serial device on COM7 (with the number of bytes received and sent), the
+address of the connected speaker and whether audio is streaming to it (or the
+remembered speaker if it is not connected), and the format of the audio
 stream.
 The lines that follow are diagnostic information which may be useful when
 reporting a problem.
@@ -7842,8 +7857,8 @@ Described with the rest of its family:  HELP MM.INFO(BIOS)
 MM.INFO$(BLUETOOTH device)
 
 BLUETOOTH HOST VERSIONS ONLY
-Returns the address of the connected Bluetooth keyboard (or mouse) if 'device'
-is KEYBOARD or of the connected speaker if it is SPEAKER, or an empty string
+Returns the address of the connected Bluetooth keyboard (or mouse), speaker or
+serial device if 'device' is KEYBOARD, SPEAKER or SERIAL, or an empty string
 if there is none.
 
 ~MM.INFO$(BOOT COUNT)
@@ -9315,7 +9330,11 @@ See also ON ERROR and MM.ERRNO for error handling.
 
 OPEN comspec$ AS [#]fnbr
 
-Will open a serial communications port for reading and writing.  Two ports are available (COM1: and COM2:) and both can be open simultaneously.   For a full description with examples see Appendix A.
+Will open a serial communications port for reading and writing.  Two ports are
+available (COM1: and COM2:) and both can be open simultaneously; the versions
+with USB host support add COM3: to COM6: for USB serial devices and the
+Bluetooth host versions COM7: for a Bluetooth serial device.   For a full
+description with examples see Appendix A.
 Using 'fnbr' the port can be written to and read from using any command or
 function that uses a file number.
 
