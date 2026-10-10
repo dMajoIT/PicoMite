@@ -457,7 +457,10 @@ void bt_console_init(void)
     adv_data_len = (uint8_t)(p - adv_data);
 }
 {
-    uint8_t scan_data[31];
+    /* static: btstack keeps the pointer and sends the data later (gap.h:
+       "data is not copied, pointer has to stay valid"). On the stack it was
+       gone by then, and the scan response carried garbage, not the UUID. */
+    static uint8_t scan_data[31];
     uint8_t *p = scan_data;
 
     /* Nordic UART Service UUID */
