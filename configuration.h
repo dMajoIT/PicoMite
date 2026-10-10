@@ -93,8 +93,11 @@ extern "C"
       +16 KB (2026-10-04): Route B's items 5, 7 and 8 and VAL, CHOICE, MM.INFO and
       BLIT went 0.6 KB over.
       +16 KB (2026-10-09): Bluetooth Classic keyboards (BTClassicKeyboard.c and
-      btstack's hid_host.c, ~7.1 KB) went 4.4 KB over. */
-#define FLASH_TARGET_OFFSET (1488 * 1024)
+      btstack's hid_host.c, ~7.1 KB) went 4.4 KB over.
+      +16 KB (2026-10-10): the RC0 build went over.
+      +16 KB (2026-10-10): BLE serial devices on COM7 (BTSerial.c, 4.3 KB) went
+      1.8 KB over, the Classic ones (12.8 KB) having taken the rest. */
+#define FLASH_TARGET_OFFSET (1504 * 1024)
    /* +4 KB (2026-10-02, Peter): libgcc's complex arithmetic left RAM; ~5.2 KB of RAM margin left for the stack. */
    /* -12 KB (2026-10-06, bt-audio): dual-mode btstack for Bluetooth speaker
       output added ~12.6 KB of BSS (less what dropping VS1053 and PWM/SPI
@@ -102,7 +105,10 @@ extern "C"
    /* -4 KB (2026-10-09, Peter): Bluetooth Classic keyboards - a third HCI
       connection (2.3 KB), the HID descriptor buffer and the HID host took
       the margin to 1.6 KB. MAX_PROG_SIZE is pinned, so nothing in flash moves. */
-#define HEAP_MEMORY_SIZE (224 * 1024)
+   /* -4 KB (2026-10-10, Peter): the Bluetooth serial device on COM7 - a fourth
+      HCI connection (2.3 KB), RFCOMM and a second GATT client - took the margin
+      to 2.4 KB. MAX_PROG_SIZE is pinned, so nothing in flash moves. */
+#define HEAP_MEMORY_SIZE (220 * 1024)
 #define MAX_PROG_SIZE (180 * 1024)
 #define MagicKey 0x8DECA3E8
 #elif defined(PICOMITEHDMIWEB)

@@ -23,6 +23,7 @@
 #include "BTKeyboard.h"
 #include "BTAudio.h"
 #include "BTClassicKeyboard.h" /* bt_hid_led_layout(), shared with the Classic keyboard */
+#include "BTSerial.h"          /* bt_serial_is_remembered(): the COM7 device is no keyboard */
 
 #include <inttypes.h>
 #include <stdarg.h>
@@ -963,11 +964,14 @@ static void start_scan(void)
             BTH_TARGET_ADDR_STRING);
 }
 
+static bool other_connecting; /* see bt_keyboard_connect_other() */
+static bool scan_wanted(void);
+
 /* Called by BTAudio.c (in the btstack context) when a speaker stream starts
    or stops: a scan in progress is restarted with the matching duty cycle. */
 void bt_keyboard_scan_duty_changed(void)
 {
-    if (state != BTK_SCANNING)
+    if (!scan_wanted() || other_connecting || state == BTK_CONNECTING)
         return;
     gap_stop_scan();
     set_scan_parameters();
@@ -1002,6 +1006,61 @@ static void connect_target(void)
     bth_log("connecting to %s (addr_type=%u)",
             bd_addr_to_str(target_addr), target_addr_type);
     gap_connect(target_addr, target_addr_type);
+}
+
+/* ============================================================================
+ * Other LE links - the Bluetooth serial device (BTSerial.c). btstack connects
+ * one LE device at a time, and the scan stops meanwhile, so another module's
+ * LE connection goes through here. Scanning also runs while the keyboard is
+ * connected when something holds it: BLUETOOTH SCAN listing BLE devices, or
+ * COM7 waiting for its BLE device to advertise.
+ * ============================================================================
+ */
+static uint8_t scan_holds; /* BT_SCAN_HOLD_* bits */
+
+static bool scan_wanted(void)
+{
+    return state == BTK_SCANNING || scan_holds != 0;
+}
+
+/* After a connection attempt: scan again if anyone wants it. */
+static void resume_scan(void)
+{
+    if (scan_wanted() && !other_connecting && state != BTK_CONNECTING)
+    {
+        set_scan_parameters();
+        gap_start_scan();
+    }
+}
+
+void bt_keyboard_scan_hold(uint8_t who, bool on)
+{
+    if (on)
+        scan_holds |= who;
+    else
+        scan_holds &= (uint8_t)~who;
+    if (other_connecting || state == BTK_CONNECTING)
+        return; /* resume_scan() follows the connection */
+    if (scan_wanted())
+    {
+        set_scan_parameters();
+        gap_start_scan();
+    }
+    else
+        gap_stop_scan();
+}
+
+uint8_t bt_keyboard_connect_other(const uint8_t *addr, uint8_t addr_type)
+{
+    if (other_connecting || state == BTK_CONNECTING)
+        return ERROR_CODE_COMMAND_DISALLOWED;
+    gap_stop_scan();
+    uint8_t status = gap_connect(addr, (bd_addr_type_t)addr_type);
+    if (status == ERROR_CODE_SUCCESS)
+        other_connecting = true;
+    else
+        resume_scan();
+    return status;
 }
 
 /* Keyboard report decode lives in KeyboardMap.c now -- shared with
@@ -1727,11 +1786,14 @@ static void packet_handler(uint8_t packet_type,
 
     case GAP_EVENT_ADVERTISING_REPORT:
     {
-        if (state != BTK_SCANNING)
+        if (state != BTK_SCANNING || other_connecting)
             break;
 
         bd_addr_t addr;
         gap_event_advertising_report_get_address(packet, addr);
+        /* The serial device on COM7 (BTSerial.c) is no keyboard, bonded or not. */
+        if (bt_serial_is_remembered(addr))
+            break;
         bd_addr_type_t addr_type = gap_event_advertising_report_get_address_type(packet);
         int8_t rssi = (int8_t)gap_event_advertising_report_get_rssi(packet);
 
@@ -1806,6 +1868,17 @@ static void packet_handler(uint8_t packet_type,
            addressing — we don't enable those.) */
         case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
         {
+            /* Only the connection connect_target() started is the keyboard's:
+               the serial device's (bt_keyboard_connect_other) - made, failed
+               or cancelled - is BTSerial.c's. */
+            if (other_connecting)
+            {
+                other_connecting = false;
+                resume_scan();
+                break;
+            }
+            if (state != BTK_CONNECTING)
+                break;
             uint8_t status = hci_subevent_le_connection_complete_get_status(packet);
             if (status != 0)
             {
@@ -1815,6 +1888,11 @@ static void packet_handler(uint8_t packet_type,
             }
             conn_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
             state = BTK_CONNECTED_UNENCRYPTED;
+            if (scan_holds)
+            { /* someone still wants the scan (bt_keyboard_scan_hold) */
+                set_scan_parameters();
+                gap_start_scan();
+            }
 
             /* On a *bonded* reconnect (the common case after the keyboard
                sleeps and re-advertises on a key press) we don't need to

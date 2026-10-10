@@ -141,6 +141,9 @@ typedef struct
     int8_t rssi;
     uint8_t psrm;
     uint16_t clock_offset;
+    uint8_t le;         /* a BLE serial device (its advertising, not the inquiry) */
+    uint8_t addr_type;  /* BLE: its address type */
+    uint8_t le_service; /* BLE: its serial service (bt_serial_le_service_in_ad) */
     char name[BTA_NAME_LEN];
 } bta_device_t;
 
@@ -792,6 +795,49 @@ static bta_device_t *found_lookup(const bd_addr_t addr)
     return NULL;
 }
 
+/* An LE advertisement while BLUETOOTH SCAN runs: a BLE serial device is
+   listed (BTSerial.c, COM7). The service and the name may come in separate
+   reports - the advertisement and the scan response - so a device is listed
+   once one names the service, and a name in a later report is added. */
+static void found_le_advert(const uint8_t *packet)
+{
+    bd_addr_t addr;
+    gap_event_advertising_report_get_address(packet, addr);
+    const uint8_t *data = gap_event_advertising_report_get_data(packet);
+    uint8_t len = gap_event_advertising_report_get_data_length(packet);
+    bta_device_t *d = found_lookup(addr);
+    if (d == NULL)
+    {
+        int service = bt_serial_le_service_in_ad(data, len);
+        if (service < 0 || found_count >= BTA_MAX_FOUND)
+            return;
+        d = &found[found_count];
+        memset(d, 0, sizeof(*d));
+        memcpy(d->addr, addr, sizeof(bd_addr_t));
+        d->le = 1;
+        d->le_service = (uint8_t)service;
+        found_count++;
+    }
+    else if (!d->le)
+        return; /* a Classic device of the inquiry */
+    d->addr_type = gap_event_advertising_report_get_address_type(packet);
+    d->rssi = (int8_t)gap_event_advertising_report_get_rssi(packet);
+    ad_context_t ctx;
+    for (ad_iterator_init(&ctx, len, data); ad_iterator_has_more(&ctx); ad_iterator_next(&ctx))
+    {
+        uint8_t type = ad_iterator_get_data_type(&ctx);
+        if (type == BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME ||
+            (type == BLUETOOTH_DATA_TYPE_SHORTENED_LOCAL_NAME && !d->name[0]))
+        {
+            int n = ad_iterator_get_data_len(&ctx);
+            if (n > BTA_NAME_LEN - 1)
+                n = BTA_NAME_LEN - 1;
+            memcpy(d->name, ad_iterator_get_data(&ctx), n);
+            d->name[n] = 0;
+        }
+    }
+}
+
 static void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
 {
     (void)channel;
@@ -864,6 +910,12 @@ static void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 
     case GAP_EVENT_INQUIRY_COMPLETE:
         inquiry_active = false;
+        bt_keyboard_scan_hold(BT_SCAN_HOLD_LIST, false);
+        break;
+
+    case GAP_EVENT_ADVERTISING_REPORT:
+        if (inquiry_active)
+            found_le_advert(packet);
         break;
 
     case HCI_EVENT_REMOTE_NAME_REQUEST_COMPLETE:
@@ -1123,6 +1175,8 @@ static void bta_scan(unsigned char *tp)
     inquiry_active = true;
     bta_lock();
     int rc = gap_inquiry_start((uint8_t)((seconds * 100 + 127) / 128)); /* units of 1.28 s */
+    if (rc == 0) /* BLE serial devices too, from their advertising (found_le_advert) */
+        bt_keyboard_scan_hold(BT_SCAN_HOLD_LIST, true);
     bta_unlock();
     if (rc)
     {
@@ -1134,14 +1188,15 @@ static void bta_scan(unsigned char *tp)
     {
         bta_lock();
         gap_inquiry_stop();
+        bt_keyboard_scan_hold(BT_SCAN_HOLD_LIST, false);
         bta_unlock();
         inquiry_active = false;
     }
 
-    /* Ask for the names that weren't in the extended inquiry response. */
+    /* Ask for the Classic names that weren't in the extended inquiry response. */
     for (int i = 0; i < found_count; i++)
     {
-        if (found[i].name[0])
+        if (found[i].name[0] || found[i].le)
             continue;
         name_request_active = true;
         bta_lock();
@@ -1162,7 +1217,11 @@ static void bta_scan(unsigned char *tp)
         print_padded(bd_addr_to_str(found[i].addr), 19);
         sprintf(buf, "%d dBm", found[i].rssi);
         print_padded(buf, 9);
-        print_padded(cod_is_audio(found[i].cod) ? "Audio" : bt_ckbd_cod_is_keyboard(found[i].cod) ? "Keyboard" : "", 10);
+        print_padded(found[i].le                            ? "BLE serial"
+                     : cod_is_audio(found[i].cod)           ? "Audio"
+                     : bt_ckbd_cod_is_keyboard(found[i].cod) ? "Keyboard"
+                                                             : "",
+                     12);
         if (found[i].name[0])
         {
             MMputchar('"', 1);
@@ -1215,9 +1274,22 @@ static void bta_connect(unsigned char *tp)
     if (inquiry_active || name_request_active)
         error("Scan in progress");
 
+    /* A BLE serial device the last SCAN listed, or the remembered one given
+       by address. */
+    bta_device_t *d = found_lookup(addr);
+    uint8_t le_type, le_service;
+    if (d ? d->le : bt_serial_remembered_le(addr, &le_type, &le_service))
+    {
+        if (d)
+        {
+            le_type = d->addr_type;
+            le_service = d->le_service;
+        }
+        bt_serial_connect_le(addr, le_type, le_service);
+        return;
+    }
     /* A keyboard, by its Class of Device in the last SCAN, or the
        remembered one given by address. */
-    bta_device_t *d = found_lookup(addr);
     if (d ? bt_ckbd_cod_is_keyboard(d->cod) : bt_ckbd_is_remembered(addr))
     {
         bt_ckbd_connect(addr);

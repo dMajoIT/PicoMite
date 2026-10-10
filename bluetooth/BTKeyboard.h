@@ -46,6 +46,20 @@ bool bt_keyboard_ready(void);
    stops, so a running LE scan picks up the matching duty cycle. */
 void bt_keyboard_scan_duty_changed(void);
 
+/* LE scanning while the keyboard is connected (it scans by itself while it
+   is not): on while any holder wants it. btstack context or the lock held. */
+#define BT_SCAN_HOLD_LIST 1   /* BLUETOOTH SCAN lists BLE serial devices */
+#define BT_SCAN_HOLD_SERIAL 2 /* COM7 waits for its BLE device to advertise */
+void bt_keyboard_scan_hold(uint8_t who, bool on);
+
+/* Connect an LE device that is not the keyboard (BTSerial.c): btstack makes
+   one LE connection at a time, so the keyboard's scan and connect wait.
+   The HCI_SUBEVENT_LE_CONNECTION_COMPLETE that follows - made, failed, or
+   cancelled with gap_connect_cancel() - is the caller's. Returns a btstack
+   status; ERROR_CODE_COMMAND_DISALLOWED while another LE connection is
+   being made. btstack context or the lock held. */
+uint8_t bt_keyboard_connect_other(const uint8_t *addr, uint8_t addr_type);
+
 /* Diagnostics for BLUETOOTH STATUS (the save counters reset on each call). */
 void bt_keyboard_stats(uint32_t *saves, uint32_t *save_max_us, uint32_t *save_total_us,
                        uint32_t *pairings, uint32_t *reencryptions, uint32_t *interrupted);

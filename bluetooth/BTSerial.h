@@ -1,11 +1,14 @@
 /*
- * BTSerial.h - a Bluetooth Classic serial device (Serial Port Profile over
- * RFCOMM) as COM7, for the BT host builds (PICOMITEBTH, PICOMITEHDMIBTH).
+ * BTSerial.h - a Bluetooth serial device as COM7, for the BT host builds
+ * (PICOMITEBTH, PICOMITEHDMIBTH): Bluetooth Classic with the Serial Port
+ * Profile (RFCOMM), or BLE with a serial service (Nordic UART, HM-10,
+ * Microchip Transparent UART).
  *
- * BLUETOOTH CONNECT pairs a device whose SDP records offer a serial port and
- * remembers it. OPEN "COM7:" then works as it does for a USB CDC port:
- * received bytes go to the port's buffer (or the GPS decoder with AS GPS),
- * and while the port is open a device that drops out is reconnected.
+ * BLUETOOTH CONNECT connects a device whose SDP records offer a serial port,
+ * or a BLE device BLUETOOTH SCAN listed as "BLE serial", and remembers it.
+ * OPEN "COM7:" then works as it does for a USB CDC port: received bytes go
+ * to the port's buffer (or the GPS decoder with AS GPS), and while the port
+ * is open a device that drops out is reconnected.
  */
 #ifndef BTSERIAL_H
 #define BTSERIAL_H
@@ -24,11 +27,22 @@ void bt_serial_init(void);
 /* True for the remembered serial device's address. */
 bool bt_serial_is_remembered(const uint8_t *addr);
 
-/* BLUETOOTH CONNECT: finds the device's serial port in its SDP records,
-   connects and pairs it. Returns false when it has no serial port (the
-   caller then tries it as a speaker); reports failure with error().
+/* True when addr is the remembered device and it is a BLE one: its address
+   type and service (as bt_serial_le_service_in_ad numbers them). */
+bool bt_serial_remembered_le(const uint8_t *addr, uint8_t *addr_type, uint8_t *service);
+
+/* The BLE serial service advertising data names, or -1 (BLUETOOTH SCAN). */
+int bt_serial_le_service_in_ad(const uint8_t *data, uint8_t len);
+
+/* BLUETOOTH CONNECT on a Classic device: finds its serial port in its SDP
+   records, connects and pairs it. Returns false when it has no serial port
+   (the caller then tries it as a speaker); reports failure with error().
    Interpreter context. */
 bool bt_serial_connect(const uint8_t *addr);
+
+/* BLUETOOTH CONNECT on a BLE serial device. Reports failure with error().
+   Interpreter context. */
+void bt_serial_connect_le(const uint8_t *addr, uint8_t addr_type, uint8_t service);
 
 /* BLUETOOTH DISCONNECT SERIAL: drops the link; it is not reconnected until
    COM7 is opened again or the next CONNECT. Interpreter context. */

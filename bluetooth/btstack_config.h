@@ -100,7 +100,7 @@
    MAX_NR_HIDS_HOSTS; define both so either stack sizes its pool.
    CAUTION: if the new name is missing the pool silently defaults to 0
    and every hids_host_connect fails at runtime — no compile error. */
-#define MAX_NR_GATT_CLIENTS 1
+#define MAX_NR_GATT_CLIENTS 2 /* the BLE keyboard, and a BLE serial device (BTSerial.c, COM7) */
 #define MAX_NR_HIDS_CLIENTS 1
 #define MAX_NR_HIDS_HOSTS 1
 #else
