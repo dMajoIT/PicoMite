@@ -211,6 +211,7 @@ extern int com7;				  // true if COM7 is open
 extern char *com7_interrupt;	  // pointer to the interrupt routine
 extern int com7_ilevel;			  // number of chars in buffer for an interrupt
 void SerialBTReceive(const uint8_t *data, int len);
+void SerialBTGpsFeed(void); // COM7 AS GPS: the next queued NMEA line, after processgps() took one
 #endif
 
 #endif // SERIAL_HEADER

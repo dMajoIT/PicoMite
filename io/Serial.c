@@ -101,20 +101,28 @@ int com7_ilevel;					   // number of chars in buffer for an interrupt
 unsigned char *com7Rx_buf;			   // pointer to the buffer for received characters
 volatile int com7Rx_head, com7Rx_tail; // head and tail of the ring buffer for com7
 
+// COM7 opened AS GPS: the queued bytes go to the NMEA line assembler only while no finished
+// line waits for processgps(). Bluetooth delivers several lines at once, and the assembler
+// holds just one, so feeding them all straight in lost lines (and could rewrite the one being
+// parsed). processgps() calls this again once it has taken a line.
+void SerialBTGpsFeed(void)
+{
+	if (!com7 || GPSchannel != 7 || com7Rx_buf == NULL)
+		return;
+	while (gpsready == NULL && com7Rx_head != com7Rx_tail)
+	{
+		char c = com7Rx_buf[com7Rx_tail];
+		com7Rx_tail = (com7Rx_tail + 1) % com7_buf_size;
+		GPSrxByte(c);
+	}
+}
+
 // Bytes from the Bluetooth serial device. Called by BTSerial.c in btstack's context, inside
-// the main loop's poll: like the USB CDC receive callback, it feeds the NMEA line assembler
-// when COM7 was opened AS GPS, or else the receive buffer. A closed port drops them.
+// the main loop's poll: they go to the receive buffer, and on to the NMEA line assembler
+// when COM7 was opened AS GPS. A closed port drops them.
 void SerialBTReceive(const uint8_t *data, int len)
 {
-	if (!com7)
-		return;
-	if (GPSchannel == 7)
-	{
-		for (int i = 0; i < len; i++)
-			GPSrxByte(data[i]);
-		return;
-	}
-	if (com7Rx_buf == NULL)
+	if (!com7 || com7Rx_buf == NULL)
 		return;
 	for (int i = 0; i < len; i++)
 	{
@@ -123,6 +131,11 @@ void SerialBTReceive(const uint8_t *data, int len)
 		if (next == com7Rx_tail)
 			com7Rx_tail = (com7Rx_tail + 1) % com7_buf_size;
 		com7Rx_head = next;
+	}
+	if (GPSchannel == 7)
+	{
+		SerialBTGpsFeed();
+		return;
 	}
 	if (com7_interrupt != NULL)
 	{ // signal the COM interrupt if the buffer is at or above its level

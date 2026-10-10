@@ -556,6 +556,9 @@ void processgps(void)
     GPS_parse(line);
     GPSTimer = 0;
     busy = false;
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+    SerialBTGpsFeed(); /* a Bluetooth GPS on COM7: its next queued line */
+#endif
   }
 }
 uint8_t parseHex(char c)
