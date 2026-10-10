@@ -10709,6 +10709,13 @@ int checkdetailinterrupts(void)
         goto GotAnInterrupt;
     }
 #endif
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+    if (com7_interrupt != NULL && SerialRxStatus(7) >= com7_ilevel)
+    {                             // do we need to interrupt? (the Bluetooth serial device)
+        intaddr = com7_interrupt; // set the next stmt to the interrupt location
+        goto GotAnInterrupt;
+    }
+#endif
     if (IrGotMsg && IrInterrupt != NULL)
     {
         IrGotMsg = false;

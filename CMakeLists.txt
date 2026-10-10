@@ -582,6 +582,10 @@ if(IS_BTH)
 		# Bluetooth Classic HID keyboards (bluetooth/BTClassicKeyboard.c)
 		bluetooth/BTClassicKeyboard.c
 		${PICO_BTSTACK_PATH}/src/classic/hid_host.c
+		# A Bluetooth Classic serial device as COM7 (bluetooth/BTSerial.c)
+		bluetooth/BTSerial.c
+		${PICO_BTSTACK_PATH}/src/classic/rfcomm.c
+		${PICO_BTSTACK_PATH}/src/classic/sdp_client_rfcomm.c
 	)
 endif()
 

@@ -203,6 +203,16 @@ extern unsigned char *com6Rx_buf; // pointer to the receive buffer
 extern volatile int com6Rx_head, com6Rx_tail;
 #endif
 
+/* ==============================================================================================================
+ * BLUETOOTH SERIAL DEVICE (COM7) - BT host builds, bluetooth/BTSerial.c
+ * ============================================================================================================== */
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+extern int com7;				  // true if COM7 is open
+extern char *com7_interrupt;	  // pointer to the interrupt routine
+extern int com7_ilevel;			  // number of chars in buffer for an interrupt
+void SerialBTReceive(const uint8_t *data, int len);
+#endif
+
 #endif // SERIAL_HEADER
 #endif // !defined(INCLUDE_COMMAND_TABLE) && !defined(INCLUDE_TOKEN_TABLE)
 	   /* @endcond */

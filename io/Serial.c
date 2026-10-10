@@ -91,6 +91,50 @@ static inline __attribute__((always_inline)) bool GPSrxByte(char cc)
 	return false;
 }
 
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+// variables for the Bluetooth serial device (COM7, bluetooth/BTSerial.c)
+#include "BTSerial.h"
+int com7 = 0;						   // true if COM7 is open
+int com7_buf_size;					   // size of the buffer used to receive chars
+char *com7_interrupt;				   // pointer to the interrupt routine
+int com7_ilevel;					   // number of chars in buffer for an interrupt
+unsigned char *com7Rx_buf;			   // pointer to the buffer for received characters
+volatile int com7Rx_head, com7Rx_tail; // head and tail of the ring buffer for com7
+
+// Bytes from the Bluetooth serial device. Called by BTSerial.c in btstack's context, inside
+// the main loop's poll: like the USB CDC receive callback, it feeds the NMEA line assembler
+// when COM7 was opened AS GPS, or else the receive buffer. A closed port drops them.
+void SerialBTReceive(const uint8_t *data, int len)
+{
+	if (!com7)
+		return;
+	if (GPSchannel == 7)
+	{
+		for (int i = 0; i < len; i++)
+			GPSrxByte(data[i]);
+		return;
+	}
+	if (com7Rx_buf == NULL)
+		return;
+	for (int i = 0; i < len; i++)
+	{
+		com7Rx_buf[com7Rx_head] = data[i];
+		int next = (com7Rx_head + 1) % com7_buf_size;
+		if (next == com7Rx_tail)
+			com7Rx_tail = (com7Rx_tail + 1) % com7_buf_size;
+		com7Rx_head = next;
+	}
+	if (com7_interrupt != NULL)
+	{ // signal the COM interrupt if the buffer is at or above its level
+		int n = com7Rx_head - com7Rx_tail;
+		if (n < 0)
+			n += com7_buf_size;
+		if (n >= com7_ilevel)
+			IntSignal();
+	}
+}
+#endif
+
 // variables for USB CDC host ports (COM3-COM6)
 #ifdef USBKEYBOARD
 #include "tusb.h"
@@ -731,6 +775,25 @@ void MIPS16 SerialOpen(unsigned char *spec)
 			cdc_open_failed(comnbr, "DTR/RTS");
 	}
 #endif // USBKEYBOARD
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+	else if (spec[3] == '7')
+	{
+		///////////////////////////////// this is COM7 (Bluetooth serial device) ////////////////////////////////////
+		// The baud rate is accepted and ignored: RFCOMM has none. A remembered device that is not
+		// connected is reconnected while the port is open (BTSerial.c).
+		if (com7)
+			StandardError(31);
+		if (!bt_serial_known())
+			error("No Bluetooth serial device for COM7 - use BLUETOOTH CONNECT");
+		com7_buf_size = bufsize;
+		com7_interrupt = interrupt;
+		com7_ilevel = ilevel;
+		com7Rx_buf = GetMemory(bufsize);
+		com7Rx_head = com7Rx_tail = 0;
+		com7 = true;
+		bt_serial_port_opened();
+	}
+#endif
 }
 
 /***************************************************************************************************
@@ -799,6 +862,19 @@ void MIPS16 SerialClose(int comnbr)
 		}
 	}
 #endif // USBKEYBOARD
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+	else if (comnbr == 7 && com7)
+	{
+		bt_serial_port_closed(); // a link that is up stays up
+		com7 = false;
+		com7_interrupt = NULL;
+		if (com7Rx_buf != NULL)
+		{
+			FreeMemory(com7Rx_buf);
+			com7Rx_buf = NULL;
+		}
+	}
+#endif
 }
 
 /***************************************************************************************************
@@ -858,6 +934,18 @@ unsigned char SerialPutchar(int comnbr, unsigned char c)
 		}
 	}
 #endif // USBKEYBOARD
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+	else if (comnbr == 7)
+	{
+		// Buffered in BTSerial.c and sent when btstack can; wait if the buffer is full
+		while (!bt_serial_putc(c))
+		{
+			ProcessBT(); // keep Bluetooth running while we wait
+			if (MMAbort)
+				longjmp(mark, 1);
+		}
+	}
+#endif
 	return c;
 }
 
@@ -894,6 +982,14 @@ int SerialRxStatus(int comnbr)
 			i += *cdc_buf_size[idx];
 	}
 #endif // USBKEYBOARD
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+	else if (comnbr == 7 && com7)
+	{
+		i = com7Rx_head - com7Rx_tail;
+		if (i < 0)
+			i += com7_buf_size;
+	}
+#endif
 	return i;
 }
 
@@ -923,6 +1019,13 @@ int SerialTxStatus(int comnbr)
 		i = 0;
 	}
 #endif // USBKEYBOARD
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+	else if (comnbr == 7)
+	{
+		ProcessBT(); // CLOSE waits for this to reach 0: keep Bluetooth sending meanwhile
+		i = bt_serial_tx_pending();
+	}
+#endif
 	return i;
 }
 
@@ -967,5 +1070,15 @@ int SerialGetchar(int comnbr)
 		}
 	}
 #endif // USBKEYBOARD
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+	else if (comnbr == 7 && com7)
+	{
+		if (com7Rx_head != com7Rx_tail)
+		{
+			c = com7Rx_buf[com7Rx_tail];
+			com7Rx_tail = (com7Rx_tail + 1) % com7_buf_size;
+		}
+	}
+#endif
 	return c;
 }

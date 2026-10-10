@@ -7382,6 +7382,9 @@ void cmd_open(void)
 #ifdef USBKEYBOARD
                          || mem_equal((unsigned char *)fname, (unsigned char *)"COM3:", 5) || mem_equal((unsigned char *)fname, (unsigned char *)"COM4:", 5) || mem_equal((unsigned char *)fname, (unsigned char *)"COM5:", 5) || mem_equal((unsigned char *)fname, (unsigned char *)"COM6:", 5)
 #endif
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+                         || mem_equal((unsigned char *)fname, (unsigned char *)"COM7:", 5) // Bluetooth serial device
+#endif
             ;
 
         // check that it is a serial port that we are opening
@@ -7417,7 +7420,7 @@ void cmd_open(void)
             fnbr = FindFreeFileNbr();
             GPSfnbr = fnbr;
             FileTable[fnbr].com = fname[3] - '0';
-            GPSchannel = fname[3] - '0'; // 1-2 = UART, 3-6 = USB CDC host (is_comport already validated it)
+            GPSchannel = fname[3] - '0'; // 1-2 = UART, 3-6 = USB CDC host, 7 = Bluetooth (is_comport already validated it)
             gpsbuf = gpsbuf1;
             gpscurrent = 0;
             gpscount = 0;

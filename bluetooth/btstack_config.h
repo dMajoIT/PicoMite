@@ -62,12 +62,17 @@
 #if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
 /* The BT host builds are dual-mode (ENABLE_CLASSIC from CMakeLists.txt):
    one LE link to the keyboard/mouse, one Classic link to a Bluetooth
-   speaker (BTAudio.c, A2DP source) and one to a Classic keyboard
-   (BTClassicKeyboard.c), all at once. */
-#define MAX_NR_HCI_CONNECTIONS 3
-#define MAX_NR_L2CAP_CHANNELS 6 /* SDP server, SDP client, AVDTP signalling + media, HID control + interrupt */
+   speaker (BTAudio.c, A2DP source), one to a Classic keyboard
+   (BTClassicKeyboard.c) and one to a serial device (BTSerial.c, COM7),
+   all at once. */
+#define MAX_NR_HCI_CONNECTIONS 4
+#define MAX_NR_L2CAP_CHANNELS 7 /* SDP server, SDP client, AVDTP signalling + media, HID control + interrupt, RFCOMM */
 #define MAX_NR_L2CAP_SERVICES 4 /* SDP, AVDTP, HID control, HID interrupt */
 #define MAX_NR_HID_HOST_CONNECTIONS 1 /* a Classic keyboard (BTClassicKeyboard.c) */
+/* A serial device (BTSerial.c): one outgoing RFCOMM channel, no services. */
+#define MAX_NR_RFCOMM_MULTIPLEXERS 1
+#define MAX_NR_RFCOMM_CHANNELS 1
+#define MAX_NR_RFCOMM_SERVICES 0
 #define MAX_NR_AVDTP_CONNECTIONS 1
 #define MAX_NR_AVDTP_STREAM_ENDPOINTS 1
 /* Cap outstanding ACL packets to the controller and let the host flow-

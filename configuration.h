@@ -419,8 +419,11 @@ extern "C"
    /* +16 KB (2026-10-04): Route B's items 5, 7 and 8 and VAL, CHOICE, MM.INFO and
       BLIT went 0.8 KB over.
       +16 KB (2026-10-09): Bluetooth Classic keyboards (BTClassicKeyboard.c and
-      btstack's hid_host.c) went 6.7 KB over. */
-#define FLASH_TARGET_OFFSET (1504 * 1024)
+      btstack's hid_host.c) went 6.7 KB over.
+      +16 KB (2026-10-10): the Bluetooth serial device on COM7 (BTSerial.c and
+      btstack's rfcomm.c and sdp_client_rfcomm.c) is 12.8 KB on PicoMiteHDMIBTH;
+      about 1.7 KB was spare. */
+#define FLASH_TARGET_OFFSET (1520 * 1024)
    /* +56 KB (2026-10-01): the variable table's records moved into the heap (compact-vars); ~4 KB of RAM margin left for the stack. */
    /* +20 KB (2026-10-02): the SUB/FUNCTION table's RAM (funtbl) given to the heap by the name index; ~3.9 KB of RAM margin left for the stack. */
    /* +4 KB (2026-10-02, Peter): libgcc's complex arithmetic left RAM; ~4.6 KB of RAM margin left for the stack. */
@@ -595,7 +598,9 @@ extern "C"
  * Operating characteristics - Files and I/O
  * ============================================================================ */
 #define MAXOPENFILES 10 // Maximum number of open files
-#ifdef USBKEYBOARD
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+#define MAXCOMPORTS 7 // Maximum number of COM ports (COM1-2 = UART, COM3-6 = USB CDC host where there is one, COM7 = Bluetooth serial device)
+#elif defined(USBKEYBOARD)
 #define MAXCOMPORTS 6 // Maximum number of COM ports (COM1-2 = UART, COM3-6 = USB CDC host)
 #else
 #define MAXCOMPORTS 2 // Maximum number of COM ports

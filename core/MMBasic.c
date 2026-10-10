@@ -3888,8 +3888,13 @@ unsigned char *getFstring(unsigned char *p)
         unsigned char *q = tp;
         if ((mytoupper(q[0]) == 'A' || mytoupper(q[0]) == 'B' || mytoupper(q[0]) == 'C') && q[1] == ':')
             q += 2; // drive prefix (already normalised to "X:/...")
+#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+        else if (mytoupper(q[0]) == 'C' && mytoupper(q[1]) == 'O' && mytoupper(q[2]) == 'M' &&
+                 q[3] >= '1' && q[3] <= '7' && q[4] == ':') // COM7 = the Bluetooth serial device
+#else
         else if (mytoupper(q[0]) == 'C' && mytoupper(q[1]) == 'O' && mytoupper(q[2]) == 'M' &&
                  q[3] >= '1' && q[3] <= '6' && q[4] == ':')
+#endif
             q += 5; // serial port spec COMn: (handled by OPEN, not a filename)
         for (; *q; q++)
             if (*q == ':' || *q == '"' || *q == '<' || *q == '>' || *q == '|')

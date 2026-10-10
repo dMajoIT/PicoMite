@@ -35,6 +35,7 @@
 #include "BTAudio.h"
 #include "BTKeyboard.h"
 #include "BTClassicKeyboard.h"
+#include "BTSerial.h"
 
 #define BTA_AUDIO_TIMEOUT_MS 5    /* encode/send tick */
 #define BTA_SBC_STORAGE_SIZE 1030 /* one media packet: header byte + SBC frames */
@@ -249,6 +250,11 @@ static const char *channel_mode_name(void)
 bool bt_audio_streaming(void)
 {
     return spk_state == SPK_STREAMING;
+}
+
+bool bt_audio_inquiry_busy(void)
+{
+    return inquiry_active || name_request_active;
 }
 
 /* ============================================================================
@@ -807,8 +813,8 @@ static void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
     case HCI_EVENT_PIN_CODE_REQUEST:
         /* Legacy (pre-2.1) pairing: speakers that still use it take "0000". */
         hci_event_pin_code_request_get_bd_addr(packet, addr);
-        if (bt_ckbd_owns_pairing(addr))
-            break; /* a keyboard BLUETOOTH CONNECT is pairing (BTClassicKeyboard.c) */
+        if (bt_ckbd_owns_pairing(addr) || bt_serial_owns_pairing(addr))
+            break; /* a keyboard or serial device BLUETOOTH CONNECT is pairing */
         if (spk_pairing_allowed)
             gap_pin_code_response(addr, "0000");
         else
@@ -818,7 +824,7 @@ static void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
     case HCI_EVENT_USER_CONFIRMATION_REQUEST:
         /* Secure Simple Pairing, Just Works (neither side has a display). */
         hci_event_user_confirmation_request_get_bd_addr(packet, addr);
-        if (bt_ckbd_owns_pairing(addr))
+        if (bt_ckbd_owns_pairing(addr) || bt_serial_owns_pairing(addr))
             break;
         if (spk_pairing_allowed)
             gap_ssp_confirmation_response(addr);
@@ -1061,6 +1067,7 @@ void bt_audio_init(void)
 
     sdp_init();
     bt_ckbd_init(); /* Classic HID keyboards (BTClassicKeyboard.c) */
+    bt_serial_init(); /* a serial device as COM7 (BTSerial.c) */
     a2dp_source_init();
     a2dp_source_register_packet_handler(&a2dp_packet_handler);
 
@@ -1216,6 +1223,15 @@ static void bta_connect(unsigned char *tp)
         bt_ckbd_connect(addr);
         return;
     }
+    /* Anything else that is not audio - or an address the last SCAN did not
+       list, unless it is the remembered speaker - may be a serial device:
+       its SDP records say. One without a serial port is tried as a speaker. */
+    if (d ? !cod_is_audio(d->cod)
+          : !(have_remembered_speaker && memcmp(addr, remembered_speaker, sizeof(bd_addr_t)) == 0))
+    {
+        if (bt_serial_connect(addr))
+            return;
+    }
     auto_reconnect = true;
 
     /* Checked and started under the lock: a paired speaker may be
@@ -1267,10 +1283,15 @@ static void bta_connect(unsigned char *tp)
     PRet();
 }
 
-/* BLUETOOTH DISCONNECT */
-static void bta_disconnect(void)
+/* BLUETOOTH DISCONNECT [SERIAL] - the speaker, or the serial device */
+static void bta_disconnect(unsigned char *tp)
 {
     bta_require_ready();
+    if (checkstring(tp, (unsigned char *)"SERIAL"))
+    {
+        bt_serial_disconnect();
+        return;
+    }
     auto_reconnect = false; /* until the next CONNECT or reset */
     if (spk_state == SPK_NONE)
         error("No speaker connected");
@@ -1346,8 +1367,9 @@ static void bta_test(unsigned char *tp)
 }
 
 /* BLUETOOTH FORGET [addr$] - delete stored pairings: every keyboard bond,
-   every Classic link key and the remembered speaker, or only those for
-   addr$. A connected device that is forgotten is disconnected first. */
+   every Classic link key, the remembered speaker and the remembered serial
+   device, or only those for addr$. A connected device that is forgotten is
+   disconnected first. */
 static void bta_forget(unsigned char *tp)
 {
     bd_addr_t addr;
@@ -1372,6 +1394,7 @@ static void bta_forget(unsigned char *tp)
     bta_lock();
     bt_keyboard_forget(one ? addr : NULL);
     bt_ckbd_forget(one ? addr : NULL);
+    bt_serial_forget(one ? addr : NULL);
     if (one)
         gap_drop_link_key_for_bd_addr(addr);
     else
@@ -1405,6 +1428,8 @@ void bt_info(unsigned char *tp, char *out)
         if (!out[0])
             bt_ckbd_address(out);
     }
+    else if (checkstring(tp, (unsigned char *)"SERIAL"))
+        bt_serial_address(out);
     else
         SyntaxError();
 }
@@ -1420,6 +1445,9 @@ static void bta_status(void)
         char buf[160];
         bt_ckbd_status(buf, sizeof(buf));
         MMPrintString("\r\nClassic keyboard: ");
+        MMPrintString(buf);
+        bt_serial_status(buf, sizeof(buf));
+        MMPrintString("\r\nSerial:    ");
         MMPrintString(buf);
     }
     MMPrintString("\r\nSpeaker:   ");
@@ -1542,7 +1570,7 @@ void cmd_bluetooth(void)
     else if ((tp = checkstring(cmdline, (unsigned char *)"CONNECT")))
         bta_connect(tp);
     else if ((tp = checkstring(cmdline, (unsigned char *)"DISCONNECT")))
-        bta_disconnect();
+        bta_disconnect(tp);
     else if ((tp = checkstring(cmdline, (unsigned char *)"TEST")))
         bta_test(tp);
     else if ((tp = checkstring(cmdline, (unsigned char *)"STATUS")))
