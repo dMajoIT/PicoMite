@@ -2230,7 +2230,12 @@ void bt_notice(const char *msg)
 
 /* ProcessBT(): called from the same places as the WiFi builds' ProcessWeb()
    (see Hardware_Includes.h), and throttled the same way - the radio is
-   polled at most once a millisecond, or every 100 calls. */
+   polled at most once a millisecond, or every 100 calls.  Everything else
+   here works to milliseconds too (the speaker's idle timer and sound
+   discard, the bond-store save, the LED), so it runs only when the radio
+   is polled: on every call it cost about 700 cycles a statement once a
+   speaker was configured, a third of the interpreter's time (measured on
+   the PC3, 2026-10-11). */
 void bt_keyboard_poll(void)
 {
     static uint64_t lastusec;
@@ -2239,14 +2244,15 @@ void bt_keyboard_poll(void)
         return;
 
     uint64_t timenow = time_us_64();
-    if (testcount == 0 || timenow > lastusec)
+    if (testcount != 0 && timenow <= lastusec)
     {
-        lastusec = timenow + 1000;
-        testcount = 0;
-        cyw43_arch_poll();
+        if (++testcount == 100)
+            testcount = 0;
+        return;
     }
-    if (++testcount == 100)
-        testcount = 0;
+    lastusec = timenow + 1000;
+    testcount = 1;
+    cyw43_arch_poll();
     if (bt_notice_buf[0])
     {
         char msg[sizeof(bt_notice_buf)];
