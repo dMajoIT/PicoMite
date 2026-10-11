@@ -406,12 +406,22 @@ Things to settle in phase 1, none of them hard:
   dropped, audibly broken. Raising the Bluetooth backlog cap from a quarter
   second to a second changed nothing (18.7% dropped), so this is the link's
   average capacity with the WiFi receiver on, not bursts a buffer could
-  absorb. The Bluetooth keyboard works throughout. Not tried, for Peter to
-  choose from: WiFi power save only while a stream runs (he has had trouble
-  with power save before and ruled it out as a general setting), the
-  firmware's coexistence iovars (`btc_mode`, `btc_params`; the driver sets
-  none), filtering broadcast reception while streaming, and a mono or
-  lower-rate fallback when WiFi is associated.
+  absorb. The Bluetooth keyboard works throughout. WiFi power save was not
+  tried (Peter has had trouble with it before). **The fix is the radio's
+  coexistence mode.** The cyw43 driver never sets one; an experimental
+  `WEB IOVAR GET|SET` command on the branch reads and writes the firmware's
+  variables through the driver's ioctl, and a sweep of `btc_mode` with the
+  same tone gave: 1 (the default) 229 ms waits and 8% dropped; 0 a dead
+  stream; 2 and 6 worse than 1; **3, 4 and 5 nothing dropped** (longest
+  waits 40, 53 and 118 ms). With a TFTP transfer running during the tone,
+  mode 1 moved 21 KB/s with broken audio, mode 3 starved WiFi (no reply),
+  mode 4 managed 2 KB/s and mode 5 6 KB/s, all three with clean audio.
+  Peter chose 3 by ear. The audio service therefore sets `btc_mode` 3
+  while a stream runs and puts 1 back as soon as it pauses or closes, so
+  WiFi has the air whenever the speaker is silent
+  ([BTAudio.c](../bluetooth/BTAudio.c#L996), WiFi builds only). Under mode 3
+  the bitpool settles around 28-34 rather than 53: the link's capacity with
+  the WiFi side present, acceptable to the ear.
 
 ## Build mechanics
 
