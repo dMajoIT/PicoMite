@@ -758,7 +758,10 @@ extern "C"
 #define FNV_prime 16777619
 #define FNV_offset_basis 2166136261
 #define DISKCHECKRATE 500 // Check for SD card removal every 500ms
-#ifdef PICOMITEPC3
+#if defined(PICOMITEPC3) || defined(HEAPKB)
+   /* (HEAPKB too: a timing build with a small SRAM heap needs this rule or a
+      program bigger than the heap cannot be loaded - Elite failed to LOAD on the
+      first HDMIWEB/HEAPKB=108 run.)
    /* PC3: the program-text buffer (EDIT, LOAD, AUTOSAVE, LIBRARY LOAD and SAVE,
       the X/Y/ZMODEM program transfers) is 512 KB from PSRAM, room for a 256 KB
       program's source: GetTempMemory's SRAM search fails on it and falls
