@@ -464,6 +464,29 @@ if(PC3_USB_EVLOG)
         PROPERTIES COMPILE_DEFINITIONS "PC3_USB_EVLOG;PC3_EVLOG_N=112")
 endif()
 
+# Measurement knobs for the PC3 design (docs/PC3_All_In_Build_Design_Review.md),
+# to time a PSRAM build against itself on the bench programs:
+#   -DPSRAMHEAP_TEST=ON  every GetMemory block goes to PSRAM (the variables'
+#                        records and the temporaries stay in SRAM) - the design's
+#                        allocation policy, as an upper bound on its cost. Driver
+#                        buffers go there too in this build, so no COM ports or
+#                        audio while it runs.
+#   -DHEAPKB=n           the SRAM heap as n KB with today's policy (108 = the
+#                        PC3's at 640x480); the variant's MAX_PROG_SIZE stays, so
+#                        the flash layout and the A: drive do too.
+# Both are cached in the build directory: pass them again to turn them off.
+# Neither is for a release.
+option(PSRAMHEAP_TEST "Every GetMemory block in PSRAM (timing test)" OFF)
+if(PSRAMHEAP_TEST)
+    target_compile_definitions(PicoMite PRIVATE PSRAMHEAP_TEST)
+    message(STATUS "PicoMite: PSRAMHEAP_TEST=ON - every GetMemory block goes to PSRAM")
+endif()
+set(HEAPKB "" CACHE STRING "SRAM heap in KB for a timing test (empty = the variant's own)")
+if(HEAPKB)
+    target_compile_definitions(PicoMite PRIVATE HEAPKB=${HEAPKB})
+    message(STATUS "PicoMite: HEAPKB=${HEAPKB} - SRAM heap override")
+endif()
+
 # Diagnostic: force an RP2350 build to take the RP2040 EPX-switch path in the
 # TinyUSB host driver (SOF round-robin + STOP_TRANS) instead of the RP2350
 # hardware stop-on-NAK path. The RP2040-only path cannot otherwise be exercised

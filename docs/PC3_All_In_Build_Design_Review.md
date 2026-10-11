@@ -11,8 +11,8 @@ Every number below is measured, not estimated: the three existing HDMI
 variants were rebuilt from main with the release settings (Release, SDK
 2.3.1, private Ninja build directories, Peter's `build/` untouched) and the
 all-in variant was built the same way on the experiment branch `pc3-all`
-(worktree `../pm_pc3`, commit 3b1418e). The experiment links and fits; it
-has not been flashed or run.
+(worktree `../pm_pc3`). The experiment links and fits; it has not been
+flashed or run.
 
 ## Summary
 
@@ -33,7 +33,7 @@ has not been flashed or run.
    not the MMBasic heap takes 225 KB of the 520 KB (RAM code 81 KB, static
    data and BSS 144 KB, of which lwIP's packet pools are 52 KB and btstack's
    24 KB), plus 32 KB of C heap and stack budget and a 4 KB margin. That
-   leaves 265 KB for the framebuffer pool and an SRAM heap together: with the
+   leaves 259 KB for the framebuffer pool and an SRAM heap together: with the
    full 150 KB pool (640x480 in all five modes, 720x400, 1024x768, 1280x720,
    1024x600) the SRAM heap is **108 KB**; at 800x480, 848x480 and 800x600
    with their bigger pools it is 72, 60 and 24 KB.
@@ -93,11 +93,11 @@ plus the framebuffer pool): RAM-resident code, initialised data and BSS.
 | Flash image | 1123 KB | 1554 KB | 1491 KB | **1722 KB** |
 | `FLASH_TARGET_OFFSET` | 1136 KB | 1568 KB | 1504 KB | 1728 KB |
 | RAM code (`.data`) | 81.7 KB | 78.3 KB | 77.3 KB | 81.4 KB |
-| BSS | 424.0 KB | 419.7 KB | 403.9 KB | 389.7 KB |
-| of which `AllMemory` | 362.0 (212 heap + 150 pool) | 302.0 (208 + 93.75) | 314.0 (220 + 93.75) | 246.3 (96 + 150) |
+| BSS | 424.0 KB | 419.7 KB | 403.9 KB | 401.7 KB |
+| of which `AllMemory` | 362.0 (212 heap + 150 pool) | 302.0 (208 + 93.75) | 314.0 (220 + 93.75) | 258.3 (108 + 150) |
 | **Static, all other** | **143.6 KB** | **196.1 KB** | **167.2 KB** | **224.9 KB** |
 | C heap + stack budget | 2 + 8 KB | 10 + 8 KB | 16 + 16 KB | 16 + 16 KB |
-| RAM margin | 4.0 KB | 3.5 KB | 6.4 KB | 16.5 KB |
+| RAM margin | 4.0 KB | 3.5 KB | 6.4 KB | 4.2 KB |
 
 The experiment's static total is within 2 KB of the sum of the parts
 (HDMIUSB's 143.6, plus WiFi's 55.3, plus Bluetooth's 26.5, less the cyw43
@@ -126,17 +126,21 @@ it decides the offset):
 Fixed: 225.2 KB static (including the 304-byte vector table), 32 KB of C
 heap and stack budget (the Bluetooth host builds' 0x4000 each; the TLS
 handshake stack and the lwIP packet buffers live here), 4 KB margin (Peter's
-rule). That leaves 264.9 KB of the 520 KB for `AllMemory`: the framebuffer
-pool plus the SRAM heap plus its 256-byte guard. The pool is what the full
+rule). That leaves 264,968 bytes (258.8 KB) of the 520 KB for `AllMemory`:
+the framebuffer pool plus the SRAM heap plus its 256-byte guard. The pool is what the full
 HDMI build allocates at boot for the resolution in `OPTION RESOLUTION`
 ([PicoMite.c](../PicoMite.c#L3940)):
 
 | Boot resolution | Pool | SRAM heap (4 KB steps) | Margin |
 | --- | --- | --- | --- |
-| 640x480 (252, 315, 378 MHz), 720x400, 1024x768, 1280x720, 1024x600 | 153,600 | **108 KB** | 7.0 KB |
-| 800x480 | 192,000 | 72 KB | 5.5 KB |
-| 848x480 | 203,520 | 60 KB | 6.3 KB |
-| 800x600 | 240,000 | 24 KB | 6.5 KB |
+| 640x480 (252, 315, 378 MHz), 720x400, 1024x768, 1280x720, 1024x600 | 153,600 | **108 KB** | 4.5 KB |
+| 800x480 | 192,000 | 72 KB | 3.0 KB (68 KB would leave 7.0) |
+| 848x480 | 203,520 | 60 KB | 3.75 KB |
+| 800x600 | 240,000 | 24 KB | 4.1 KB |
+
+(The heap is one `HEAP_MEMORY_SIZE`, 108 KB; the boot-time resize for the
+three medium resolutions takes their bigger pool out of it, as HDMIUSB does
+today, so the rows below the first are what is left at those resolutions.)
 
 Knobs that would raise every row:
 
@@ -399,13 +403,15 @@ bindings, the compact variable table and Bluetooth audio through all of
 them. A PC3 fork would have to take each of those by hand within weeks. The
 experiment shows the cost of staying in the tree: five files.
 
-The experiment's changes (branch `pc3-all`, commit 3b1418e):
+The branch's changes (`pc3-all`):
 
 | File | Change |
 | --- | --- |
 | [CMakeLists.txt](../CMakeLists.txt) | `PC3` in the variant lists (RP2350, BTH, WEB, USB host, UPNG, raycaster, HDMI, rand, subprofile); the turtle and display-source exclusions widened; no cut-down; the HDMI heap/stack defaults, the WEB heap/stack budget, the `WebMite` host name, the `PICOMITE` define and `CYW43_LWIP=0` kept off it; an identity block defining `PICOMITEHDMIBTH`, `PICOMITEHDMIWEB`, `PICOMITEPC3`, host name `PicoMitePC3` |
-| [configuration.h](../configuration.h#L75) | a PC3 budget block ahead of HDMIBTH's: offset 1728 KB, heap 96 KB (the experiment's), program 180 KB (the experiment's; the asserts cap it until the reserve and the map change), new MagicKey |
+| [configuration.h](../configuration.h#L75) | a PC3 budget block ahead of HDMIBTH's: offset 1728 KB, heap 108 KB, program 180 KB (the asserts cap it until the reserve and the map change in phase 2), new MagicKey; `EDIT_BUFFER_SIZE` 512 KB from PSRAM; the `HEAPKB` knob |
 | [PicoMite.c](../PicoMite.c#L214) | `MES_SIGNON`, the banner's chip-letter index (31), the Bluetooth init block skipped under `PICOMITEWEB`, `bt_keyboard_init()` after `WebConnect()` |
+| [WiFi.c](../net/WiFi.c#L389), [BTKeyboard.c](../bluetooth/BTKeyboard.c#L2269) | one heartbeat: `WebHeartbeat` keeps the LED, with the Bluetooth speaker's no-toggle-while-streaming rule; the Bluetooth poll's blink is out under `PICOMITEWEB` |
+| [Memory.c](../core/Memory.c#L2336) | the `PSRAMHEAP_TEST` knob in `GetMemory` |
 | [MM_Misc.c](../core/MM_Misc.c#L8159) | `MM.DEVICE$` = `PicoMitePC3` |
 | [buildpicomite.bat](../buildpicomite.bat#L37) | `PC3:PicoMitePC3` in the RP2350 targets |
 
@@ -469,8 +475,34 @@ in an inner loop, a 200-byte string compared each iteration, sprites blitted
 every frame. Each access that misses the cache is a QMI transaction of about
 100-200 ns at 105 MHz; sequential walks amortise it, random ones do not.
 
+One measurement in the tree says how sensitive the games are: when the
+symbol bindings' hot block took 9 KB of SRAM, the 9 KB of Elite's own data
+that it displaced into PSRAM cost Elite 20% ([Symbols.c](../core/Symbols.c#L493),
+the reason the block now goes to PSRAM itself). That is the cost of a slice of
+hot game data in PSRAM; "all program data in PSRAM" puts every slice there.
+So the expectation is: scalar maths and the interpreter's own paths (records,
+temporaries, the compiled stream) about as today, array and sprite heavy games
+measurably slower, with the threshold knob as the fallback. The number
+decides.
+
+**The A/B/C, on an HDMIWEB board (COM4), nothing PC3-specific needed.** The
+branch adds two CMake knobs, both off by default and neither for a release:
+`-DPSRAMHEAP_TEST=ON` sends every `GetMemory` block to PSRAM with the records
+and the temporaries left in SRAM, which is the design's policy and an upper
+bound on its cost (the driver buffers go there too in that build, so no COM
+ports or audio while it runs); `-DHEAPKB=108` gives today's policy the PC3's
+108 KB SRAM heap, which is phase 1's behaviour. HDMIWEB's offset and
+MagicKey are unchanged by either, so the board's options and A: drive
+survive the three flashes:
+
+| Build | What it measures |
+| --- | --- |
+| A: HDMIWEB as released | today |
+| B: HDMIWEB `PSRAMHEAP_TEST=ON` | the phase 2 policy's cost, upper bound |
+| C: HDMIWEB `HEAPKB=108` | phase 1: a 108 KB SRAM heap, PSRAM overflow |
+
 The test plan, on the bench programs Peter judges by, at a fixed clock,
-HDMIWEB first with the policy macro on and off, then the PC3 build:
+the three HDMIWEB builds first, then the PC3 build:
 
 | Program | What it exercises |
 | --- | --- |
@@ -491,7 +523,7 @@ guessed. If long strings regress, string scalars join the records in SRAM
 | Phase | Work | Test | Size |
 | --- | --- | --- | --- |
 | 0 (done) | The experiment: the PC3 variant that links | build margins | 5 files |
-| 1 | The variant that runs: one radio init and one pump (done in the experiment), one heartbeat, `EDIT_BUFFER_SIZE` as a PSRAM-sized constant, heap 108 KB with today's allocator, program 180 KB, flash offset 1728 KB; `buildpicomite.bat` target | Boot on the PC3; WiFi join, telnet, TLS fetch; BT keyboard, mouse, speaker; USB keyboard and MSC; HDMI at every resolution and mode; EDIT a 150 KB program; goldens | small; 2-3 days with the board |
+| 1 | The variant that runs: one radio init (done), one heartbeat (done), `EDIT_BUFFER_SIZE` as a PSRAM-sized constant (done), heap 108 KB with today's allocator (done), program 180 KB, flash offset 1728 KB, `buildpicomite.bat` target (done); the two polls left as they are (each throttled to once a millisecond; `ProcessWeb` returns early with no WiFi, so the Bluetooth poll must stay) | Boot on the PC3; WiFi join, telnet, TLS fetch; BT keyboard, mouse, speaker; USB keyboard and MSC; HDMI at every resolution and mode; EDIT a 150 KB program; goldens; the A/B/C above | the branch builds; the board tests are the work |
 | 2 | The heap: the allocation classes (program data to PSRAM behind `PSRAMHEAP`), `GetDriverMemory` and its call sites (COM, audio, ADC, stepper, share, BBC, layers), `CallocMemory` to PSRAM, `PSRAM_RESERVE` replacing the four 2 MB sites, the Route B flash stream dropped, `MAX_PROG_SIZE` 256 KB, new MagicKey | The benchmark table above on HDMIWEB (A/B) and the PC3; SAVE CONTEXT, CHAIN, RAM slots, LIBRARY LOAD RAM, a 250 KB program through EDIT, LOAD, SAVE, LIBRARY SAVE; flash writes during COM traffic, WAV playback and a stepper run; PSRAM disabled at boot | medium; the allocator change is ~150 lines, the call sites ~40 |
 | 3 | PC3-only gating (presets, flash map, PSRAM option), optional stepper decision, lwIP pool sizing | build margins, OPTION LIST, a TCP throughput check if the pool shrinks | small |
 | 4 | Manual (variant table, memory section, the PSRAM map), release notes, the Bluetooth and WiFi companions' variant lists, the release asset | help lint, `release_preflight.py` | small |
@@ -501,21 +533,30 @@ overflow, which is to say HDMIWEB's behaviour with Bluetooth added and a
 smaller SRAM heap. Everything the PC3 is for works at that point; phase 2 is
 what makes the 256 KB program and the deterministic placement true.
 
-## Decisions for Peter
+## Decisions (Peter, 2026-10-11)
 
-1. The name and the `COMPILE` token (`PC3` / `PicoMitePC3` in the experiment).
-2. Phase 2's policy: program data always in PSRAM (recommended, measured
-   first), or today's size rule with a smaller SRAM heap (phase 1 as the end
-   state).
-3. The Route B flash stream: dropped on this variant (recommended) or kept
-   with a 3.5 MB system top and a 512 KB MOD buffer.
-4. 800x600, 848x480 and 800x480: full modes with a 24-72 KB SRAM heap, or
-   modes 1 and 2 as the cut-down builds have them.
-5. `PBUF_POOL_SIZE` and the other lwIP pools: keep 32 (WebMite throughput)
-   or halve for 24 KB of heap.
-6. Stepper in or out.
-7. The context area: 384 KB as today, or 192 KB.
-8. Which heartbeat survives.
+1. **Name:** `COMPILE=PC3`, sign-on and `MM.DEVICE$` `PicoMitePC3`.
+2. **Phase 2's policy:** program data always in PSRAM, measured first. The
+   measurement is the gate: if the games or the string programs lose too
+   much, the size-threshold knob (small blocks SRAM first) is the fallback,
+   and the records stay in SRAM in every case.
+3. **The Route B flash stream:** dropped on this variant; the 3 MB system
+   top, the 1 MB MOD buffer and the A: drive at 4 MB stay as on every other
+   RP2350 build.
+4. **800x600, 848x480 and 800x480:** full modes. Consequence: at those boot
+   resolutions the SRAM heap is 72, 60 and 24 KB. At 800x600 that is room for
+   about eight record chunks (256 variables) plus the temporaries before the
+   records spill to PSRAM, and a WAV or MP3 player takes 16 KB of it for its
+   sample buffers; a big program at 800x600 runs, but slower, and
+   `MM.INFO(HEAP)` is the thing to watch there.
+5. **lwIP pools:** keep `PBUF_POOL_SIZE` 32.
+6. **Stepper:** in.
+7. **The context area:** 384 KB, as today.
+8. **Heartbeat:** the CYW43's GPIO0 LED only, one driver: `WebHeartbeat`
+   (from `routinechecks`, blinking whether or not WiFi is up, honouring
+   `OPTION HEARTBEAT`), which on the PC3 also leaves the LED alone while a
+   Bluetooth speaker streams, the rule `bt_keyboard_poll` had; its own blink
+   is compiled out under `PICOMITEWEB`.
 
 ## Appendix: how the numbers were taken
 

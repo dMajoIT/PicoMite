@@ -9,6 +9,9 @@
 #include "MMBasic_Includes.h"
 #include "Hardware_Includes.h"
 #include "WiFi.h"
+#if defined(PICOMITEHDMIBTH)
+#include "BTAudio.h" // bt_audio_streaming(), for the heartbeat
+#endif
 #ifdef PICOMITEWEB
 #include "lwipopts.h"
 #include "pico/cyw43_arch.h"
@@ -392,6 +395,15 @@
         static uint64_t lastheartmsec = 0;
         if (!startupcomplete)
             return;
+#if defined(PICOMITEHDMIBTH)
+        /* PC3: the one heartbeat for both radios (bt_keyboard_poll's blink is
+           compiled out under PICOMITEWEB).  While a Bluetooth speaker streams the
+           LED is left alone: a toggle is a CYW43 control call under the
+           async-context lock, and one can wait out the 500 ms ioctl timeout and
+           stall the encoder (239 and 505 ms measured on HDMIBTH). */
+        if (bt_audio_streaming())
+            return;
+#endif
         if (Option.NoHeartbeat)
         {
             if (lastonoff != 2)

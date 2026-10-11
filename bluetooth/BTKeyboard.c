@@ -2272,6 +2272,7 @@ void bt_keyboard_poll(void)
         bt_tlv_save();
     }
 
+#ifndef PICOMITEWEB /* PC3: WebHeartbeat drives the CYW43 LED for both radios */
     {
         static uint64_t last_heart_us;
         static int led_state;
@@ -2313,6 +2314,7 @@ void bt_keyboard_poll(void)
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led_state);
         }
     }
+#endif
 }
 
 

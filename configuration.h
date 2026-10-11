@@ -81,7 +81,10 @@ extern "C"
       area are sized for at most 208 KB and 7 program-sized areas.  The design
       review (docs/PC3_All_In_Build_Design_Review.md) sets the real values. */
 #define FLASH_TARGET_OFFSET (1728 * 1024)
-#define HEAP_MEMORY_SIZE (96 * 1024)
+   /* 108 KB: the SRAM heap the review's budget gives with the full 153600-byte
+      pool (4.5 KB of RAM margin left for the stack); the boot-time resize for
+      800x600, 848x480 and 800x480 takes its pool from this, as on HDMIUSB. */
+#define HEAP_MEMORY_SIZE (108 * 1024)
 #define MAX_PROG_SIZE (180 * 1024)
 #define MagicKey 0x7C3A11E1
 #elif defined(PICOMITEHDMIBTH)
@@ -565,6 +568,15 @@ extern "C"
 #elif !defined(MAX_PROG_SIZE)
 #define MAX_PROG_SIZE HEAP_MEMORY_SIZE // (unless the variant sets its own above)
 #endif
+/* Measurement knob (CMake -DHEAPKB=n, docs/PC3_All_In_Build_Design_Review.md):
+   the SRAM heap as n KB, to time a build with the PC3 design's smaller SRAM
+   heap.  Only for the variants that set their own MAX_PROG_SIZE above (every
+   RP2350 one does): there MAX_PROG_SIZE is a literal, so the flash layout and
+   the A: drive stay put.  Not for a release. */
+#ifdef HEAPKB
+#undef HEAP_MEMORY_SIZE
+#define HEAP_MEMORY_SIZE (HEAPKB * 1024)
+#endif
 #define SAVEDVARS_FLASH_SIZE 16384
 #define FLASH_ERASE_SIZE 4096
 #define MAXFLASHSLOTS 3
@@ -746,7 +758,16 @@ extern "C"
 #define FNV_prime 16777619
 #define FNV_offset_basis 2166136261
 #define DISKCHECKRATE 500 // Check for SD card removal every 500ms
+#ifdef PICOMITEPC3
+   /* PC3: the program-text buffer (EDIT, LOAD, AUTOSAVE, LIBRARY LOAD and SAVE,
+      the X/Y/ZMODEM program transfers) is 512 KB from PSRAM, room for a 256 KB
+      program's source: GetTempMemory's SRAM search fails on it and falls
+      through to GetPSMemory.  With the PSRAM not answering at boot the board
+      is down to its SRAM heap and the old rule applies. */
+#define EDIT_BUFFER_SIZE (PSRAMsize ? (512u * 1024u) : (heap_memory_size - 3072 - 3 * HRes))
+#else
 #define EDIT_BUFFER_SIZE (heap_memory_size - 3072 - 3 * HRes)
+#endif
    /* Subtracted from EDIT_BUFFER_SIZE when the editor is opening a FILE rather
       than the program in memory (see edit() in Editor.c).  The editor takes its
       buffer as ONE contiguous bottom-up GetTempMemory block, so any other heap

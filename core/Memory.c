@@ -2339,6 +2339,12 @@ void MIPS32 __not_in_flash_func (*GetMemory)(int size)
 #endif
 {
 #ifdef rp2350
+#ifdef PSRAMHEAP_TEST
+    /* timing test (CMake PSRAMHEAP_TEST): every block from here goes to PSRAM; the
+       variables' records (GetVarMemory) and the temporaries (GetTempMemory) stay in SRAM */
+    if (PSRAMsize)
+        return GetPSMemory(size);
+#endif
     if (PSRAMsize && size > heap_memory_size / 2)
         return GetPSMemory(size);
 #endif
