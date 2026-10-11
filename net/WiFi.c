@@ -561,6 +561,62 @@ void cmd_web(void)
         unsigned char *tp;
         if (!startupcomplete) // the radio didn't start at boot: nothing here can reach it
                 error("WiFi radio not running");
+#ifdef PICOMITEPC3
+        /* WEB IOVAR GET name$ [, index] and WEB IOVAR SET name$, value [, value2]:
+           the radio firmware's variables through the driver's ioctl, for the
+           Bluetooth/WiFi coexistence experiment (btc_mode, btc_params <index>
+           <value>, btc_flags <index> <value>).  A GET with an index sends the
+           index and prints what comes back; a SET with two values sends both.
+           The ioctl's return code is printed.  An experiment, not for a release. */
+        tp = checkstring(cmdline, (unsigned char *)"IOVAR");
+        if (tp)
+        {
+                unsigned char *p;
+                int set = 0;
+                if ((p = checkstring(tp, (unsigned char *)"SET")))
+                        set = 1;
+                else if (!(p = checkstring(tp, (unsigned char *)"GET")))
+                        SyntaxError();
+                getcsargs(&p, 5);
+                if (argc < 1 || (set && argc < 3))
+                        SyntaxError();
+                char *name = (char *)getCstring(argv[0]);
+                uint8_t buf[72];
+                size_t n = strlen(name) + 1, len = n;
+                if (n > 48)
+                        error("Name too long");
+                memset(buf, 0, sizeof(buf));
+                memcpy(buf, name, n);
+                if (argc >= 3)
+                {
+                        uint32_t v = (uint32_t)getinteger(argv[2]);
+                        memcpy(buf + len, &v, 4);
+                        len += 4;
+                }
+                if (argc >= 5)
+                {
+                        uint32_t v = (uint32_t)getinteger(argv[4]);
+                        memcpy(buf + len, &v, 4);
+                        len += 4;
+                }
+                if (!set && argc < 3)
+                        len += 4; // room for the value
+                /* cyw43_ll_ioctl takes the WLC command shifted left with the
+                   set/get bit: WLC_GET_VAR is 262, WLC_SET_VAR 263 */
+                int rc = cyw43_ioctl(&cyw43_state, set ? ((263 << 1) | 1) : (262 << 1), len, buf, CYW43_ITF_STA);
+                char s[96];
+                if (set)
+                        sprintf(s, "%s set, rc %d\r\n", name, rc);
+                else
+                {
+                        uint32_t v;
+                        memcpy(&v, buf, 4);
+                        sprintf(s, "%s = %lu (&H%lX), rc %d\r\n", name, (unsigned long)v, (unsigned long)v, rc);
+                }
+                MMPrintString(s);
+                return;
+        }
+#endif
         tp = checkstring(cmdline, (unsigned char *)"CONNECT");
         if (tp)
         {
