@@ -397,10 +397,21 @@ Things to settle in phase 1, none of them hard:
   the Bluetooth host builds, so every HDMI clock stays under the chip's
   50 MHz: 39.4 MHz at 315, 47.3 at 378, 45 at 360 (800x600), 47.2 at 283.2
   (720x400).
-- **Coexistence on the air** is the risk to test, not to design: an A2DP
-  stream to a speaker while a TFTP transfer or a TLS fetch runs on the same
-  radio. The CYW43439 arbitrates; the AX1300BT stutter test with a keyboard
-  connected is the same question one link smaller.
+- **Coexistence on the air, measured 2026-10-11 on the COM4 PC3** (speaker
+  00:13:EF:D2:4E:8C, a 10 s `PLAY TONE`, counters read once afterwards,
+  because a `BLUETOOTH STATUS` during a stream stalls it): with the WiFi
+  option cleared the stream is clean, bitpool 53, longest send wait 20 ms,
+  no samples dropped; with WiFi merely associated and idle it is not,
+  bitpool pinned at 26, send waits of 220-231 ms, 17-19% of the samples
+  dropped, audibly broken. Raising the Bluetooth backlog cap from a quarter
+  second to a second changed nothing (18.7% dropped), so this is the link's
+  average capacity with the WiFi receiver on, not bursts a buffer could
+  absorb. The Bluetooth keyboard works throughout. Not tried, for Peter to
+  choose from: WiFi power save only while a stream runs (he has had trouble
+  with power save before and ruled it out as a general setting), the
+  firmware's coexistence iovars (`btc_mode`, `btc_params`; the driver sets
+  none), filtering broadcast reception while streaming, and a mono or
+  lower-rate fallback when WiFi is associated.
 
 ## Build mechanics
 
