@@ -411,10 +411,11 @@ set(PICO_BOARD ${_PM_BOARD} CACHE STRING "PICO target board (derived from COMPIL
 message(STATUS "PicoMite: COMPILE=${COMPILE} -> PICO_PLATFORM=${PICO_PLATFORM} PICO_BOARD=${PICO_BOARD}")
 
 # TinyUSB for every variant (host and device): ../tinyusb-master is TinyUSB
-# master at 3174e7603 (2026-10-11), which has the enumeration retry and
+# master at efab607b8 (2026-10-11), which has the enumeration retry and
 # control-transfer timeout (#3862) that answer our issue #3876, the EPX
-# abort/buffer release (#4166) that answers #3874 and the interrupt-endpoint
-# abort (#4177) that answers #4173, plus our RP2 host driver fixes
+# abort/buffer release (#4166) that answers #3874, the interrupt-endpoint
+# abort (#4177) that answers #4173 and the hub port-status rework (#3776),
+# plus our RP2 host driver fixes
 # (endpoint-0 RX-timeout grace, single-buffered host control on RP2350,
 # faults recorded instead of panic()).
 # tinyusb-patches/setup-tinyusb
@@ -425,7 +426,7 @@ message(STATUS "PicoMite: COMPILE=${COMPILE} -> PICO_PLATFORM=${PICO_PLATFORM} P
 # CACHE FORCE for the same reason as PICO_BOARD above: the build dir is
 # reused across variants. Rollback = ../tinyusb-0.21 (TinyUSB 0.21.0 with all
 # the workarounds).
-set(PICO_TINYUSB_PATH ${CMAKE_CURRENT_LIST_DIR}/../tinyusb-master CACHE PATH "TinyUSB master 3174e7603 (PicoMite-patched)" FORCE)
+set(PICO_TINYUSB_PATH ${CMAKE_CURRENT_LIST_DIR}/../tinyusb-master CACHE PATH "TinyUSB master efab607b8 (PicoMite-patched)" FORCE)
 
 include(pico_sdk_import.cmake)
 project(PicoMite C CXX ASM)

@@ -2,7 +2,7 @@
 
 PicoMite's USB **host** support — fast USB flash-drive transfers, and reliable
 enumeration of several devices (keyboards, mouse, gamepad, flash drive) behind
-a hub — is built on **TinyUSB master at 3174e7603** (2026-10-11) with the
+a hub — is built on **TinyUSB master at efab607b8** (2026-10-11) with the
 patches in this directory applied. Every build variant uses the same tree,
 including those that are only a USB device (the CDC console).
 
@@ -20,7 +20,7 @@ tinyusb-patches/setup-tinyusb.sh      # Linux / macOS / Git Bash
 tinyusb-patches\setup-tinyusb.bat     # Windows (runs the .sh via Git Bash)
 ```
 
-It fetches TinyUSB master at 3174e7603 into `../tinyusb-master` and applies the
+It fetches TinyUSB master at efab607b8 into `../tinyusb-master` and applies the
 three patches. To recreate the tree, delete `../tinyusb-master` and run it again.
 (Only that one commit is fetched; TinyUSB's `lib/` submodules are not needed
 for the PicoMite build.) A `../tinyusb-0.21` tree from an earlier setup is no
@@ -79,12 +79,29 @@ same four devices, 2026-10-11): all four on every one of 5 `CPU RESTART`s,
 replugging the mouse with the keyboard in use, nothing else disturbed. The
 Raspberry Pi keyboard still drops the gamepad, as above.
 
+Master efab607b8 ([#3776](https://github.com/hathach/tinyusb/pull/3776)) adds
+a change to `src/host/hub.c`:
+- **Port status:** the hub's port status now stays in its `ctrl_buf`, and the
+  completion callback travels with the transfer. A hub closed while its
+  requests are failing can no longer lose a later attach.
+- **Enumeration:** enumeration fails, and is retried, when a port status read
+  fails, instead of decoding stale data.
+- **Stuck status poll:** after three failed status-change polls the hub reads
+  its port statuses directly. This cannot happen on the RP2 host, where an
+  interrupt endpoint only ever completes successfully (a timeout or STALL is
+  charged to the transfer on EPX).
+
+No patch changes there. Tested on PicoMiteHDMIBTH (PicoComputer 3, same four
+devices, 2026-10-11): all four on every one of 5 `CPU RESTART`s, and
+reset-button and power-on resets, flash-drive hot-plug and the mouse replug
+all clean.
+
 The TinyUSB 0.21.0 patches, `usbh.patch` included, are in this directory's
 git history.
 
 ## The patches
 
-Each is a one-file diff against **stock** TinyUSB master 3174e7603
+Each is a one-file diff against **stock** TinyUSB master efab607b8
 (`patch -p1`), so the apply order does not matter. None of these issues is
 fixed upstream at that commit.
 
