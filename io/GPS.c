@@ -91,8 +91,10 @@ MMFLOAT GPSlatitude = 0;
 MMFLOAT GPSlongitude = 0;
 MMFLOAT GPSspeed = 0;
 int GPSvalid = 0;
-char GPStime[9] = "000:00:0";
-char GPSdate[11] = "000-00-200";
+// MMBasic strings: byte 0 is the length. As "000:00:0" and "000-00-200" it was '0' (48), so until
+// an RMC sentence with a date set it, GPS(TIME) and GPS(DATE) returned 48 bytes of memory.
+char GPStime[9] = {8, '0', '0', ':', '0', '0', ':', '0', '0'};
+char GPSdate[11] = {10, '0', '0', '-', '0', '0', '-', '2', '0', '0', '0'};
 MMFLOAT GPStrack = 0;
 MMFLOAT GPSdop = 0;
 int GPSsatellites = 0;
