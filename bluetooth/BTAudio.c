@@ -995,6 +995,30 @@ void bt_audio_service(void)
     uint32_t idle_ms = (uint32_t)AUDIO_BLUETOOTH_IDLE * 1000u; /* 0: never suspend */
     if (playing || tone)
         last_active_ms = now_ms;
+#ifdef PICOMITEWEB
+    /* Coexistence on a build with WiFi (the PC3, 2026-10-11): with WiFi merely
+       associated, the radio's default time-division mode (btc_mode 1) starved
+       the stream - sends waited 220 ms and 8-19% of the samples were dropped.
+       btc_mode 3 gives the stream the air (none dropped, sends under 60 ms)
+       and leaves WiFi next to nothing while it runs (a TFTP transfer got no
+       reply), so it is set only while a stream runs and put back the moment
+       the stream pauses or closes.  The variable is written here, on the main
+       thread, with the driver's ioctl (a blocking exchange with the chip),
+       never from a btstack callback.  The chip comes up in mode 1. */
+    {
+        static int coex_mode = 1;
+        int want = (spk_state == SPK_STREAMING) ? 3 : 1;
+        if (want != coex_mode)
+        {
+            uint8_t buf[16];
+            uint32_t v = (uint32_t)want;
+            memcpy(buf, "btc_mode", 9);
+            memcpy(buf + 9, &v, 4);
+            if (cyw43_ioctl(&cyw43_state, CYW43_IOCTL_SET_VAR, 13, buf, CYW43_ITF_STA) == 0)
+                coex_mode = want;
+        }
+    }
+#endif
     if (reopen_hold && (int32_t)(hold_until_ms - now_ms) <= 0)
     {
         reopen_hold = false;
