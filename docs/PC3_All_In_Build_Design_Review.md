@@ -234,6 +234,78 @@ the cache, and core 1's layer reads would do the same.
   for the editor), and it is why the SRAM heap must stay a real heap rather
   than a bag of reservations.
 
+### The program-text commands: EDIT, AUTOSAVE, LOAD, SAVE and the transfers
+
+Every command that handles the program as text takes one buffer sized from
+`EDIT_BUFFER_SIZE` ([configuration.h](../configuration.h#L737)), which is
+`heap_memory_size - 3072 - 3 * HRes`: the whole SRAM heap, less a little.
+That is why each of them first empties the heap (`HeapReleaseForBuffer`,
+[MMBasic.c](../core/MMBasic.c#L1230)) and why the editor opened from FM
+asks for `FM_HEAP_RESERVE` less. On the PC3 the SRAM heap is 108 KB and the
+program 256 KB, so the definition has to change; nothing else in these
+commands does.
+
+| Command | Buffer | Taken with | On the PC3 |
+| --- | --- | --- | --- |
+| EDIT, program or file ([Editor.c](../misc/Editor.c#L647)) | `EDIT_BUFFER_SIZE` (2 KB less from FM) | `GetTempMemory` | PSRAM (below) |
+| AUTOSAVE, AUTOSAVE APPEND ([FileIO.c](../misc/FileIO.c#L7187)) | `EDIT_BUFFER_SIZE` less 8 KB | `GetTempMemory` | PSRAM |
+| LOAD, RUN "file", CHAIN (`FileLoadProgram`, [FileIO.c](../misc/FileIO.c#L4567)) and RAM FILE LOAD ([:5075](../misc/FileIO.c#L5075)) | `EDIT_BUFFER_SIZE` less 2 KB | `GetTempMemory` | PSRAM |
+| LOAD with `#DEFINE` preprocessing ([FileIO.c](../misc/FileIO.c#L3766)) | `loadbuffsize` | `GetMemory` | already PSRAM on every PSRAM build (over half the heap) |
+| LIBRARY LOAD from a text file ([FileIO.c](../misc/FileIO.c#L7187)) | `EDIT_BUFFER_SIZE` | `GetTempMemory` | PSRAM |
+| LIBRARY SAVE ([MM_Misc.c](../core/MM_Misc.c#L1945)) | `EDIT_BUFFER_SIZE` | `GetTempMainMemory`, i.e. `GetMemory` | already PSRAM |
+| XMODEM, YMODEM and ZMODEM RECEIVE and SEND of the program ([XModem.c](../misc/XModem.c#L110)) | `XMODEMBUFFERSIZE` = `EDIT_BUFFER_SIZE` | `GetTempMemory` | PSRAM |
+| SAVE "file", LIST, LIST to a file ([FileIO.c](../misc/FileIO.c#L3458), [Commands.c](../core/Commands.c#L2302)) | none: `llist` expands one line into a 256-byte buffer | | unchanged |
+| The tokeniser, `SaveProgramToFlash` ([PicoMite.c](../PicoMite.c#L4850)) | none: `inpbuf`/`tknbuf` and a 4 KB flash page | | unchanged; it reads the text buffer once, sequentially, and checks `MAX_PROG_SIZE` at the write pointer |
+
+**The change** is one definition: on the PC3, `EDIT_BUFFER_SIZE` is a
+constant, 512 KB. Prince of Pico's source is 245 KB for a program that
+tokenises under 156 KB, so a 256 KB program can come from a source of
+400 KB or more; the buffer is temporary and PSRAM has 5.6 MB, so there is no
+reason to be tight. The allocator does the rest without being touched:
+`GetTempMemory` goes through the bottom-up SRAM search, finds no 512 KB run
+in a 108 KB heap, and takes the block from PSRAM, which is the path LIBRARY
+SAVE and the `#DEFINE` LOAD already take today. `HeapReleaseForBuffer` and
+`FM_HEAP_RESERVE` stop being necessary for the buffer to fit, but they stay:
+the release is also what guarantees that no interrupt is still writing a
+variable record when the program is replaced.
+
+**What to watch:**
+
+- *Editing a big program gets slower per keystroke.* `editInsertChar`
+  ([Editor.c](../misc/Editor.c#L8832)) walks to the end of the text and then
+  shifts the whole tail down one byte at a time; DEL and BACKSPACE
+  ([:6608](../misc/Editor.c#L6608)) shift it up the same way; beautify uses
+  `memmove`. Two passes over the text per key, so inserting at the top of a
+  300 KB listing already costs a few milliseconds in SRAM; in PSRAM, through
+  the write-back cache, expect several times that, 10-30 ms, which shows with
+  key repeat and with a paste. It is the same O(n) the editor has today with a
+  bigger constant, and the cure is independent of PSRAM: keep the end-of-text
+  pointer instead of re-scanning, or a gap buffer. Measure it in phase 1 with
+  a 250 KB program open at line 1 before deciding.
+- *AUTOSAVE and the transfers* append sequentially and are bound by the
+  serial link; no change. AUTOSAVE's 255-character line limit is unrelated.
+- *Tokenising* reads the buffer once, sequentially (cache-friendly), with two
+  more sequential passes for the symbol table (`SymCount`). Seconds for a
+  256 KB program either way.
+- *The tables the program builds in the SRAM heap* are the real pressure on
+  the 108 KB, not the text buffer: the variable record chunks (2 KB per 32
+  variables; Prince of Pico takes 38 KB), the SUB/label name index
+  ([MMBasic.c](../core/MMBasic.c#L855)), the IF table
+  ([Commands.c](../core/Commands.c#L3299)) and the line-number targets. The
+  symbol bindings already go to PSRAM when the hot block passes 4 KB
+  ([Symbols.c](../core/Symbols.c#L496); the cold block always does), and the
+  compiled stream is in PSRAM. A 256 KB program with 1200 variables would
+  want about 75 KB of records; past the heap they spill to PSRAM, which
+  works but slows every reference to the spilled variables. Phase 1 should
+  RUN the biggest programs and read `MM.INFO(HEAP)`.
+- *CHAIN* keeps its order ([Commands.c](../core/Commands.c#L4612)):
+  `SaveContext`, `ClearVars`, `FileLoadProgram` with `M_LIMITED` (no PSRAM
+  wipe), `ClearRuntime`. The load buffer is then taken from PSRAM beside the
+  parent's preserved data, and the saved page map frees it at
+  `RestoreContext`, as any allocation made after a save is freed today. A
+  plain LOAD does `m_alloc(M_PROG)`, which clears the PSRAM heap, before it
+  takes its buffer, so the order is right there too.
+
 ## Flash map
 
 The image is 1722 KB, so `FLASH_TARGET_OFFSET` is 1728 KB (6 KB spare; the
