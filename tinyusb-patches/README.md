@@ -2,7 +2,7 @@
 
 PicoMite's USB **host** support — fast USB flash-drive transfers, and reliable
 enumeration of several devices (keyboards, mouse, gamepad, flash drive) behind
-a hub — is built on **TinyUSB master at e20482387** (2026-10-08) with the
+a hub — is built on **TinyUSB master at 3174e7603** (2026-10-11) with the
 patches in this directory applied. Every build variant uses the same tree,
 including those that are only a USB device (the CDC console).
 
@@ -20,7 +20,7 @@ tinyusb-patches/setup-tinyusb.sh      # Linux / macOS / Git Bash
 tinyusb-patches\setup-tinyusb.bat     # Windows (runs the .sh via Git Bash)
 ```
 
-It fetches TinyUSB master at e20482387 into `../tinyusb-master` and applies the
+It fetches TinyUSB master at 3174e7603 into `../tinyusb-master` and applies the
 three patches. To recreate the tree, delete `../tinyusb-master` and run it again.
 (Only that one commit is fetched; TinyUSB's `lib/` submodules are not needed
 for the PicoMite build.) A `../tinyusb-0.21` tree from an earlier setup is no
@@ -63,18 +63,34 @@ and re-enumerate: the gamepad, or the flash drive once the gamepad was swapped
 for a battery-powered PS4 controller. b8 (e42fa9357) does the same, 5 of 5, so
 it is not this change; it looks like the keyboard's inrush current.
 
+Master 3174e7603 ([#4177](https://github.com/hathach/tinyusb/pull/4177)) is
+the answer to [#4173](https://github.com/hathach/tinyusb/issues/4173).
+`hcd_device_close()` now clears a freed interrupt slot's `interrupt_num`, so a
+completion can no longer reach a slot reused by another endpoint (a stale
+number let a newly plugged mouse steal a working keyboard's completions), and
+`hcd_edpt_abort_xfer()` now aborts interrupt endpoints too. Our own fix, which
+cleared the number on close and when a slot was reopened for EPX and skipped
+free slots in `handle_buf_status_isr()`, was dropped from `hcd_rp2040.patch`
+there, and the RP2040 preempt guard moved into the new `epx_sof_round_robin()`.
+The other source changes since e20482387 are in the nrf5x and Renesas drivers,
+which PicoMite does not compile. Tested on PicoMiteHDMIBTH (PicoComputer 3,
+same four devices, 2026-10-11): all four on every one of 5 `CPU RESTART`s,
+4 reset-button and 4 power-on resets; flash-drive hot-plug and unplugging and
+replugging the mouse with the keyboard in use, nothing else disturbed. The
+Raspberry Pi keyboard still drops the gamepad, as above.
+
 The TinyUSB 0.21.0 patches, `usbh.patch` included, are in this directory's
 git history.
 
 ## The patches
 
-Each is a one-file diff against **stock** TinyUSB master e20482387
+Each is a one-file diff against **stock** TinyUSB master 3174e7603
 (`patch -p1`), so the apply order does not matter. None of these issues is
 fixed upstream at that commit.
 
 | Patch | File | What it changes |
 |-------|------|-----------------|
-| `hcd_rp2040.patch` | `src/portable/raspberrypi/rp2040/hcd_rp2040.c` | RP2 host driver: a 1 s endpoint-0 RX-timeout **grace period** (`PC3_CTRL_RX_TIMEOUT_GRACE_US`) in which the controller retries instead of failing the request, so a spurious shared-latch timeout does not fail an enumeration; the window closes when the control transfer ends, whether it completes or is aborted or closed (`epx_retire()`). Also: `ERROR_DATA_SEQ` is recorded instead of `panic()`; the RP2040 SOF round-robin never preempts a transfer that has already moved data (`PM_EPX_PREEMPT_UNGUARDED` restores the stock behaviour, for diagnosis); a freed or EPX endpoint slot drops its interrupt-endpoint number and completions are never delivered to a free slot (a stale number let a newly plugged mouse steal a working keyboard's completions); `PM_FORCE_EPX_SOF` build switch; `pm_epx_*` counters; `PC3_USB_EVLOG` hooks. |
+| `hcd_rp2040.patch` | `src/portable/raspberrypi/rp2040/hcd_rp2040.c` | RP2 host driver: a 1 s endpoint-0 RX-timeout **grace period** (`PC3_CTRL_RX_TIMEOUT_GRACE_US`) in which the controller retries instead of failing the request, so a spurious shared-latch timeout does not fail an enumeration; the window closes when the control transfer ends, whether it completes or is aborted or closed (`epx_retire()`). Also: `ERROR_DATA_SEQ` is recorded instead of `panic()`; the RP2040 SOF round-robin never preempts a transfer that has already moved data (`PM_EPX_PREEMPT_UNGUARDED` restores the stock behaviour, for diagnosis); `PM_FORCE_EPX_SOF` build switch; `pm_epx_*` counters; `PC3_USB_EVLOG` hooks. |
 | `rp2040_usb.patch` | `src/portable/raspberrypi/rp2040/rp2040_usb.c` | Host **control** transfers single-buffered on the RP2350 ([#3875](https://github.com/hathach/tinyusb/issues/3875): a 9-packet control IN double-buffered on EPX completed after its first packet), but not on the RP2040, where erratum E4 makes single-buffered multi-packet host transfers unsafe; the two `buf_ctrl already available` `panic()`s clear the stale arming and continue; the shared USB fault record; optional timing-neutral event ring (`PC3_USB_EVLOG`, off by default). |
 | `cdc_host.patch` | `src/class/cdc/cdc_host.c` | CDC host: a bulk IN that ends `XFER_RESULT_FAILED` is **re-armed**. Stock returns without re-arming, so one failed IN stops a COM3-COM6 port receiving until the device re-enumerates. On the RP2 host the failure need not be the CDC endpoint's: `SIE_STATUS.RX_TIMEOUT` is shared with the interrupt endpoints the controller polls in the background (a keyboard behind the hub), and `hcd_rp2040` charges a timeout to whatever transfer holds EPX, nearly always the CDC IN waiting on an idle device. Found by reading the code while investigating a COM3 report (2026-10-10); not yet seen to fire. A STALL is not re-armed. |
 
