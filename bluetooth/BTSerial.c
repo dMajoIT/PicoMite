@@ -675,10 +675,11 @@ static void sp_hci_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
         break;
 
     case HCI_EVENT_PIN_CODE_REQUEST:
-        /* Legacy pairing: serial devices, GPS receivers among them, take "0000". */
+        /* Legacy pairing: the PIN given to BLUETOOTH CONNECT, or "0000",
+           which serial devices, GPS receivers among them, mostly take. */
         hci_event_pin_code_request_get_bd_addr(packet, addr);
         if (bt_serial_owns_pairing(addr))
-            gap_pin_code_response(addr, "0000");
+            gap_pin_code_response(addr, bt_connect_pin());
         break;
 
     case HCI_EVENT_USER_CONFIRMATION_REQUEST:

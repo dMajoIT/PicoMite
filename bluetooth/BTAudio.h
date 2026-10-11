@@ -30,6 +30,10 @@ bool bt_audio_streaming(void);
    reconnects wait (BTSerial.c). */
 bool bt_audio_inquiry_busy(void);
 
+/* The PIN BLUETOOTH CONNECT gives a device that asks for legacy (pre-2.1)
+   PIN pairing: its pin$, or "0000" (BTSerial.c answers with it too). */
+const char *bt_connect_pin(void);
+
 /* Main-loop service for PLAY output (OPTION AUDIO BLUETOOTH): starts and
    suspends the stream, and discards sound while no speaker takes it.
    Called from bt_keyboard_poll(). */

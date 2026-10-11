@@ -64,6 +64,9 @@ static volatile bool spk_quiet_release;  /* a command is waiting for the release
 static volatile bool spk_reopening;      /* the link was dropped to reopen the stream */
 static volatile bool spk_reopen_quiet;   /* ...so its reconnection is not announced */
 static volatile bool spk_pairing_allowed; /* BLUETOOTH CONNECT is running */
+static volatile bool spk_new_stream;     /* opened, not yet started - see bt_audio_service() */
+#define BTA_PIN_MAX 16                   /* a legacy PIN is 1 to 16 characters */
+static char connect_pin[BTA_PIN_MAX + 1] = "0000"; /* btstack keeps a pointer to it */
 static bool bta_ready;                   /* bt_audio_init() completed */
 
 static uint16_t a2dp_cid;
@@ -77,13 +80,16 @@ static uint8_t cfg_bitpool, cfg_blocks, cfg_subbands;
 static uint8_t cfg_min_bitpool;
 static volatile uint8_t cur_bitpool; /* the bitpool in use - see adapt_bitpool() */
 
-/* Offer 44.1 and 48 kHz, joint stereo, stereo or mono, any block length /
+/* Offer 44.1 kHz, joint stereo, stereo or mono, any block length /
    subband count / allocation, bitpool 2..53 - the sink picks within that.
    btstack prefers joint stereo, then stereo; mono is for the few speakers
    that offer nothing else (the sound is mixed down in
-   fill_sbc_audio_buffer). */
+   fill_sbc_audio_buffer). Only 44.1 kHz, which every A2DP sink must
+   accept: a speaker that opens the stream itself picks from this list, and
+   a car radio that picked 48 kHz played with a gap every 3 s. btstack
+   rejects a rate not offered here. */
 static const uint8_t media_sbc_codec_capabilities[] = {
-    (AVDTP_SBC_44100 << 4) | (AVDTP_SBC_48000 << 4) | AVDTP_SBC_STEREO | AVDTP_SBC_JOINT_STEREO | AVDTP_SBC_MONO,
+    (AVDTP_SBC_44100 << 4) | AVDTP_SBC_STEREO | AVDTP_SBC_JOINT_STEREO | AVDTP_SBC_MONO,
     0xFF,
     2, 53};
 static uint8_t media_sbc_codec_configuration[4];
@@ -258,6 +264,11 @@ bool bt_audio_streaming(void)
 bool bt_audio_inquiry_busy(void)
 {
     return inquiry_active || name_request_active;
+}
+
+const char *bt_connect_pin(void)
+{
+    return connect_pin;
 }
 
 /* ============================================================================
@@ -638,6 +649,7 @@ static void a2dp_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *
         }
         local_seid = a2dp_subevent_stream_established_get_local_seid(packet);
         media_mtu = (uint16_t)(a2dp_max_media_payload_size(a2dp_cid, local_seid) + BTA_RTP_HEADER_SIZE);
+        spk_new_stream = true;
         spk_state = SPK_OPEN;
         remember_speaker(speaker_addr);
         if (!spk_pairing_allowed && !CurrentLinePtr && !spk_reopen_quiet)
@@ -648,6 +660,7 @@ static void a2dp_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *
     case A2DP_SUBEVENT_STREAM_STARTED:
         lead_in_samples = cfg_rate * BTA_LEAD_IN_MS / 1000;
         audio_timer_start();
+        spk_new_stream = false;
         spk_state = SPK_STREAMING;
         stream_starts++;
         bt_keyboard_scan_duty_changed();
@@ -703,6 +716,7 @@ static void a2dp_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *
         bool was_connected = (spk_state == SPK_OPEN || spk_state == SPK_STREAMING || spk_state == SPK_LINKED);
         audio_timer_stop();
         a2dp_cid = 0;
+        spk_new_stream = false;
         spk_state = SPK_NONE;
         bt_keyboard_scan_duty_changed();
         if (spk_reopening)
@@ -857,12 +871,13 @@ static void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
        connectable (for paired speakers to reconnect), so without this any
        device that knew our address could pair through Just Works. */
     case HCI_EVENT_PIN_CODE_REQUEST:
-        /* Legacy (pre-2.1) pairing: speakers that still use it take "0000". */
+        /* Legacy (pre-2.1) pairing: the PIN given to BLUETOOTH CONNECT, or
+           "0000", which most speakers that still use it take. */
         hci_event_pin_code_request_get_bd_addr(packet, addr);
         if (bt_ckbd_owns_pairing(addr) || bt_serial_owns_pairing(addr))
             break; /* a keyboard or serial device BLUETOOTH CONNECT is pairing */
         if (spk_pairing_allowed)
-            gap_pin_code_response(addr, "0000");
+            gap_pin_code_response(addr, connect_pin);
         else
             gap_pin_code_negative(addr);
         break;
@@ -948,11 +963,15 @@ static void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 #define BTA_DISCARD_RATE 44100
 
 /* Called from bt_keyboard_poll() in the main loop. With OPTION AUDIO
-   BLUETOOTH [idle] it starts the stream when PLAY has something to play,
-   and suspends it after idle seconds of silence - or, with idle 0, starts
-   it as soon as a speaker connects and never suspends it, so no sound
+   BLUETOOTH [idle] it starts the stream as soon as a speaker connects,
+   suspends it after idle seconds of silence, and starts it again when PLAY
+   has something to play - or, with idle 0, never suspends it, so no sound
    waits for a restart (~0.45 s) at the cost of the encoder's ~12% of the
-   CPU while a speaker is connected. While no speaker can
+   CPU while a speaker is connected. (The start at connect is for speakers
+   that play only a stream started soon after it was opened: a Milwaukee M12
+   site radio accepted a later start but stayed silent, then dropped the
+   link. A start
+   after our own suspend plays.) While no speaker can
    take the sound it is discarded at the real-time rate, so PLAY behaves as
    a wired output does with nothing plugged in: sounds still end on time and
    their interrupts still fire.
@@ -1000,7 +1019,9 @@ void bt_audio_service(void)
         }
         return;
     case SPK_OPEN:
-        if (!playing && idle_ms)
+        if (spk_new_stream)
+            last_active_ms = now_ms; /* the idle time counts from the start */
+        else if (!playing && idle_ms)
         {
             start_requested = false;
             break;
@@ -1243,17 +1264,30 @@ static void bta_error_status(const char *what, uint8_t status)
     error("$", buf);
 }
 
-/* BLUETOOTH CONNECT name$ | addr$
+/* BLUETOOTH CONNECT name$ | addr$ [, pin$]
      name$ - a device name as the last BLUETOOTH SCAN listed it (any case)
      addr$ - its address, "AA:BB:CC:DD:EE:FF"
+     pin$  - the PIN for a speaker or serial device that pairs the legacy
+             (pre-2.1) way, 1 to 16 characters; "0000" when it is left out.
+             Keyboards are shown their own; BLE devices use none.
    There is no bare form: with more than one kind of device it couldn't
    know which was meant. The remembered speaker reconnects by itself. */
 static void bta_connect(unsigned char *tp)
 {
     bd_addr_t addr;
-    if (!*tp)
+    getargs(&tp, 3, (unsigned char *)",");
+    if (argc == 0)
         error("Device name or address required");
-    char *s = (char *)getCstring(tp);
+    if (argc == 2)
+        SyntaxError();
+    char *s = (char *)getCstring(argv[0]);
+    const char *pin = "0000";
+    if (argc == 3)
+    {
+        pin = (const char *)getCstring(argv[2]);
+        if (*pin == 0 || strlen(pin) > BTA_PIN_MAX)
+            error("PIN must be 1 to 16 characters");
+    }
     bta_require_ready();
     if (sscanf_bd_addr(s, addr) == 0)
     {
@@ -1280,6 +1314,8 @@ static void bta_connect(unsigned char *tp)
     uint8_t le_type, le_service;
     if (d ? d->le : bt_serial_remembered_le(addr, &le_type, &le_service))
     {
+        if (argc == 3)
+            error("A BLE device pairs without a PIN");
         if (d)
         {
             le_type = d->addr_type;
@@ -1292,9 +1328,14 @@ static void bta_connect(unsigned char *tp)
        remembered one given by address. */
     if (d ? bt_ckbd_cod_is_keyboard(d->cod) : bt_ckbd_is_remembered(addr))
     {
+        if (argc == 3)
+            error("No PIN for a keyboard: it is shown a code to type");
         bt_ckbd_connect(addr);
         return;
     }
+    /* Set before anything can pair; only the device being paired is
+       answered with it (spk_pairing_allowed, bt_serial_owns_pairing). */
+    strcpy(connect_pin, pin);
     /* Anything else that is not audio - or an address the last SCAN did not
        list, unless it is the remembered speaker - may be a serial device:
        its SDP records say. One without a serial port is tried as a speaker. */
@@ -1341,7 +1382,7 @@ static void bta_connect(unsigned char *tp)
         spk_state = SPK_NONE;
         error("Speaker did not answer");
     }
-    if (spk_state != SPK_OPEN)
+    if (spk_state == SPK_NONE) /* else open - and bt_audio_service() may have started it */
         bta_error_status("Connection failed", spk_last_status);
 
     MMPrintString("Connected to ");
