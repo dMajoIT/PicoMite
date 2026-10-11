@@ -1245,8 +1245,8 @@ BLUETOOTH DISCONNECT  BLUETOOTH SCAN
 List them all with:  HELP BLUETOOTH*
 
 ~BLUETOOTH CONNECT
-BLUETOOTH CONNECT name$
-BLUETOOTH CONNECT addr$
+BLUETOOTH CONNECT name$ [, pin$]
+BLUETOOTH CONNECT addr$ [, pin$]
 
 BLUETOOTH HOST VERSIONS ONLY
 Pairs with and connects to a Bluetooth speaker or headphones, a Bluetooth
@@ -1256,6 +1256,12 @@ device as listed by the last BLUETOOTH SCAN (upper and lower case are treated
 as the same).  'addr$' is its address in the form "AA:BB:CC:DD:EE:FF", which
 can be used without a scan.  If the scan found two devices with the same name
 the address must be used.
+'pin$' is the PIN for a speaker or a Bluetooth Classic serial device that asks
+for one when it pairs (the older way of pairing, from before Bluetooth 2.1).
+It is 1 to 16 characters long and is needed only when the device does not
+accept 0000, which is used when 'pin$' is not given.  The device's
+instructions give its PIN (some car radios and serial modules use 1234).  A
+PIN cannot be given for a keyboard or a Bluetooth LE device.
 The command waits up to 30 seconds for the device to answer and then shows the
 format of the audio stream that has been agreed.  Only one speaker can be
 connected at a time.  For a keyboard it waits up to 60 seconds, as a passkey
@@ -9431,10 +9437,10 @@ BLUETOOTH HOST VERSIONS ONLY Directs the audio output to a Bluetooth speaker
 or headphones, which are connected with the BLUETOOTH CONNECT command.  No I/O
 pins are used.  See the chapter Bluetooth Versions for the details.
 'idle' is the time in seconds (0 to 250) after the last sound before the audio
-stream to the speaker is suspended.  The stream is restarted automatically by
-the next sound, which is delayed slightly while it starts.  0 means that the
-stream is never suspended (it starts as soon as the speaker connects).  The
-default is 60 seconds.
+stream to the speaker is suspended.  The stream starts as soon as the speaker
+connects, and once suspended it is restarted automatically by the next sound,
+which is delayed slightly while it starts.  0 means that the stream is never
+suspended.  The default is 60 seconds.
 If Bluetooth is not already the audio output the PicoMite will restart after
 this command.  If it is, the command just changes 'idle'.
 This command must be run at the command prompt (not in a program).

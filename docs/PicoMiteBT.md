@@ -801,16 +801,25 @@ intervals of up to a minute). `BLUETOOTH DISCONNECT` lets it go until the
 next `BLUETOOTH CONNECT` or restart. One speaker can be connected at a
 time.
 
+If the speaker asks for a PIN when it pairs, `0000` is used. A speaker
+that needs another PIN (its instructions say; some car radios use `1234`)
+is connected with the PIN added:
+
+```
+BLUETOOTH CONNECT "Car Radio", "1234"
+```
+
 If `BLUETOOTH CONNECT` reports `Connection failed (Bluetooth error 0x04)`,
 the speaker did not answer in time. This is common just after a speaker
 is switched on, or while it is still trying to reconnect to the phone or
 computer it was last used with. Try again.
 
-To save power the stream to the speaker is suspended when nothing has
-been played for 60 seconds, and restarted by the next sound (which is
-then delayed by about half a second). Change the time by adding it to the
-option, from 0 to 250 seconds. 0 keeps the stream running for as long as
-a speaker is connected:
+The stream to the speaker starts as soon as the speaker connects. To save
+power it is suspended when nothing has been played for 60 seconds, and
+restarted by the next sound (which is then delayed by about half a
+second). Change the time by adding it to the option, from 0 to 250
+seconds. 0 keeps the stream running for as long as a speaker is
+connected:
 
 ```
 OPTION AUDIO BLUETOOTH 120
@@ -864,7 +873,10 @@ Connected to serial device 00:19:01:2D:DC:BF (RFCOMM channel 1) as COM7
 
 For a Classic device the PicoMite first asks it for its serial port (one
 without a serial port is tried as a speaker), then pairs with it,
-answering a PIN request with `0000`. A Bluetooth LE device is used without
+answering a PIN request with `0000`, or with a PIN given after the name
+(many serial modules use `1234`: `BLUETOOTH CONNECT "HC-05", "1234"`).
+A PIN cannot be given for a keyboard or a Bluetooth LE device, which pair
+without one. A Bluetooth LE device is used without
 pairing unless it asks for it. The device is then remembered. One serial
 device is remembered at a time: connecting another replaces it.
 
