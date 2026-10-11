@@ -11,8 +11,9 @@ Every number below is measured, not estimated: the three existing HDMI
 variants were rebuilt from main with the release settings (Release, SDK
 2.3.1, private Ninja build directories, Peter's `build/` untouched) and the
 all-in variant was built the same way on the experiment branch `pc3-all`
-(worktree `../pm_pc3`). The experiment links and fits; it has not been
-flashed or run.
+(worktree `../pm_pc3`). The experiment links and fits, and after Peter
+handed over the COM4 board it was flashed and ran the whole benchmark set
+(section "Performance").
 
 ## Summary
 
@@ -44,20 +45,24 @@ flashed or run.
    and the layer framebuffers core 1 scans. The second group is a correctness
    rule, not a speed preference: a flash write takes the whole QMI window
    down, PSRAM included, so an interrupt that reads a PSRAM buffer during
-   SAVE or an A: write reads garbage or hangs. The recommended policy is
-   therefore: records, temporaries, driver buffers and layers in the SRAM
-   heap; every program-visible allocation (arrays, strings, the editor and
-   LOAD buffers, TLS, JSON, blit and sprite buffers) in PSRAM. Today's
-   allocator already does most of this by accident (anything over half the
-   heap goes to PSRAM, and PSRAM takes the overflow); the change is to make
-   it a rule and to give the driver buffers an allocator that refuses PSRAM.
-5. **The open question is interpreter speed with all program data in PSRAM.**
-   PSRAM reads go through the 16 KB XIP cache that the flash code and the
-   compiled Route B stream also use. Big arrays already live there on every
-   PSRAM build and the games run compiled from it, but small hot arrays and
-   long strings do not. This has to be measured, not argued: the plan puts the
-   allocation policy behind one compile-time switch so HDMIWEB can A/B it on
-   the bench programs before the PC3 build depends on it.
+   SAVE or an A: write reads garbage or hangs. The policy that measured best
+   is today's: records, temporaries and small blocks SRAM first, anything
+   over half the SRAM heap and the overflow in PSRAM, plus a new allocator
+   for the driver buffers that refuses PSRAM; the program-text buffers
+   (EDIT, LOAD and the rest) become a 512 KB PSRAM block so a 256 KB program
+   can be edited and loaded. "Program data always in PSRAM" was measured
+   too, and costs 2-9% for no gain.
+5. **The speed question is measured (section "Performance"), on the COM4
+   PC3.** All program data in PSRAM costs 2-9% on compute-bound programs
+   and far more on a game that draws into a framebuffer that has gone to
+   PSRAM; today's rule (SRAM first, PSRAM for big blocks and the overflow)
+   with the PC3's 108 KB SRAM heap costs under 1% on everything that fits,
+   and the PC3's full framebuffer pool keeps a 320x240 framebuffer in SRAM
+   whatever the heap holds. The all-in build itself, flashed and run on the
+   board, is 5-11% slower than HDMIWEB, and the RC0 images of HDMIUSB and
+   HDMIBTH on the same board show that this is the Bluetooth host's
+   millisecond poll, which HDMIBTH pays today: the PC3 runs at HDMIBTH's
+   speed. The heap in PSRAM is worth about 1%.
 6. **Gating out the irrelevant buys little.** What the PC3 cannot use is
    already out of the two hybrids (SPI panels, touch, VGA, PS/2, PicoCalc,
    VS1053, PWM audio). The remaining candidates (other boards' presets, the
@@ -178,7 +183,7 @@ The proposed classes, and what changes:
 | Variable records | `GetVarMemory`, 2 KB chunks of 32 | SRAM, PSRAM when full; RUN reserves the declared globals' chunks | same | every variable reference reads its record |
 | Temporaries | `GetTempMemory`, `GetTempStrMemory` | SRAM bottom-up, PSRAM when full | same for small ones; the big program buffers (next row) go to PSRAM by size | expression evaluation allocates these constantly |
 | Program buffers | EDIT, LOAD, LIBRARY LOAD/SAVE, LIST to file, XMODEM, FM: all sized from `EDIT_BUFFER_SIZE` | `heap_memory_size - 3072 - 3 * HRes`, i.e. the whole SRAM heap | a constant bigger than the program (`MAX_PROG_SIZE + 64 KB`); the SRAM search fails and the existing fallback lands them in PSRAM | with a 108 KB heap the editor could not hold a 256 KB program |
-| Program data | arrays, strings over the inline size, `LOCAL` arrays, structures | SRAM first, PSRAM when big or when SRAM is full | **PSRAM always** | this is "the heap in PSRAM"; it also makes placement independent of allocation order and keeps SRAM for the rows above and below |
+| Program data | arrays, strings over the inline size, `LOCAL` arrays, structures | SRAM first, PSRAM when over half the heap or when SRAM is full | **the same** (measured: "PSRAM always" costs 2-9% and gains nothing; see Performance) | with a 108 KB heap the threshold is 54 KB; a program whose small data outgrows the heap spills, as on HDMIWEB today past 104 KB |
 | Driver buffers | COM rx/tx ([Serial.c](../io/Serial.c#L693)), audio sample buffers ([Audio.c](../io/Audio.c#L873)), ADC DMA ([External.c](../misc/External.c#L5640)), stepper blocks and arcs ([stepper.c](../io/stepper.c#L237)), MEMORY SHARE, PLAY BBC state, PIO rings | plain `GetMemory`, so SRAM unless SRAM is full | a new `GetDriverMemory`: SRAM only, a precise error if there is none | an interrupt or DMA reading PSRAM during a flash write reads a dead window (below) |
 | Layers | `FRAMEBUFFER LAYER`, `LAYER TOP` | refused if the allocation lands in PSRAM ([FrameBuffer.c](../graphics/FrameBuffer.c#L1621)) | same, through `GetDriverMemory` | core 1 reads them every scanline |
 | JPEG capture | [I2C.c](../io/I2C.c#L3703) | already refuses PSRAM ("Not enough fast RAM") | same | DMA |
@@ -189,10 +194,12 @@ The proposed classes, and what changes:
 
 Peter's wording was "exclusively in PSRAM". The classes above are what that
 means once the hardware rules are applied: an SRAM pool for the firmware's
-own use, a PSRAM heap for the program. The pure form is the same table with
-"Program data" in PSRAM and nothing else moved, which is the recommendation;
-a variant that also sends temporaries to PSRAM is not worth measuring, since
-temporaries are the hottest allocations the interpreter makes.
+own use, a PSRAM heap for the program. The pure form, "Program data" always
+in PSRAM and nothing else moved, was built (`PSRAMHEAP_TEST`) and measured
+against today's rule on the same board: it is slower on every program and
+gains nothing, so the table keeps today's rule. A variant that also sends
+temporaries to PSRAM was not worth measuring, since temporaries are the
+hottest allocations the interpreter makes.
 
 ### Why interrupt and DMA buffers cannot be in PSRAM
 
@@ -501,6 +508,134 @@ survive the three flashes:
 | B: HDMIWEB `PSRAMHEAP_TEST=ON` | the phase 2 policy's cost, upper bound |
 | C: HDMIWEB `HEAPKB=108` | phase 1: a 108 KB SRAM heap, PSRAM overflow |
 
+### Measured (2026-10-11, COM4 PC3, HDMIWEB, 315 MHz, 640x480)
+
+Peter flashed HDMIWEB from the branch (identical to the release for that
+variant) and handed the board over; the three images were flashed in turn,
+each verified against its uf2 by `fwsum.py`, A was flashed back at the end
+and its repeat run agreed with the first to 0.1%. Every program was run with
+`OPTION COMPILE OFF` and `ON` after `MODE 1 : CLS` and `OPTION CONSOLE SERIAL`.
+Prince of Pico and PETSCII Robots were not run: their data sets are not on
+this machine. The chess bench is the `chessiter.bas` benchmark cut to plies
+1-3 (8,911 nodes). The raw outputs, the driver and the new string benchmark
+are in `Bas/bench/results/pc3heap_1011/`.
+
+| Program, mode | A: release | B: all blocks to PSRAM | C: 108 KB SRAM heap, today's rule |
+| --- | --- | --- | --- |
+| solar_eclipse, text (s) | 14.21 | 14.69 (+3.4%) | 14.32 (+0.8%) |
+| solar_eclipse, compiled (s) | 5.65 | 5.88 (+4.1%) | 5.68 (+0.6%) |
+| Exile kernel, compiled (ms/tick) | 4.58 | 4.67 (+1.9%) | 4.62 (+0.9%) |
+| Exile kernel, text (ms/tick) | 10.59 | 10.77 (+1.7%) | 10.69 (+0.9%) |
+| chess plies 1-3, compiled (s) | 35.8 | 38.9 (+8.7%) | 36.0 (+0.6%) |
+| chess plies 1-3, text (s) | 193.4 | 197.2 (+1.9%) | 194.2 (+0.4%) |
+| Elite demo, compiled (ms/frame) | 9.49 | 16.66 (+75%) | 15.58 (+64%) |
+| Elite demo, text (ms/frame) | 20.94 | 28.41 (+36%) | 27.74 (+32%) |
+| micro suite, 36 statements, text | | +0 to +2% (one +6%: a SUB creating 3 LOCAL arrays) | +0 to +2% |
+| micro suite, compiled | | +0 to +3% | +0 to +2% |
+| 100-char string array compare / copy, text | 24.0 / 22.3 us | +6.6% / +9.1% | +2.0% / +1.1% |
+| 64 KB integer array, strided read / write, compiled | 1.17 / 1.22 us | +30% / +44% | +31% / +46% |
+| 64 KB integer array, strided read / write, text | 16.5 / 17.1 us | +2.6% / +3.8% | +2.9% / +4.0% |
+
+What it says:
+
+- **Program data in PSRAM costs 2-9% on compute-bound programs.** solar
+  3-4%, the Exile kernel 2%, chess 9% compiled (its 32 KB history table and
+  the board arrays are what it touches). The micro suite shows the floor:
+  a single array element read or write in PSRAM is 1-3% slower than SRAM in
+  the interpreter, whose own overhead dominates, and 30-45% slower compiled,
+  where the access is most of the statement. Strings cost 7-9% where the
+  string itself is in PSRAM (array elements), nothing where it is a
+  temporary.
+- **Elite is the case that matters, and its cost is not the policy.** Under
+  C, today's rule with a 108 KB heap, it is +64% compiled, nearly the +75%
+  of B. In C small blocks still go to SRAM first; Elite's working set is
+  simply bigger than 108 KB, so the rest spills, and what spills is hot:
+  its framebuffer (38 KB), the 3D meshes, and the LOCAL arrays its routines
+  create every frame. The absolute cost is the same in both modes (about
+  +7 ms a frame), a fixed per-frame price for drawing into and copying out
+  of PSRAM. Under A, with 208 KB, everything fits. (On the first C run Elite
+  did not even LOAD: the 117 KB program is bigger than a load buffer sized
+  from a 108 KB heap, which is exactly why the PC3 gives that buffer 512 KB
+  of PSRAM; the `HEAPKB` knob now carries the same rule.)
+- **So the choice of policy (decision 2) is secondary; where the
+  framebuffer a game draws into lands is what decides whether it runs as it
+  does today.** Today's rule (C) is free for everything that fits, and no
+  worse than B for what does not, so phase 2 should keep it: SRAM first,
+  PSRAM for blocks over half the SRAM heap and for the overflow, plus the
+  driver allocator for correctness. "Program data always in PSRAM" would
+  cost the 2-9% on every program for no gain.
+
+**Where Elite's 7 ms a frame goes, and why the PC3 build does not pay it.**
+A sweep of HDMIWEB builds with 128, 144, 160 and 176 KB SRAM heaps left
+Elite at 15.5-17.2 ms/frame compiled: no knee, only the 208 KB release gets
+9.5. A probe program (`fbprobe.bas` in the results directory, run on A:
+`MODE 2`, `FRAMEBUFFER CREATE`, a frame of 50 lines, a box, text and
+`FRAMEBUFFER COPY F,N`, then the same after filling the SRAM heap with
+arrays) measured the frame at 9.7 ms with F in the SRAM heap and 15.9 ms with
+F in PSRAM, text mode, and 8.9 against 15.1 compiled: the same +6-7 ms Elite
+loses. `MM.INFO(WRITEBUFF)` showed where F was each time. The reason the
+sweep never recovered is in [FrameBuffer.c](../graphics/FrameBuffer.c#L1569):
+`FRAMEBUFFER CREATE` puts F inside the framebuffer pool when `ScreenSize`
+is under a third of the pool, and only otherwise takes it from the heap.
+HDMIWEB's cut-down pool is 96,000 bytes, a third is 32,000, and a 320x240
+F is 38,400, so on HDMIWEB F always comes from the heap and goes to PSRAM
+whenever the heap is too full or too fragmented for 150 contiguous pages,
+which it was on every heap below 208 KB. The PC3 build has the full
+153,600-byte pool, a third is 51,200, so at MODE 2 (and MODE 1) a 640x480
+F lives in the pool, in SRAM, whatever the heap holds. The one case that
+still takes the heap is MODE 3/4/5 at 640x480 (153,600 bytes, PSRAM on
+every build today), which is also what today's HDMIWEB does.
+
+**The PC3 build itself, on the same board (COM4, flashed after the A/B/C).**
+It boots, signs on as `PicoMitePC3`, verifies against its uf2, keeps the A:
+drive across the variant change (the 16 MB fixed map) and takes the
+`OPTION RESET PICO COMPUTER 3` preset (PSRAM on GP47, SD, I2S, 315 MHz),
+which on this map no longer asks or formats. The first boot after the
+variant change comes up without the preset, so the PSRAM is off until it is
+applied: the auto-configure on GP27 did not run, as noted for HDMIWEB on
+2026-09-26. With the preset, `MM.INFO(HEAP)` reports 6,383,616: 90 KB of the
+108 KB SRAM heap free at the prompt plus the 6 MB of PSRAM. The full set,
+every check passing:
+
+| Program, mode | A: HDMIWEB release | PC3 build | PC3 / A |
+| --- | --- | --- | --- |
+| solar_eclipse, text (s) | 14.21 | 15.46 | +8.8% |
+| solar_eclipse, compiled (s) | 5.65 | 6.01 | +6.3% |
+| Exile kernel, compiled (ms/tick) | 4.58 | 4.86 | +6.1% |
+| Exile kernel, text (ms/tick) | 10.59 | 11.60 | +9.5% |
+| Elite demo, compiled (ms/frame) | 9.49 | 10.39 | +9.4% |
+| Elite demo, text (ms/frame) | 20.94 | 23.30 | +11.3% |
+| chess plies 1-3, compiled (s) | 35.8 | 37.6 | +5.1% |
+| chess plies 1-3, text (s) | 193.4 | 211.0 | +9.1% |
+
+Elite's +9% rather than +64% is the framebuffer in the pool, as predicted.
+But solar text, which hardly touches the heap and was +0.8% with the same
+108 KB heap on HDMIWEB (C), is +8.8% here, so most of the PC3's cost is not
+the heap at all. The two things the PC3 adds that C did not have are the
+Bluetooth host's poll (`bt_keyboard_poll` runs the cyw43 and btstack once a
+millisecond from every statement's `CheckAbort`) and the full-pipeline
+scanout (HDMIloop0, RGB555 at 640x480, more SRAM traffic from core 1 than
+the cut-down RGB332 loop). The RC0 release images of HDMIUSB (full pipeline,
+no radio) and HDMIBTH (cut-down pipeline, Bluetooth host), same board, same
+preset, solar_eclipse:
+
+| Build | text (s) | compiled (s) |
+| --- | --- | --- |
+| HDMIWEB (A) | 14.21 | 5.65 |
+| HDMIUSB | 14.36 (+1.1%) | 5.59 (-1.0%) |
+| HDMIBTH | 15.50 (+9.1%) | 5.90 (+4.5%) |
+| PC3 | 15.46 (+8.8%) | 6.01 (+6.3%) |
+
+The full pipeline costs about 1% in text mode and nothing compiled. The
+Bluetooth host's poll costs 9% in text mode and 4.5% compiled, and every
+HDMIBTH user pays it today. The PC3 runs at HDMIBTH's speed in text mode and
+2% behind it compiled, which is the WiFi poll and the smaller heap (C2 put
+the heap at under 1%). **So the heap in PSRAM is worth about 1%, and the
+price of the all-in build is the price of the Bluetooth host.** The poll's
+cadence, running the cyw43 and btstack every millisecond whether or not
+anything is connected, is a tuning target for HDMIBTH and the PC3 alike, and
+outside this review.
+
 The test plan, on the bench programs Peter judges by, at a fixed clock,
 the three HDMIWEB builds first, then the PC3 build:
 
@@ -524,7 +659,7 @@ guessed. If long strings regress, string scalars join the records in SRAM
 | --- | --- | --- | --- |
 | 0 (done) | The experiment: the PC3 variant that links | build margins | 5 files |
 | 1 | The variant that runs: one radio init (done), one heartbeat (done), `EDIT_BUFFER_SIZE` as a PSRAM-sized constant (done), heap 108 KB with today's allocator (done), program 180 KB, flash offset 1728 KB, `buildpicomite.bat` target (done); the two polls left as they are (each throttled to once a millisecond; `ProcessWeb` returns early with no WiFi, so the Bluetooth poll must stay) | Boot on the PC3; WiFi join, telnet, TLS fetch; BT keyboard, mouse, speaker; USB keyboard and MSC; HDMI at every resolution and mode; EDIT a 150 KB program; goldens; the A/B/C above | the branch builds; the board tests are the work |
-| 2 | The heap: the allocation classes (program data to PSRAM behind `PSRAMHEAP`), `GetDriverMemory` and its call sites (COM, audio, ADC, stepper, share, BBC, layers), `CallocMemory` to PSRAM, `PSRAM_RESERVE` replacing the four 2 MB sites, the Route B flash stream dropped, `MAX_PROG_SIZE` 256 KB, new MagicKey | The benchmark table above on HDMIWEB (A/B) and the PC3; SAVE CONTEXT, CHAIN, RAM slots, LIBRARY LOAD RAM, a 250 KB program through EDIT, LOAD, SAVE, LIBRARY SAVE; flash writes during COM traffic, WAV playback and a stepper run; PSRAM disabled at boot | medium; the allocator change is ~150 lines, the call sites ~40 |
+| 2 | The heap: today's rule kept (measured), `GetDriverMemory` and its call sites (COM, audio, ADC, stepper, share, BBC, layers), `CallocMemory` to PSRAM, `PSRAM_RESERVE` replacing the four 2 MB sites, the Route B flash stream dropped, `MAX_PROG_SIZE` 256 KB, new MagicKey | SAVE CONTEXT, CHAIN, RAM slots, LIBRARY LOAD RAM, a 250 KB program through EDIT, LOAD, SAVE, LIBRARY SAVE; flash writes during COM traffic, WAV playback and a stepper run; PSRAM disabled at boot; the benchmark set again | small to medium; the call sites ~40 lines, the reserve and map ~30 |
 | 3 | PC3-only gating (presets, flash map, PSRAM option), optional stepper decision, lwIP pool sizing | build margins, OPTION LIST, a TCP throughput check if the pool shrinks | small |
 | 4 | Manual (variant table, memory section, the PSRAM map), release notes, the Bluetooth and WiFi companions' variant lists, the release asset | help lint, `release_preflight.py` | small |
 
@@ -537,9 +672,11 @@ what makes the 256 KB program and the deterministic placement true.
 
 1. **Name:** `COMPILE=PC3`, sign-on and `MM.DEVICE$` `PicoMitePC3`.
 2. **Phase 2's policy:** program data always in PSRAM, measured first. The
-   measurement is the gate: if the games or the string programs lose too
-   much, the size-threshold knob (small blocks SRAM first) is the fallback,
-   and the records stay in SRAM in every case.
+   measurement (same day, section "Performance") says today's rule: "always
+   in PSRAM" costs 2-9% on compute-bound programs and gains nothing, while
+   today's rule with the PC3's heap costs under 1%. Recommendation: keep
+   today's rule, add only the driver allocator; the `PSRAMHEAP_TEST` knob
+   stays as a measuring tool.
 3. **The Route B flash stream:** dropped on this variant; the 3 MB system
    top, the 1 MB MOD buffer and the A: drive at 4 MB stay as on every other
    RP2350 build.
