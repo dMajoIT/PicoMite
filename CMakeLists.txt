@@ -21,6 +21,7 @@ set(VALID_COMPILE_VARIANTS
 	PICOBTHRP2350
 	HDMIBTH
 	HDMIWEB
+	PC3
 )
 
 # VS Code uses this default when COMPILE is not supplied explicitly.
@@ -172,6 +173,7 @@ set(RP2350_VARIANTS
 	PICOBTHRP2350
 	HDMIBTH
 	HDMIWEB
+	PC3
 )
 
 set(BT_VARIANTS
@@ -187,12 +189,17 @@ set(BT_VARIANTS
 set(BTH_VARIANTS
 	PICOBTHRP2350
 	HDMIBTH
+	PC3
 )
 
+# PC3 = the Pico Computer 3 all-in build (experiment, branch pc3-all): HDMIWEB's
+# WiFi/lwIP/TLS + HDMIBTH's Bluetooth host, full (not cut-down) HDMI, USB host.
+# It is in every list HDMIWEB and HDMIBTH are in, plus BTH_VARIANTS.
 set(WEB_VARIANTS
 	WEB
 	WEBRP2350
 	HDMIWEB
+	PC3
 )
 
 set(GUI_VARIANTS
@@ -213,6 +220,7 @@ set(USB_HOST_VARIANTS
 	HDMIUSB
 	HDMIBTH
 	HDMIWEB
+	PC3
 )
 
 set(UPNG_VARIANTS
@@ -227,6 +235,7 @@ set(UPNG_VARIANTS
 	PICOBTHRP2350
 	HDMIBTH
 	HDMIWEB
+	PC3
 )
 
 set(RAYCASTER_VARIANTS
@@ -240,6 +249,7 @@ set(RAYCASTER_VARIANTS
 	PICOBTHRP2350
 	HDMIBTH
 	HDMIWEB
+	PC3
 )
 
 set(VGA_PIO_VARIANTS
@@ -261,6 +271,7 @@ set(HDMI_VARIANTS
 	HDMIUSB
 	HDMIBTH
 	HDMIWEB
+	PC3
 )
 
 set(PICOMITE_VARIANTS
@@ -295,6 +306,7 @@ set(PICO_RAND_VARIANTS
 	PICOBTHRP2350
 	HDMIBTH
 	HDMIWEB
+	PC3
 )
 set(USES_SUBPROFILE_VARIANTS
 	HDMIUSB
@@ -308,11 +320,13 @@ set(USES_SUBPROFILE_VARIANTS
 	PICOBTHRP2350
 	HDMIBTH
 	HDMIWEB
+	PC3
 )
 compile_is_in(IS_RP2350 ${RP2350_VARIANTS})
 compile_is_in(IS_WEB ${WEB_VARIANTS})
 compile_is_in(IS_WEBRP2350 WEBRP2350)
 compile_is_in(IS_HDMIWEB HDMIWEB)
+compile_is_in(IS_PC3 PC3)
 compile_is_in(HAS_GUI ${GUI_VARIANTS})
 compile_is_in(IS_PICOMIN PICOMIN)
 compile_is_in(IS_FULL_RP2040 ${FULL_RP2040_VARIANTS})
@@ -364,7 +378,7 @@ endif()
 # PICOMITEMIN, but HDMIWEB is an HDMI graphics build (like HDMIBTH) and its
 # Raycaster needs Turtle's fill_patterns[], so keep it on for HDMIWEB.
 set(USES_TURTLE TRUE)
-if((IS_WEB OR IS_PICOMIN) AND NOT IS_HDMIWEB)
+if((IS_WEB OR IS_PICOMIN) AND NOT (IS_HDMIWEB OR IS_PC3))
 	set(USES_TURTLE FALSE)
 endif()
 
@@ -524,7 +538,7 @@ endif()
 # WEB variant (IS_WEB) but its display is HDMI, not a SPI panel — exclude it
 # so it mirrors HDMIBTH (GUI.c supplies the touch stubs). This also keeps
 # SSD1963.h's `nop` macro out of every HDMIWEB TU.
-if((IS_WEB OR HAS_GUI OR IS_PICOMIN) AND NOT IS_HDMIWEB)
+if((IS_WEB OR HAS_GUI OR IS_PICOMIN) AND NOT (IS_HDMIWEB OR IS_PC3))
 	target_sources(PicoMite PRIVATE ${DISPLAY_SOURCES})
 endif()
 
@@ -802,7 +816,7 @@ if(IS_PICOMITE AND NOT IS_BT AND NOT IS_BTH)
 	)
 endif()
 
-if((IS_BT OR IS_BTH) AND NOT COMPILE STREQUAL "HDMIBTH")
+if((IS_BT OR IS_BTH) AND NOT COMPILE STREQUAL "HDMIBTH" AND NOT IS_PC3)
 	# IS_BT / IS_BTH each supply their own PICO_HEAP_SIZE / PICO_CORE0_STACK_SIZE
 	# / GUICONTROLS below; PICOMITE is still defined here so the existing
 	# PicoMite RP2350 code paths fire. Excluded for HDMIBTH because that
@@ -851,7 +865,7 @@ if(IS_HDMI)
 		HDMI
 		GUICONTROLS
 	)
-	if(NOT COMPILE STREQUAL "HDMIBTH" AND NOT COMPILE STREQUAL "HDMIWEB")
+	if(NOT COMPILE STREQUAL "HDMIBTH" AND NOT COMPILE STREQUAL "HDMIWEB" AND NOT IS_PC3)
 		target_compile_definitions(PicoMite PRIVATE
 			PICO_HEAP_SIZE=0x800
 			PICO_CORE0_STACK_SIZE=0x2000
@@ -885,6 +899,21 @@ if(COMPILE STREQUAL "HDMIBTH")
 	)
 endif()
 
+if(IS_PC3)
+	# PC3 (experiment): both hybrids' identity markers, so every HDMIWEB gate
+	# (WiFi on an HDMI build) and every HDMIBTH gate (Bluetooth host on an HDMI
+	# build) applies, plus its own marker for the few places the two collide
+	# (the configuration.h budget, MES_SIGNON, MM.DEVICE$, the cyw43 init).
+	# IS_BTH supplies the heap/stack budget (0x4000/0x4000) and the BT defines;
+	# IS_WEB supplies PICOMITEWEB and the lwIP poll backend.
+	target_compile_definitions(PicoMite PRIVATE
+		PICOMITEHDMIBTH
+		PICOMITEHDMIWEB
+		PICOMITEPC3
+		CYW43_HOST_NAME="PicoMitePC3"
+	)
+endif()
+
 if(IS_WEB)
 	# Common WiFi/lwIP defines for every WEB variant (WEB, WEBRP2350, HDMIWEB).
 	# PICO_CYW43_ARCH_POLL = the lwIP poll backend (pumped from core0 in
@@ -894,9 +923,14 @@ if(IS_WEB)
 		PICOMITEWEB
 		PICO_CYW43_ARCH_POLL
 		CYW43_PIO_CLOCK_DIV_DYNAMIC=1
-		PICO_HEAP_SIZE=0x2800
-		PICO_CORE0_STACK_SIZE=0x2000
 	)
+	if(NOT IS_PC3)
+		# (PC3 takes the Bluetooth host builds' 0x4000/0x4000 from the IS_BTH block)
+		target_compile_definitions(PicoMite PRIVATE
+			PICO_HEAP_SIZE=0x2800
+			PICO_CORE0_STACK_SIZE=0x2000
+		)
+	endif()
 	if(IS_WEBRP2350 OR IS_HDMIWEB)
 		# OPTION CYW43 PINS: the radio's pins are set at run time
 		# (cyw43_set_pins_wl, InitCYW43PIO). The RP2040 WebMite keeps them fixed.
@@ -920,7 +954,7 @@ if(IS_WEB)
 			PICOMITEHDMIWEB
 			CYW43_HOST_NAME="PicoMiteHDMIWEB"
 		)
-	else()
+	elseif(NOT IS_PC3)
 		target_compile_definitions(PicoMite PRIVATE
 			CYW43_HOST_NAME="WebMite"
 		)
@@ -1078,7 +1112,10 @@ if(IS_BTH)
 		pico_cyw43_arch_poll
 		pico_btstack_sbc_encoder
 	)
-	target_compile_definitions(PicoMite PRIVATE CYW43_LWIP=0)
+	if(NOT IS_PC3)
+		# (PC3 has lwIP: pico_cyw43_arch_lwip_poll from the IS_WEB block sets CYW43_LWIP=1)
+		target_compile_definitions(PicoMite PRIVATE CYW43_LWIP=0)
+	endif()
 	# The SDK's default TLV bank is inside the A: drive; BTKeyboard.c hands
 	# btstack_cyw43_init() the Option-backed store instead.
 	target_link_options(PicoMite PRIVATE

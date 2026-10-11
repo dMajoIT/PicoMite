@@ -8156,7 +8156,9 @@ void MIPS16 fun_device(void)
 #ifdef PICOMITEVGA
 #ifdef USBKEYBOARD
 #ifdef HDMI
-#ifdef PICOMITEHDMIBTH
+#if defined(PICOMITEPC3)
+    strcpy((char *)sret, "PicoMitePC3");
+#elif defined(PICOMITEHDMIBTH)
     strcpy((char *)sret, "PicoMiteHDMIBTH");
 #elif defined(PICOMITEHDMIWEB)
     strcpy((char *)sret, "PicoMiteHDMIWEB");

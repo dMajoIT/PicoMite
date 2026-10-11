@@ -211,7 +211,9 @@ uint8_t PSRAMpin;
 #endif
 #ifdef USBKEYBOARD
 #ifdef HDMI
-#ifdef PICOMITEHDMIBTH
+#if defined(PICOMITEPC3)
+#define MES_SIGNON "\rPicoMitePC3 MMBasic USB " CHIP " Edition V" VERSION "\r\n"
+#elif defined(PICOMITEHDMIBTH)
 #define MES_SIGNON "\rPicoMiteHDMIBTH MMBasic USB " CHIP " Edition V" VERSION "\r\n"
 #elif defined(PICOMITEHDMIWEB)
 #define MES_SIGNON "\rPicoMiteHDMIWEB MMBasic USB " CHIP " Edition V" VERSION "\r\n"
@@ -4121,7 +4123,9 @@ uint32_t testPSRAM(void)
         else
             CYW43Failed(); // reported after the banner
 #endif
-#if defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)
+#if (defined(PICOMITEBTH) || defined(PICOMITEHDMIBTH)) && !defined(PICOMITEWEB)
+        /* (PC3: the WiFi block below does the one cyw43_arch_init for both
+           radios, then WebConnect and bt_keyboard_init.) */
 #ifdef PICOMITEHDMIBTH
         /* HDMICore hardcodes DMACH_PING=0 / DMACH_PONG=1 (see the HDMI
            scanout block above). CYW43's bus_pio_spi grabs two unused
@@ -4235,7 +4239,10 @@ uint32_t testPSRAM(void)
 #ifdef PICOMITEVGA
 #ifdef HDMI
 #ifdef USBKEYBOARD
-#ifdef HDMICUTDOWN
+#if defined(PICOMITEPC3)
+        /* "PicoMitePC3" is one char shorter than "PicoMiteHDMI" */
+        banner[31] = (rp2350a ? 'A' : 'B');
+#elif defined(HDMICUTDOWN)
         /* "PicoMiteHDMIBTH" / "PicoMiteHDMIWEB" are both 3 chars longer
            than "PicoMiteHDMI", so the A/B insertion point shifts by 3:
            banner[35] is the trailing space inside the CHIP macro
@@ -4483,6 +4490,9 @@ uint32_t testPSRAM(void)
                 {
                     startupcomplete = 1;
                     WebConnect();
+#if defined(PICOMITEHDMIBTH)
+                    bt_keyboard_init(); /* (PC3: the Bluetooth host on the same radio) */
+#endif
                 }
             }
 #if CYW43_PIN_WL_DYNAMIC

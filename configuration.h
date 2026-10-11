@@ -72,7 +72,19 @@ extern "C"
 #define MAX_CPU Freq378P
 #define MIN_CPU FreqX
 #ifdef USBKEYBOARD
-#ifdef PICOMITEHDMIBTH
+#if defined(PICOMITEPC3)
+   /* PC3 (experiment, branch pc3-all): HDMIWEB + HDMIBTH on the full HDMI
+      pipeline (153600-byte pool).  The numbers here are the experiment's, to
+      measure the build: the heap is deliberately small so the link shows how
+      much SRAM is left once everything else is in, and the program size is
+      180 KB because the current 2 MB PSRAM reserve and 3 MB flash system
+      area are sized for at most 208 KB and 7 program-sized areas.  The design
+      review (docs/PC3_All_In_Build_Design_Review.md) sets the real values. */
+#define FLASH_TARGET_OFFSET (1728 * 1024)
+#define HEAP_MEMORY_SIZE (96 * 1024)
+#define MAX_PROG_SIZE (180 * 1024)
+#define MagicKey 0x7C3A11E1
+#elif defined(PICOMITEHDMIBTH)
    /* HDMIBTH: HDMIUSB-style display stack + CYW43 wireless + BLE HID
       host. The CYW43 firmware blob (~220 KB linked via the IS_BTH
       block) pushes the firmware image well past HDMIUSB's 1056 KB
