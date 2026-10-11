@@ -798,14 +798,14 @@ void MIPS16 cmd_drive(void)
 extern unsigned int mmap[HEAP_MEMORY_SIZE / PAGESIZE / PAGESPERWORD];
 extern unsigned int psmap[PSMAPWORDS];
 static void PrintImageSlotHeader(int *pp); /* defined with cmd_flash below */
-/* The slots and the 384 KB context-save area below them share a fixed 2 MB
-   reserved off the top of the PSRAM, so a future heap increase could push the
+/* The slots and the 384 KB context-save area below them share a fixed reserve
+   (PSRAM_RESERVE: 2 MB, or the PC3's 2.5 MB) off the top of the PSRAM, so a future heap increase could push the
    last slot past the end of the part.  Fail the build rather than the board. */
-_Static_assert(0x60000 + MAXRAMSLOTS * MAX_PROG_SIZE <= 2 * 1024 * 1024,
-               "the RAM slots no longer fit the 2 MB PSRAM reserve");
+_Static_assert(0x60000 + MAXRAMSLOTS * MAX_PROG_SIZE <= PSRAM_RESERVE,
+               "the RAM slots no longer fit the PSRAM reserve (PSRAM_RESERVE)");
 /* and above them Route B's compiled program, RB_STREAM_SLOTS program sizes at least */
-_Static_assert(0x60000 + (MAXRAMSLOTS + RB_STREAM_SLOTS) * MAX_PROG_SIZE <= 2 * 1024 * 1024,
-               "the RAM slots and the compiled program no longer fit the 2 MB PSRAM reserve: lower MAX_PROG_SIZE");
+_Static_assert(0x60000 + (MAXRAMSLOTS + RB_STREAM_SLOTS) * MAX_PROG_SIZE <= PSRAM_RESERVE,
+               "the RAM slots and the compiled program no longer fit the PSRAM reserve: lower MAX_PROG_SIZE or raise PSRAM_RESERVE");
 void MIPS16 cmd_psram(void)
 {
     if (!PSRAMsize)

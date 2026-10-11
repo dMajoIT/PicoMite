@@ -3880,7 +3880,7 @@ uint32_t testPSRAM(void)
                 }
             }
             else
-                PSRAMsize -= 2 * 1024 * 1024;
+                PSRAMsize -= PSRAM_RESERVE; // the context area, the RAM slots and the stream (configuration.h)
         }
 #endif
         if (clock_get_hz(clk_usb) != 48000000)

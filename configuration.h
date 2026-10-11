@@ -73,20 +73,20 @@ extern "C"
 #define MIN_CPU FreqX
 #ifdef USBKEYBOARD
 #if defined(PICOMITEPC3)
-   /* PC3 (experiment, branch pc3-all): HDMIWEB + HDMIBTH on the full HDMI
-      pipeline (153600-byte pool).  The numbers here are the experiment's, to
-      measure the build: the heap is deliberately small so the link shows how
-      much SRAM is left once everything else is in, and the program size is
-      180 KB because the current 2 MB PSRAM reserve and 3 MB flash system
-      area are sized for at most 208 KB and 7 program-sized areas.  The design
-      review (docs/PC3_All_In_Build_Design_Review.md) sets the real values. */
+   /* PC3 (branch pc3-all): HDMIWEB + HDMIBTH on the full HDMI pipeline
+      (153600-byte pool); docs/PC3_All_In_Build_Design_Review.md.
+      The flash map: firmware to 1728 KB, options, saved variables, three
+      256 KB flash slots and the 256 KB program, ending at 2772 KB under the
+      16 MB fixed map's 3 MB system top.  There is no Route B flash stream
+      (RB_STREAM_FLASH_SLOTS below): this build has PSRAM, and the stream
+      lives in the PSRAM reserve, which is 2.5 MB here (PSRAM_RESERVE). */
 #define FLASH_TARGET_OFFSET (1728 * 1024)
    /* 108 KB: the SRAM heap the review's budget gives with the full 153600-byte
-      pool (4.5 KB of RAM margin left for the stack); the boot-time resize for
+      pool (4.2 KB of RAM margin left for the stack); the boot-time resize for
       800x600, 848x480 and 800x480 takes its pool from this, as on HDMIUSB. */
 #define HEAP_MEMORY_SIZE (108 * 1024)
-#define MAX_PROG_SIZE (180 * 1024)
-#define MagicKey 0x7C3A11E1
+#define MAX_PROG_SIZE (256 * 1024) // (Peter, 2026-10-11; the 2.5 MB PSRAM reserve and the dropped flash stream are what allow it)
+#define MagicKey 0x7C3A11E2
 #elif defined(PICOMITEHDMIBTH)
    /* HDMIBTH: HDMIUSB-style display stack + CYW43 wireless + BLE HID
       host. The CYW43 firmware blob (~220 KB linked via the IS_BTH
@@ -731,7 +731,16 @@ extern "C"
    slot, so a program that fills every RAM slot still runs compiled; RAM ERASE
    ALL (PSRAMblocksize) does not reach it. */
 #define PSRAMstream (PSRAMblock + PSRAMblocksize)
-#define PSRAMstreamsize (2 * 1024 * 1024 - 0x60000 - PSRAMblocksize)
+/* The reserve off the top of the PSRAM: the context-save area, the RAM slots
+   and the stream.  2 MB everywhere; 2.5 MB on the PC3 (Peter, 2026-10-11),
+   whose 256 KB program needs 384 KB + 8 x 256 KB = 2432 KB of it.  Used by
+   PicoMite.c (PSRAMsize), FileIO.c (the assertions) and psram.c (the clear). */
+#ifdef PICOMITEPC3
+#define PSRAM_RESERVE (2560 * 1024)
+#else
+#define PSRAM_RESERVE (2 * 1024 * 1024)
+#endif
+#define PSRAMstreamsize (PSRAM_RESERVE - 0x60000 - PSRAMblocksize)
 
 #else
 #ifndef PICOMITEWEB
@@ -916,7 +925,15 @@ extern "C"
 #define RB_STREAM_SLOTS 3
 #define RB_STREAM_FLASH (FLASH_TARGET_OFFSET + FLASH_ERASE_SIZE + SAVEDVARS_FLASH_SIZE + \
                          ((MAXFLASHSLOTS + 1) * MAX_PROG_SIZE))
-#define RB_STREAM_FLASH_SIZE (RB_STREAM_SLOTS * MAX_PROG_SIZE)
+/* The PC3 has PSRAM by definition, so it keeps no flash stream: the area is
+   empty and the system flash ends at the program (a board whose PSRAM does
+   not answer runs its programs as text - RBSlotSize() is 0). */
+#ifdef PICOMITEPC3
+#define RB_STREAM_FLASH_SLOTS 0
+#else
+#define RB_STREAM_FLASH_SLOTS RB_STREAM_SLOTS
+#endif
+#define RB_STREAM_FLASH_SIZE (RB_STREAM_FLASH_SLOTS * MAX_PROG_SIZE)
 #define TOP_OF_SYSTEM_FLASH (RB_STREAM_FLASH + RB_STREAM_FLASH_SIZE)
 /* The fixed flash map of a 16 MB flash, the same on every RP2350 build so that
    the A: drive survives a change of build or an options reset (SetFlashMap in
