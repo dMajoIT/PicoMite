@@ -15767,6 +15767,8 @@ ZMODEM RECEIVE
 or
 ZMODEM RECEIVE file$
 or
+ZMODEM RECEIVE "*"
+or
 ZMODEM CRUNCH
 
 Transfers a BASIC program or a file to or from a remote computer using the
@@ -15785,8 +15787,18 @@ from a file on the Flash Filesystem or SD Card.  When sending, the remote
 computer is given the name of the file without its drive or directory.  When
 receiving, the name sent by the remote computer is ignored and the data is
 saved in 'file$', overwriting any file of that name.  If the remote computer
-sends several files only the first is received.  ZMODEM SEND file$ and ZMODEM
-RECEIVE file$ can also be used in a program.
+sends several files only the first is received, unless 'file$' is "*" (see
+below).  ZMODEM SEND file$ and ZMODEM RECEIVE file$ can also be used in a
+program.
+ZMODEM RECEIVE "*" will accept any number of files and save each one in the
+current directory under the name given by the remote computer (without any
+directory), overwriting any file of that name.  A directory can be put in
+front of the *, for example ZMODEM RECEIVE "B:/downloads/*".  In Tera Term
+select all the files to be sent in the ZMODEM Send dialog; with lrzsz list
+them all, for example sz *.bas.  When the transfer is complete the number of
+files and bytes received is reported.  If an error stops the transfer part way
+through, the files received before it are complete and the error message says
+how many there were.
 The CRUNCH option works like RECEIVE but will remove all comments, blank lines
 and unnecessary spaces from the program before saving it.
 SEND, RECEIVE and CRUNCH can be abbreviated to S, R and C.

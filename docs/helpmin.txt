@@ -9045,6 +9045,8 @@ ZMODEM RECEIVE
 or
 ZMODEM RECEIVE file$
 or
+ZMODEM RECEIVE "*"
+or
 ZMODEM CRUNCH
 
 Transfers a BASIC program or a file to or from a remote computer using the
