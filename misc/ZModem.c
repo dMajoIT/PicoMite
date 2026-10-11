@@ -7,6 +7,7 @@ The ZMODEM command over the console, in the forms XMODEM and YMODEM take:
   ZMODEM SEND file$      send a file to a ZMODEM receiver (Tera Term, lrzsz rz)
   ZMODEM SEND            send the program in memory
   ZMODEM RECEIVE file$   receive a file from a ZMODEM sender (Tera Term, lrzsz sz)
+  ZMODEM RECEIVE "*"     receive any number of files under the sender's names (a directory may precede the *)
   ZMODEM RECEIVE         receive a program into program memory
   ZMODEM CRUNCH          the same, without comments, indentation and blank lines
 
@@ -152,6 +153,8 @@ typedef struct
     bool fileopen;
     bool held; // the RAM was full and a ZRPOS asked the sender to restart and pause
     const char *target;   // receiving: the file to write
+    bool batch;           // receiving: "*" or "dir/*", every file under the sender's name
+    int dirlen;           // receiving a batch: the length of the directory in name, before the sender's name
     unsigned char *prog;  // the program: received into (RECEIVE, CRUNCH with no file name) or sent from (SEND)
     unsigned char *progp; // receiving: where the program's next byte goes
     int progmax;          // receiving: the size of the program buffer; sending: the length of the program
@@ -327,11 +330,26 @@ static bool ZParseFile(zrx_t *z)
     if (z->ZState != Z_RecvInit && z->ZState != Z_RecvInit2)
         return false;
     z->PktIn[z->PktInPtr] = 0; // for safety
-    if (z->files)
+    if (z->files && !z->batch)
         return false; // one file was asked for: skip the rest of a batch
     if (!z->prog)
     {
-        strncpy(z->name, z->target, FF_MAX_LFN - 1);
+        if (z->batch)
+        {
+            // the sender's name, without any directory it sent, after the directory asked for
+            char *n = (char *)z->PktIn, *p;
+            for (p = n; *p; p++)
+                if (*p == '/' || *p == '\\')
+                    n = p + 1;
+            if (!*n || z->dirlen + strlen(n) >= FF_MAX_LFN)
+            {
+                zfail(z, *n ? "File name too long" : "Invalid file name");
+                return false;
+            }
+            strcpy(z->name + z->dirlen, n);
+        }
+        else
+            strncpy(z->name, z->target, FF_MAX_LFN - 1);
         MMErrMsg[0] = 0;
         if (!BasicFileOpen(z->name, z->fnbr, FA_WRITE | FA_CREATE_ALWAYS))
         {
@@ -1183,6 +1201,13 @@ void cmd_zmodem(void)
         {
             z->target = fname;
             strncpy(z->name, fname, FF_MAX_LFN - 1);
+            // "*", or a directory then "/*": a batch, each file under the name its sender gives it
+            int n = strlen(z->name);
+            if (n && z->name[n - 1] == '*' && (n == 1 || z->name[n - 2] == '/' || z->name[n - 2] == '\\'))
+            {
+                z->batch = true;
+                z->dirlen = n - 1;
+            }
             z->stage = GetTempMemory(ZSTAGE);
         }
     }
@@ -1215,7 +1240,11 @@ void cmd_zmodem(void)
         ;
     BreakKey = BreakKeySave;
     if (*z->err)
+    {
+        if (z->batch && z->files)
+            error("$ (files received: %)", z->err, z->files); // the ones before it are complete
         error("$", z->err);
+    }
     if (prog && !send)
     {
         // into program memory, as XMODEM and YMODEM
@@ -1231,7 +1260,13 @@ void cmd_zmodem(void)
             MMPrintString(send ? "Sent " : "Received ");
         else
             MMPrintString(send ? "Not wanted by the receiver: " : "Nothing received: ");
-        MMPrintString(z->name);
+        if (z->files > 1) // a batch: how many, not the last one's name
+        {
+            PInt(z->files);
+            MMPrintString(" files");
+        }
+        else
+            MMPrintString(z->name);
         if (z->files)
         {
             MMPrintString(", ");
