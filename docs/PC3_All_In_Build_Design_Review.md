@@ -456,6 +456,33 @@ sign-on prints it, the uf2 is `PicoMitePC3V<ver>.uf2`. Peter's call.
 Total if everything in the "out" rows went: under 10 KB of flash and under
 1 KB of RAM. The experiment did none of it and fits.
 
+### What the PC3 build lacks against PICORP2350 (Peter's question, 2026-10-11)
+
+Every gate in the command and function tables evaluated for the two define
+sets: PICORP2350 has 330 entries, the PC3 336. PICORP2350 has four the PC3
+has not: `Backlight`, `Refresh` and the SPI-panel `Mode` (all display), and
+`YModem`, which is gated to the USB CDC console builds (every USB host build
+lacks it; XMODEM and ZMODEM are there). The PC3 adds ten: `Bluetooth`, `WEB`,
+`RESOLUTION`, `MODE`, `TILE`, `DRAW3D(`, `Gamepad`, `Keyboard`,
+`GetScanLine` and `Json$(`. The gaps that are not in the tables:
+
+| Missing on the PC3 | Where it is gated | Why | Worth adding? |
+| --- | --- | --- | --- |
+| VS1053 audio codec: `OPTION AUDIO VS1053`, `PLAY NOTE`, `STREAM`, `MIDI`, `MIDIFILE`, `HALT`, `CONTINUE`, VS1053 playback of WAV/FLAC/MP3/MOD | `NOVS1053` (CMake, every Bluetooth host build) | dropped on the BT host builds for flash; the PC3 has 16 MB and 300 KB of system-area headroom | yes if wanted: 28 KB of flash, no RAM to speak of, one 16 KB offset step; it is a separate SPI device and does not touch the Bluetooth audio path |
+| PWM audio and the SPI DAC: `OPTION AUDIO GPn,GPm` and `OPTION AUDIO SPI` | `NOPWMAUDIO` (CMake, every Bluetooth host build) | dropped so the PWM wrap interrupt serves only the I2S path next to Bluetooth audio | Peter's call: about 10 KB of flash, but it is the audio interrupt the Bluetooth audio feed shares, so it needs his view of BTAudio.c, not a CMake flag |
+| PS/2 keyboard and mouse, `ON PS2`, `OPTION KEYBOARD DISABLE` | `!USBKEYBOARD` | the PC3 has no PS/2 socket; its keyboards are USB and Bluetooth | no |
+| I2C keyboard (`CheckI2CKeyboard`) | `!USBKEYBOARD` ([I2C.c](../io/I2C.c#L609)) | compiled out of every USB host build | only if a PC3 user wants an I2C keyboard beside USB and Bluetooth |
+| The USB CDC console (the chip's own USB serial) | USB host builds | the PC3's USB port is the host port; the console is the CH340 serial, telnet and the display | no |
+| The fourth ADC channel (GP29) and a GPIO heartbeat pin | `PICOMITEWEB` | GP29 and GP25 belong to the radio; the LED is the radio's | no |
+| `OPTION CPUSPEED` from 48 to 420 MHz | every HDMI build | the clock follows `OPTION RESOLUTION` | no |
+| PIO2 for user programs | every wireless build | the radio runs on PIO2 | no |
+| `PALM PICO`, `PICOCALC`, `GAMEMITE` and the RP2040 LCD presets, `OPTION KEYBOARD REPEAT`, `OPTION LOCAL KEYBOARD` | `PICOMITERP2350`, `PICOCALC` | other boards' hardware | no |
+
+One thing the PC3 gets back that HDMIWEB and HDMIBTH do not have: the
+OV7670 camera (`CAMERA`), whose gate is `!HDMICUTDOWN`, and the PC3 is not
+cut down. The Wii controllers, the stepper, GPS, MEMORY SHARE, 3D, the
+raycaster, turtle, FM, the structures and the transfers are all in.
+
 ## Performance
 
 Facts:
@@ -659,7 +686,7 @@ guessed. If long strings regress, string scalars join the records in SRAM
 | --- | --- | --- | --- |
 | 0 (done) | The experiment: the PC3 variant that links | build margins | 5 files |
 | 1 | The variant that runs: one radio init (done), one heartbeat (done), `EDIT_BUFFER_SIZE` as a PSRAM-sized constant (done), heap 108 KB with today's allocator (done), program 180 KB, flash offset 1728 KB, `buildpicomite.bat` target (done); the two polls left as they are (each throttled to once a millisecond; `ProcessWeb` returns early with no WiFi, so the Bluetooth poll must stay) | Boot on the PC3; WiFi join, telnet, TLS fetch; BT keyboard, mouse, speaker; USB keyboard and MSC; HDMI at every resolution and mode; EDIT a 150 KB program; goldens; the A/B/C above | the branch builds; the board tests are the work |
-| 2 | The heap: today's rule kept (measured), `GetDriverMemory` and its call sites (COM, audio, ADC, stepper, share, BBC, layers), `CallocMemory` to PSRAM, `PSRAM_RESERVE` replacing the four 2 MB sites, the Route B flash stream dropped, `MAX_PROG_SIZE` 256 KB, new MagicKey | SAVE CONTEXT, CHAIN, RAM slots, LIBRARY LOAD RAM, a 250 KB program through EDIT, LOAD, SAVE, LIBRARY SAVE; flash writes during COM traffic, WAV playback and a stepper run; PSRAM disabled at boot; the benchmark set again | small to medium; the call sites ~40 lines, the reserve and map ~30 |
+| 2 | The heap: today's rule kept (measured), `GetDriverMemory` and its call sites (COM, audio, ADC, stepper, share, BBC, layers), `CallocMemory` to PSRAM. **Done 2026-10-11 (2513f23):** `PSRAM_RESERVE` replacing the four 2 MB sites (2.5 MB on the PC3, Peter's choice: 384 KB context, five 256 KB RAM slots, 896 KB of stream), the Route B flash stream dropped (`RB_STREAM_FLASH_SLOTS` 0, system flash ends at 2772 KB), `MAX_PROG_SIZE` 256 KB, new MagicKey. On the board: `MM.INFO(PSRAM SIZE)` 5,767,168, MEMORY shows a 256K program and 5738K free, a 245 KB source loads as 220K (6209 lines), RAM SAVE 1 / NEW / RAM LOAD 1 brings it back, the compiled stream area is 917,504 bytes, solar unchanged (15.48 s / 5.89 s) | SAVE CONTEXT, CHAIN, LIBRARY LOAD RAM, a 250 KB program through EDIT, SAVE, LIBRARY SAVE; flash writes during COM traffic, WAV playback and a stepper run; PSRAM disabled at boot; the benchmark set again | the driver allocator ~40 lines of call sites remain |
 | 3 | PC3-only gating (presets, flash map, PSRAM option), optional stepper decision, lwIP pool sizing | build margins, OPTION LIST, a TCP throughput check if the pool shrinks | small |
 | 4 | Manual (variant table, memory section, the PSRAM map), release notes, the Bluetooth and WiFi companions' variant lists, the release asset | help lint, `release_preflight.py` | small |
 
