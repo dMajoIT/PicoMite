@@ -419,9 +419,23 @@ Things to settle in phase 1, none of them hard:
   Peter chose 3 by ear. The audio service therefore sets `btc_mode` 3
   while a stream runs and puts 1 back as soon as it pauses or closes, so
   WiFi has the air whenever the speaker is silent
-  ([BTAudio.c](../bluetooth/BTAudio.c#L996), WiFi builds only). Under mode 3
-  the bitpool settles around 28-34 rather than 53: the link's capacity with
-  the WiFi side present, acceptable to the ear.
+  ([BTAudio.c](../bluetooth/BTAudio.c#L996), WiFi builds only). Verified on
+  the board after the flash: a fresh 20 s stream with WiFi up ran at bitpool
+  53, longest send wait 20 ms, nothing dropped (the figures of the WiFi-off
+  run); after the 60 s idle pause the mode read 1 and a 128 KB TFTP transfer
+  ran at 40 KB/s; the next tone restarted the stream in mode 3, again at
+  bitpool 53 with nothing dropped.
+
+  What the modes are, from Infineon's own WiFi Host Driver header
+  (`whd_wlioctl.h`, `WL_BTC_*`): `btc_mode` is a bit mask, `ENABLE` = 1,
+  `PREMPT` = 2, `PARTIAL` = 4, `DEFAULT` = 8, with `HYBRID` defined as
+  `ENABLE | PARTIAL` = 5. So the chip's default 1 is coexistence enabled
+  (time division); 3 is `ENABLE | PREMPT`, coexistence with pre-emption, in
+  which the Bluetooth side pre-empts WLAN activity when it needs the air,
+  which is exactly what the measurements showed (clean audio, WiFi
+  starved); 5 is the hybrid, 4 partial coexistence alone, 2 pre-emption
+  without the coexistence engine enabled and 6 pre-emption with partial,
+  both worse than 1 in practice.
 
 ## Build mechanics
 
