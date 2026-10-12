@@ -1,0 +1,79 @@
+[CENTER][SIZE=5][COLOR=BLUE][B]Bluetooth audio: test build after RC0[/B][/COLOR][/SIZE][/CENTER]
+Thank you for the reports on the M12 and the three car radios. This build changes three things, one for each of the problems you found. We have only been able to try them with our own speakers, so your results on the real devices are what tells us whether they work.
+
+• [B]M12:[/B] the sound stream now starts as soon as a speaker connects, whatever the [FONT=Courier]OPTION AUDIO BLUETOOTH[/FONT] idle time. Your tests showed the M12 plays only if the stream starts soon after it connects, which is why it worked with [FONT=Courier]OPTION AUDIO BLUETOOTH 0[/FONT] and not with an idle time.
+• [B]VDO TR723UB-BU:[/B] [FONT=Courier]BLUETOOTH CONNECT[/FONT] now takes a PIN after the name, so it can be given the 1234 the radio needs. Without one, 0000 is used as before.
+• [B]AXIS AX1801BT:[/B] the board now offers the speaker only 44.1 kHz. The radio was choosing 48 kHz, and we suspect that is behind the gap every 3 seconds.
+
+Nothing was changed for the AXIS AX1300BT, but please repeat its test (see below) so we can compare.
+
+
+[SIZE=4][COLOR=BLUE][B]Installing it[/B][/COLOR][/SIZE]
+The build is for the PicoMiteRP2350BTH, as before. Coming from RC0 nothing is lost: options, pairings and programs are kept. Coming from beta 8 or earlier the options and the Bluetooth pairings are reset, so set [FONT=Courier]OPTION AUDIO BLUETOOTH[/FONT] again and pair each device again.
+
+[FONT=Courier]MM.VER[/FONT] still says 7.00005, the same as RC0. To check you have the new build, type this (the name does not matter):
+
+[CODE]BLUETOOTH CONNECT "x", ""[/CODE]
+The new build answers [FONT=Courier]Error : PIN must be 1 to 16 characters[/FONT]. RC0 gives a different error.
+
+
+[SIZE=4][COLOR=BLUE][B]Before each test[/B][/COLOR][/SIZE]
+Use the default idle time of 60 seconds, not 0. The M12 test is about whether it now works with an idle time:
+
+[CODE]OPTION AUDIO BLUETOOTH 60[/CODE]
+If Bluetooth is already the audio output this only changes the idle time; otherwise the PicoMite restarts.
+
+The speaker counts in [FONT=Courier]BLUETOOTH STATUS[/FONT] (stream starts and pauses, gaps, send waits, dropped samples and the rest) start again from zero each time you use it, so they always cover the time since the last [FONT=Courier]BLUETOOTH STATUS[/FONT].
+
+
+[SIZE=4][COLOR=BLUE][B]Test 1: the M12[/B][/COLOR][/SIZE]
+[B]1.[/B] Connect it again from scratch (use the name [FONT=Courier]BLUETOOTH SCAN[/FONT] shows for it):
+
+[CODE]BLUETOOTH DISCONNECT
+BLUETOOTH CONNECT "M12 name"
+BLUETOOTH STATUS[/CODE]
+    The [FONT=Courier]Speaker:[/FONT] line should end in [FONT=Courier]streaming[/FONT], not [FONT=Courier]idle[/FONT].
+
+[B]2.[/B] Within a minute, play a tone. Do you hear it?
+
+[CODE]PLAY TONE 440, 440, 3000[/CODE]
+[B]3.[/B] Leave it alone for 2 minutes, then type [FONT=Courier]BLUETOOTH STATUS[/FONT]. It should say [FONT=Courier]idle[/FONT] and [FONT=Courier]pauses: 1 (0 by the speaker)[/FONT]. Play the tone again. Do you hear it? (It starts about half a second late, which is normal.)
+
+[B]4.[/B] Switch the M12 off, wait 30 seconds and switch it on again. The PicoMite should reconnect by itself within a minute or so and show [FONT=Courier]Bluetooth speaker connected[/FONT]. Leave it for 2 minutes, then play the tone again. Do you hear it?
+
+[B]5.[/B] Send the [FONT=Courier]BLUETOOTH STATUS[/FONT] listing from the end.
+
+
+[SIZE=4][COLOR=BLUE][B]Test 2: the VDO TR723UB-BU[/B][/COLOR][/SIZE]
+[B]1.[/B] If the radio lists the PicoMite from your earlier attempts, delete it on the radio first.
+
+[B]2.[/B] Put the radio into its pairing mode, then:
+
+[CODE]BLUETOOTH SCAN
+BLUETOOTH CONNECT "VDO name", "1234"[/CODE]
+    using the name the scan shows. It should end with [FONT=Courier]Connected to ...[/FONT]. The PIN is only needed this once; after that the radio reconnects by itself like the others.
+
+[B]3.[/B] Play a tone, and then some music from a file (MP3, WAV or FLAC) for a few minutes. Does it play cleanly?
+
+[B]4.[/B] Send the [FONT=Courier]BLUETOOTH STATUS[/FONT] listing. If [FONT=Courier]BLUETOOTH CONNECT[/FONT] fails, send the error line and the [FONT=Courier]BLUETOOTH STATUS[/FONT] listing.
+
+
+[SIZE=4][COLOR=BLUE][B]Test 3: the AXIS AX1801BT[/B][/COLOR][/SIZE]
+[B]1.[/B] Connect it the way you did before, and tell us which way that was: the radio connecting by itself, or [FONT=Courier]BLUETOOTH CONNECT[/FONT].
+[B]2.[/B] [FONT=Courier]BLUETOOTH STATUS[/FONT]: the [FONT=Courier]Stream:[/FONT] line should now start [FONT=Courier]SBC 44100 Hz[/FONT]. It said 48000 before.
+[B]3.[/B] Play music from a file for at least 3 minutes. Is the gap every 3 seconds gone, still there, or different?
+[B]4.[/B] Send the [FONT=Courier]BLUETOOTH STATUS[/FONT] listing from straight after the music.
+
+
+[SIZE=4][COLOR=BLUE][B]Test 4: the AXIS AX1300BT[/B][/COLOR][/SIZE]
+[B]1.[/B] Play music from a file for at least 3 minutes, as before. Are the stutters the same, better or worse?
+[B]2.[/B] Send the [FONT=Courier]BLUETOOTH STATUS[/FONT] listing from straight after the music.
+[B]3.[/B] If a Bluetooth keyboard was connected during that test, please repeat it with the keyboard switched off, and say whether the stutters change. This tells us whether the radio link itself is running out of room.
+
+
+[SIZE=4][COLOR=BLUE][B]Test 5: the devices that already worked[/B][/COLOR][/SIZE]
+Connect one of them, play a tone and some music, and check that it still works. Its [FONT=Courier]Stream:[/FONT] line should say 44100 Hz.
+
+
+[SIZE=4][COLOR=BLUE][B]What to send back[/B][/COLOR][/SIZE]
+For each device: what you did, what you heard, and the [FONT=Courier]BLUETOOTH STATUS[/FONT] listing. Please copy the listings from the terminal window as text rather than photos if you can, so we can compare the numbers directly. If anything happens that is not described here, such as an error, a message, or a connection dropping, note what you were doing at the time.
