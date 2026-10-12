@@ -714,9 +714,18 @@ static void sp_hci_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
         sp_con = hci_subevent_le_connection_complete_get_connection_handle(packet);
         sp_found_service = false;
         sp_step = SPL_SERVICE;
-        if (gatt_client_discover_primary_services_by_uuid128(&sp_gatt_handler, sp_con,
-                                                             sp_le_services[sp_service].service) != ERROR_CODE_SUCCESS)
-            sp_le_fail(ERROR_CODE_UNSPECIFIED_ERROR);
+        {
+            /* The search compares the attribute's value byte for byte, and a
+               16-bit UUID is stored as 2 bytes: the HM-10's FFE0 searched for
+               in its 128-bit form was never found. */
+            const uint8_t *u = sp_le_services[sp_service].service;
+            uint8_t status = uuid_has_bluetooth_prefix(u)
+                                 ? gatt_client_discover_primary_services_by_uuid16(&sp_gatt_handler, sp_con,
+                                                                                   big_endian_read_16(u, 2))
+                                 : gatt_client_discover_primary_services_by_uuid128(&sp_gatt_handler, sp_con, u);
+            if (status != ERROR_CODE_SUCCESS)
+                sp_le_fail(ERROR_CODE_UNSPECIFIED_ERROR);
+        }
         break;
 
     case HCI_EVENT_DISCONNECTION_COMPLETE:
