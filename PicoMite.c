@@ -465,7 +465,13 @@ uint8_t PSRAMpin;
         f.a = c;
         return f.b;
     }
-    const void *const CallTable[] __attribute__((section(".text"))) = {
+    /* The CSUB call table.  It lives in flash in a code-named section of its own
+       (.text.calltable: a named section gets no "changed section attributes"
+       warning from the assembler, which the plain .text did for data).  Its
+       address is not fixed: CSUBs find it at run time through vector-table slot 7
+       (PicoCFunctions.h), filled at the top of main(), and MM.INFO(CALLTABLE)
+       reports it. */
+    const void *const CallTable[] __attribute__((section(".text.calltable"))) = {
         (void *)uSecFunc,           // 0x00
         (void *)putConsole,         // 0x04
         (void *)getConsole,         // 0x08
@@ -611,8 +617,9 @@ uint8_t PSRAMpin;
         (void *)PinPut, // 0x1bc void PinPut(int pin, int val)  PIN(n) = v
     };
 #ifdef rp2350
-    // this is a frig to place the calltable at 0x1000023C as in previous releases
-    const int AallTableloc[2] __attribute__((section(".text"))) = {0, 1};
+    // once a frig to place the call table at 0x1000023C as in earlier releases; the
+    // address is found at run time now (see CallTable above) - kept beside the table
+    const int AallTableloc[2] __attribute__((section(".text.calltable"))) = {0, 1};
 #endif
     const struct s_PinDef PinDef[] = {
         {0, 99, "NULL", UNUSED, 99, 99},
