@@ -39,16 +39,16 @@ handed over the COM4 board it was flashed and ran the whole benchmark set
    1024x600) the SRAM heap is **108 KB**; at 800x480, 848x480 and 800x600
    with their bigger pools it is 72, 60 and 24 KB.
 4. **"Heap exclusively in PSRAM" needs an SRAM pool anyway, so the design is
-   a hybrid.** Three kinds of allocation cannot go to PSRAM: the variables'
-   records (read on every variable reference), the buffers that interrupts
-   and DMA write (COM ports, audio, ADC, PIO rings, the stepper, MEMORY SHARE)
-   and the layer framebuffers core 1 scans. The second group is a correctness
-   rule, not a speed preference: a flash write takes the whole QMI window
-   down, PSRAM included, so an interrupt that reads a PSRAM buffer during
-   SAVE or an A: write reads garbage or hangs. The policy that measured best
-   is today's: records, temporaries and small blocks SRAM first, anything
-   over half the SRAM heap and the overflow in PSRAM, plus a new allocator
-   for the driver buffers that refuses PSRAM; the program-text buffers
+   a hybrid.** Two kinds of allocation should not go to PSRAM: the variables'
+   records (read on every variable reference) and the layer framebuffers
+   core 1 scans. The buffers that interrupts fill (COM ports, audio, ADC, PIO
+   rings, the stepper, MEMORY SHARE) are a speed preference only, not a
+   correctness rule: every flash write runs with interrupts disabled, and no
+   driver that takes a heap buffer uses DMA (Peter, 2026-10-12; the earlier
+   draft of this review had this wrong and asked for a driver allocator that
+   refuses PSRAM, which is not needed). The policy that measured best is
+   today's: records, temporaries and small blocks SRAM first, anything over
+   half the SRAM heap and the overflow in PSRAM; the program-text buffers
    (EDIT, LOAD and the rest) become a 512 KB PSRAM block so a 256 KB program
    can be edited and loaded. "Program data always in PSRAM" was measured
    too, and costs 2-9% for no gain.
@@ -201,7 +201,7 @@ gains nothing, so the table keeps today's rule. A variant that also sends
 temporaries to PSRAM was not worth measuring, since temporaries are the
 hottest allocations the interpreter makes.
 
-### Why interrupt and DMA buffers cannot be in PSRAM
+### Interrupt buffers in PSRAM: a speed matter, not a correctness one
 
 `safe_flash_range_program` and `safe_flash_range_erase`
 ([FileIO.c](../misc/FileIO.c#L403)) run the SDK's `flash_range_program`,
@@ -209,19 +209,21 @@ which calls the ROM's `flash_exit_xip` and so takes the QMI out of
 memory-mapped mode for the duration of the write: the PSRAM window at
 0x11000000 is as dead as the flash window. The SDK saves and restores the
 CS1 timing registers ([flash.c](../../pico-sdk/src/rp2_common/hardware_flash/flash.c#L116)),
-so PSRAM comes back afterwards, but nothing can read it meanwhile. Core 1
-survives today because the scanout reads only `AllMemory` and the lookup
-tables placed in RAM for that reason ([SPI-LCD.c](../graphics/SPI-LCD.c#L3231)).
-Interrupts survive because their buffers are in the SRAM heap, which today is
-a side effect of their size, not a rule: a program that has filled SRAM with
-small arrays and then opens a COM port gets an interrupt-written buffer in
-PSRAM on any PSRAM build. The PC3 design makes it certain unless the driver
-allocator exists, so it is part of phase 2, and it fixes the latent case on
-the other PSRAM builds for free.
-
-The second reason is contention: the PSRAM shares the QMI with flash XIP,
-so a DMA stream from PSRAM steals from every instruction fetch that misses
-the cache, and core 1's layer reads would do the same.
+so PSRAM comes back afterwards, but nothing can read it meanwhile. Nothing
+does: every flash write in the firmware runs between `disable_interrupts_pico()`
+and `enable_interrupts_pico()`, so no interrupt handler runs during the
+window, and none of the drivers that take heap buffers (Audio.c, Serial.c,
+stepper.c, Onewire.c) uses DMA - the DMA users are the display scanout
+(`AllMemory`, in SRAM), the CYW43 bus (static SDK buffers) and the user's own
+`PIO DMA` (External.c). Core 1 survives because the scanout reads only
+`AllMemory` and the lookup tables placed in RAM for that reason
+([SPI-LCD.c](../graphics/SPI-LCD.c#L3231)). An earlier draft of this review
+took the window for a correctness hazard and asked for a driver allocator that
+refuses PSRAM; Peter pointed out the interrupt rule (2026-10-12) and the
+allocator is dropped. What remains is speed: an interrupt handler reading a
+PSRAM buffer pays the QMI round trip, and a stream from PSRAM steals from
+every instruction fetch that misses the cache, which is why the SRAM-first
+rule stays.
 
 ### What does not change
 
