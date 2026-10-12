@@ -1068,7 +1068,7 @@ This is an efficient way of programmatically calling user defined functions.
 CAMERA
 
 NOT VGA, HDMIWEB OR HDMIBTH VERSIONS Command supporting the OV7670 camera
-module. On the HDMI versions (PicoMiteHDMI and HDMIUSB) the camera is
+module. On the HDMI versions (PicoMiteHDMI, HDMIUSB and PC3) the camera is
 supported when the screen is in MODE 4 (320x240) and the captured image is
 written directly to the framebuffer.
 

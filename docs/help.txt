@@ -1416,9 +1416,9 @@ CAMERA
 
 NOT VGA, HDMIWEB OR HDMIBTH VERSIONS
 Command supporting the OV7670 camera module.
-On the HDMI versions (PicoMiteHDMI and HDMIUSB) the camera is supported when
-the screen is in MODE 4 (320x240) and the captured image is written directly
-to the framebuffer.
+On the HDMI versions (PicoMiteHDMI, HDMIUSB and PC3) the camera is supported
+when the screen is in MODE 4 (320x240) and the captured image is written
+directly to the framebuffer.
 For the 2-megapixel OV2640 and the 5-megapixel OV5640 cameras (RP2350 versions
 only) see the separate entries that follow.
 Except on the HDMI versions (which require MODE 4) a display is not needed to
@@ -8435,7 +8435,8 @@ These report internal memory-allocator values and exist to help debug the
 firmware itself.  They are not part of the supported MMBasic language and may
 change or be withdrawn without notice, so programs should not rely on them.
 MM.INFO(HEAPEND) is available on all versions; the others are on the WiFi
-versions only (MM.INFO(STACKPEAK) on WebMiteRP2350 and PicoMiteHDMIWEB only).
+versions only (MM.INFO(STACKPEAK) on WebMiteRP2350, PicoMiteHDMIWEB and
+PicoMitePC3 only).
 
 ~MM.INFO(HPOS)
 MM.INFO(HPOS)
