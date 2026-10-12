@@ -2387,6 +2387,16 @@ void *GetSRAMMemoryNull(int size)
 void __not_in_flash_func (*CallocMemory)(size_t num, size_t size)
 {
     size_t total_size = num * size;
+#ifdef rp2350
+    /* mbedtls' allocator (MBEDTLS_PLATFORM_CALLOC_MACRO): a TLS handshake
+       takes dozens of blocks, none of them read by an interrupt and none
+       speed-critical, so on a PSRAM build they go to PSRAM outright rather
+       than filling the SRAM heap first and pushing the program's own
+       variables out (the PC3's SRAM heap is 108 KB).  GetPSMemory zeroes
+       the block, as calloc must, and FreeMemory knows both heaps. */
+    if (PSRAMsize)
+        return GetPSMemory(total_size);
+#endif
     void *ptr = GetMemory(total_size);
     return ptr;
 }
