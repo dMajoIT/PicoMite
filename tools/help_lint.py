@@ -11,7 +11,11 @@ Checks:
   * every topic header is reachable by typing its own name at HELP
   * CRLF endings (the seek-back in cmd_help() assumes them)
   * no line >= 256 bytes (the reader's buffer, which it does not bound-check)
-  * 7-bit ASCII only (tokenise() masks the input line with & 0x7f)
+  * ASCII; in body lines also code page 437's box drawing (0xB3-0xDA), which
+    cmd_help() prints as it is and MMBasic's fonts draw; header lines 7-bit
+    only (the name is typed, and tokenise() masks input with & 0x7f)
+  * no '`' (MMBasic's fonts show 0x60 as a degree sign) and no control
+    characters other than CR and LF
   * no trailing whitespace on a header, which would make it unmatchable
   * no '~' starting a body line, which would truncate the entry
   * no empty topics, no duplicate topic names
@@ -114,12 +118,29 @@ def lint(path):
             "%d of %d line endings are bare LF - cmd_help()'s seek-back "
             "assumes CRLF" % (lf - crlf, lf))
 
-    try:
-        text = raw.decode("ascii")
-    except UnicodeDecodeError as e:
-        problems.append("non-ASCII byte at offset %d (tokenise() masks with "
-                        "& 0x7f)" % e.start)
-        text = raw.decode("ascii", "replace")
+    # One character per byte, so that offsets and lengths stay byte counts.
+    text = raw.decode("latin-1")
+    for n, line in enumerate(text.split("\n"), 1):
+        high = sorted({ord(c) for c in line if ord(c) > 127})
+        if not high:
+            continue
+        if line.startswith("~"):
+            problems.append("line %d: header with byte(s) %s - a typed name is masked "
+                            "with & 0x7f, so it can never match"
+                            % (n, ", ".join("0x%02X" % b for b in high)))
+        else:
+            other = [b for b in high if not 0xB3 <= b <= 0xDA]
+            if other:
+                problems.append("line %d: byte(s) %s - only code page 437's box drawing "
+                                "(0xB3-0xDA) is drawn" % (n, ", ".join("0x%02X" % b for b in other)))
+
+    ticks = text.count("`")
+    if ticks:
+        problems.append("%d '`' character(s), first at offset %d - MMBasic's "
+                        "fonts show 0x60 as a degree sign" % (ticks, text.index("`")))
+    ctrl = sorted({c for c in text if (ord(c) < 32 and c not in "\r\n") or ord(c) == 127})
+    if ctrl:
+        problems.append("control character(s) %s" % ", ".join("0x%02X" % ord(c) for c in ctrl))
 
     lines = text.split("\n")
     headers = []
@@ -180,7 +201,7 @@ def main():
     args = ap.parse_args()
 
     if args.lookup:
-        text = open(args.file, "rb").read().decode("ascii", "replace")
+        text = open(args.file, "rb").read().decode("cp437")  # the box drawing as MMBasic draws it
         pat = tokenise_help_arg("HELP " + args.lookup) or args.lookup
         hits = lookup(text, pat)
         print("HELP %s  ->  %d topic(s)\n" % (args.lookup, len(hits)))

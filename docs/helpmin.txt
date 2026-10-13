@@ -871,7 +871,7 @@ BITSTREAM
 BITSTREAM pin1, count1, array1() [, mode1] [,pin2, count2, array2()] [,mode2]
 [,logic]
 
-The `BITSTREAM` command generates extremely accurate bit sequences on one or
+The 'BITSTREAM' command generates extremely accurate bit sequences on one or
 two GPIO pins. Each timing value in the array specifies the duration (in
 microseconds) before the pin state toggles.
 
@@ -963,7 +963,7 @@ source coordinate is 'x' and 'y' and the width of the display area to copy is
 BLIT RESIZE src, dst, sx, sy, sw, sh, dx, dy, dw, dh [,transparent]
 
 Scales a rectangular source region into a destination rectangle using fast
-nearest-neighbour sampling. `src`  Source buffer selector.
+nearest-neighbour sampling. 'src'  Source buffer selector.
 
 ~BLIT WRITE
 BLIT WRITE [#]b, x, y [,mode]
@@ -5878,7 +5878,7 @@ OPTION GPS
 Configures the PicoMite to interface with a GPS module. This integration
 allows the PicoMite to automatically parse NMEA data streams in the
 background, making location, time, and speed data available to the user
-program via the `GPS()` function.
+program via the 'GPS()' function.
 
 ~OPTION GUI CONTROLS
 OPTION GUI CONTROLS n
@@ -7294,27 +7294,27 @@ Camera Y position
 ~RAY(CASTDIST)
 RAY(CASTDIST)
 
-Distance from last `RAY CAST
+Distance from last 'RAY CAST
 
 ~RAY(CASTSIDE)
 RAY(CASTSIDE)
 
-Side hit from last `RAY CAST` (0=X-side, 1=Y-side)
+Side hit from last 'RAY CAST' (0=X-side, 1=Y-side)
 
 ~RAY(CASTWALL)
 RAY(CASTWALL)
 
-Wall type from last `RAY CAST
+Wall type from last 'RAY CAST
 
 ~RAY(CASTX)
 RAY(CASTX)
 
-Map X cell from last `RAY CAST
+Map X cell from last 'RAY CAST
 
 ~RAY(CASTY)
 RAY(CASTY)
 
-Map Y cell from last `RAY CAST
+Map Y cell from last 'RAY CAST
 
 ~RAY(CELL)
 RAY(CELL x, y)
@@ -7330,12 +7330,12 @@ Wall definition field (type: integer or single char). 0=fg, 1=bg, 2=pattern,
 ~RAY(DIST)
 RAY(DIST col)
 
-Perpendicular wall distance at screen column `col
+Perpendicular wall distance at screen column 'col
 
 ~RAY(DOOR)
 RAY(DOOR x, y)
 
-Door offset at (x, y), or  1.0 if not an active door
+Door offset at (x, y), or -1.0 if not an active door
 
 ~RAY(MAPH)
 RAY(MAPH)
@@ -7355,17 +7355,17 @@ Count of active sprites
 ~RAY(SPRITEX)
 RAY(SPRITEX id)
 
-World X of sprite `id
+World X of sprite 'id
 
 ~RAY(SPRITEY)
 RAY(SPRITEY id)
 
-World Y of sprite `id
+World Y of sprite 'id
 
 ~RAY(WALL)
 RAY(WALL col)
 
-Wall type hit at screen column `col
+Wall type hit at screen column 'col
 
 ~RBOX
 RBOX  x,  y,  w,  h  [, r]  [,c] [,fill]

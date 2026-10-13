@@ -13,7 +13,11 @@ format contract.
 Format rules enforced here (all of them are things cmd_help() requires):
   * CRLF line endings              - the seek-back in cmd_help() assumes them
   * every line < 200 characters    - the reader has a 256-byte buffer, unchecked
-  * 7-bit ASCII only               - tokenise() masks input with & 0x7f
+  * ASCII, and in body lines also the box-drawing characters of code page
+    437 (0xB3-0xDA), which MMBasic's fonts draw; cmd_help() prints body
+    bytes as they are, but a topic name is typed, and tokenise() masks
+    input with & 0x7f, so header lines are 7-bit ASCII only
+  * no '`'                          - MMBasic's fonts show 0x60 as a degree sign
   * '~' only ever at the start of a header line
   * no trailing whitespace on a header - the match is whole-string
 """
@@ -23,7 +27,8 @@ import os
 import re
 import sys
 import textwrap
-from collections import OrderedDict
+import unicodedata
+from collections import Counter, OrderedDict
 
 from docx import Document
 from docx.oxml.ns import qn
@@ -48,13 +53,16 @@ MAXLINE = 200      # hard cap - the firmware reads into a 256-byte buffer
 FOLD = {
     "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'",
     "\u201c": '"', "\u201d": '"', "\u201e": '"',
-    "\u2013": "-", "\u2014": "-", "\u2010": "-", "\u2011": "-",
+    "\u2013": "-", "\u2014": "-", "\u2010": "-", "\u2011": "-", "\u2212": "-",
     "\u2026": "...", "\u2022": "-", "\u00b7": "-",
     "\u00b5": "u", "\u03bc": "u", "\u00b1": "+/-",
     "\u00b0": " deg", "\u00ba": " deg", "\u00bd": "1/2", "\u00bc": "1/4",
     "\u00d7": "x", "\u00f7": "/", "\u2264": "<=", "\u2265": ">=",
     "\u2260": "<>", "\u2192": "->", "\u2190": "<-",
     "\u00a0": " ", "\u200b": "", "\ufeff": "", "\u00ad": "",
+    # ASCII, but MMBasic's fonts show 0x60 as a degree sign; the supplementary
+    # manuals' Markdown uses it to mark code
+    "`": "'",
 }
 
 # name cells that are symbols rather than keywords
@@ -116,10 +124,46 @@ def blank_groups(paras):
 # --------------------------------------------------------------------------
 # text handling
 # --------------------------------------------------------------------------
+# Characters fold_ascii() found no ASCII for and wrote as a space, with a
+# count - main() lists them, so that they can be added to FOLD.
+DROPPED = Counter()
+
+
+def cp437_box(c):
+    """True for a box-drawing character that code page 437 has (0xB3-0xDA):
+    MMBasic's fonts draw those, so it is written as that byte."""
+    try:
+        return 0xB3 <= c.encode("cp437")[0] <= 0xDA
+    except UnicodeEncodeError:
+        return False
+
+
+def box_ascii(c):
+    """A box-drawing character that code page 437 lacks (heavy, dashed,
+    rounded...) as ASCII art: a horizontal line '-', a vertical one '|', and
+    a corner or a join '+'."""
+    n = unicodedata.name(c, "")
+    if "HORIZONTAL" in n and not any(w in n for w in ("VERTICAL", "UP", "DOWN")):
+        return "-"
+    if "VERTICAL" in n and not any(w in n for w in ("HORIZONTAL", "LEFT", "RIGHT")):
+        return "|"
+    return "+"
+
+
 def fold_ascii(s):
     for k, v in FOLD.items():
         s = s.replace(k, v)
-    return "".join(c if 32 <= ord(c) <= 126 else " " for c in s)
+    out = []
+    for c in s:
+        if 32 <= ord(c) <= 126:
+            out.append(c)
+        elif 0x2500 <= ord(c) <= 0x257F:
+            out.append(c if cp437_box(c) else box_ascii(c))  # emit() writes it as CP437
+        else:
+            if c not in "\t\r\n":
+                DROPPED[c] += 1
+            out.append(" ")
+    return "".join(out)
 
 
 def canon_name(line):
@@ -1093,9 +1137,12 @@ def build_blocks(by_name, short=False, tiny=False):
 def emit(blocks, path):
     out = []
     for name, body in blocks:
-        out.append("~" + name.rstrip())
+        name = fold_ascii(name).rstrip()
+        if any(ord(c) > 126 for c in name):
+            sys.exit("topic name %r: a header must be 7-bit ASCII to be found" % name)
+        out.append("~" + name)
         for line in body:
-            line = line.rstrip()
+            line = fold_ascii(line).rstrip()  # whatever path it came by
             if line.startswith("~"):
                 line = " " + line        # '~' in column 1 would end the topic
             while len(line) >= MAXLINE:  # never truncate: fold instead
@@ -1106,8 +1153,12 @@ def emit(blocks, path):
             out.append(line)
         out.append("")
     data = "\r\n".join(out) + "\r\n"
+    bad = sorted({c for c in data if c == "`" or not (32 <= ord(c) <= 126 or c in "\r\n" or cp437_box(c))})
+    if bad:  # fold_ascii() above should have made this impossible
+        sys.exit("%s not written: characters MMBasic cannot show: %s"
+                 % (path, ", ".join("U+%04X" % ord(c) for c in bad)))
     with open(path, "wb") as f:
-        f.write(data.encode("ascii", "replace"))
+        f.write(data.encode("cp437"))  # ASCII, plus the box drawing as CP437 bytes
     return len(data)
 
 
@@ -1163,6 +1214,10 @@ def main():
     if gaps:
         print("firmware keywords with no entry in the manual (%d):" % len(gaps))
         print("    " + "  ".join(gaps))
+    if DROPPED:
+        print("characters with no ASCII equivalent, written as a space - add them to FOLD:")
+        for c, n in DROPPED.most_common():
+            print("    U+%04X %-40s x%d" % (ord(c), unicodedata.name(c, "?"), n))
 
     if args.json:
         import json

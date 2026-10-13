@@ -1002,22 +1002,22 @@ BITSTREAM
 BITSTREAM pin1, count1, array1() [, mode1] [,pin2, count2, array2()] [,mode2]
 [,logic]
 
-The `BITSTREAM` command generates extremely accurate bit sequences on one or
+The 'BITSTREAM' command generates extremely accurate bit sequences on one or
 two GPIO pins. Each timing value in the array specifies the duration (in
 microseconds) before the pin state toggles. This enables precise generation of
 protocols like IR remote control signals, PS/2 keyboard/mouse communication,
 and other timing-critical waveforms.
 
-`pin1`, `pin2` are the GPIO pin number(s) for the output. Can use GP notation
+'pin1', 'pin2' are the GPIO pin number(s) for the output. Can use GP notation
 (e.g., GP15) or physical pin numbers.
-count1`, `count2` specify the number of timing values to use from the arrays
+count1', 'count2' specify the number of timing values to use from the arrays
 (1 to 10000).
-array1()`, `array2()` are numeric array containing timing values in
+array1()', 'array2()' are numeric array containing timing values in
 microseconds. Each value specifies the time before the next pin toggle.
-`mode1`, `mode2` specify the output mode (optional, defaults to 0)
+'mode1', 'mode2' specify the output mode (optional, defaults to 0)
 0 = Push-pull (driven high and low),1 = Open-collector (driven low,
 high-impedance for high)
-`logic` is a special function for same-pin mode (optional, defaults to 0, only
+'logic' is a special function for same-pin mode (optional, defaults to 0, only
 valid when pin1 = pin2) 0 = XOR (toggle on any event, original behavior), 1 =
 AND (output HIGH only when both logical states are HIGH), 2 = OR (output HIGH
 when either logical state is HIGH)
@@ -1211,18 +1211,18 @@ BLIT RESIZE src, dst, sx, sy, sw, sh, dx, dy, dw, dh [,transparent]
 
 Scales a rectangular source region into a destination rectangle using fast
 nearest-neighbour sampling.
-`src`  Source buffer selector. Supported: `L`, `F`, `N` (VGA/HDMI builds), `2`
-(second framebuffer, VGA/HDMI builds), `T` (top layer, RP2350 VGA/HDMI
+'src'  Source buffer selector. Supported: 'L', 'F', 'N' (VGA/HDMI builds), '2'
+(second framebuffer, VGA/HDMI builds), 'T' (top layer, RP2350 VGA/HDMI
 builds).
-`dst` |Destination buffer selector. Supported: `L`, `F`, `N` (VGA/HDMI
-builds), `2` (second framebuffer, VGA/HDMI builds), `T` (top layer, RP2350
+'dst' |Destination buffer selector. Supported: 'L', 'F', 'N' (VGA/HDMI
+builds), '2' (second framebuffer, VGA/HDMI builds), 'T' (top layer, RP2350
 VGA/HDMI builds).
-`sx`, `sy`  Top-left source coordinate
-`sw`, `sh` Source width and height (must be > 0
-'dx`, `dy` Top-left destination coordinate
-'dw`, `dh` Destination width and height (must be > 0)
-`transparent` Optional RGB121 pixel value to skip while writing destination.
-Range `-1` to `15`, default `-1` (disabled).
+'sx', 'sy'  Top-left source coordinate
+'sw', 'sh' Source width and height (must be > 0
+'dx', 'dy' Top-left destination coordinate
+'dw', 'dh' Destination width and height (must be > 0)
+'transparent' Optional RGB121 pixel value to skip while writing destination.
+Range '-1' to '15', default '-1' (disabled).
 
 ~BLIT WRITE
 BLIT WRITE [#]b, x, y [,mode]
@@ -3627,9 +3627,11 @@ row-major order (left to right, top to bottom). For example, a 3x2 grid
 creates
 6 panels:
 
-   P1     P2     P3
-
-   P4     P5     P6
+ÚÄÄÄÄÄÄÂÄÄÄÄÄÄÂÄÄÄÄÄÄ¿
+³  P1  ³  P2  ³  P3  ³
+ÃÄÄÄÄÄÄÅÄÄÄÄÄÄÅÄÄÄÄÄÄ´
+³  P4  ³  P5  ³  P6  ³
+ÀÄÄÄÄÄÄÁÄÄÄÄÄÄÁÄÄÄÄÄÄÙ
 
 Multiple FRAME BOX calls accumulate panels. A second FRAME BOX creating 2
 panels
@@ -4115,8 +4117,8 @@ Sets the viewport scroll offset for a panel that has a virtual buffer.
 The viewport top-left corner maps to position (sx, sy) in the virtual buffer.
 
   - panel_id - The panel to scroll.
-  - sx - Horizontal scroll offset (0 to vwidth   panel_width).
-  - sy - Vertical scroll offset (0 to vheight   panel_height).
+  - sx - Horizontal scroll offset (0 to vwidth - panel_width).
+  - sy - Vertical scroll offset (0 to vheight - panel_height).
 
 When FRAME WRITE is called, the visible portion of the virtual buffer (from
 the
@@ -4163,11 +4165,11 @@ character.
   colour  Title colour (default: panel's default foreground)
 
 Examples:
-' Title on a single-line box:     My Panel
+' Title on a single-line box:  Ä´ My Panel ÃÄ
 FRAME BOX 0, 0, 40, 10
 FRAME TITLE 1, "My Panel"
 
-' Title on a double-line overlay:     Dialog
+' Title on a double-line overlay:  Íµ Dialog ÆÍ
 FRAME OVERLAY 10, 30, 8, RGB(WHITE), DOUBLE
 FRAME TITLE 10, "Dialog", RGB(YELLOW)
 
@@ -5198,7 +5200,7 @@ box
 opens a pop-up list; touching an item selects it and closes the pop-up.
 
   Parameter  Description
-  #ref  Control reference number (1 ... OPTION CONTROLS   1)
+  #ref  Control reference number (1 ... OPTION CONTROLS - 1)
   array$()  A one-dimensional string array holding the list items (see Array
   binding below)
   x, y  Top-left corner of the collapsed control
@@ -5246,7 +5248,7 @@ item$ = fruit$(CtrlVal(#1))  ' the selected text (your program owns the array)
 > index your own array as shown above. This keeps the array under your
 control.
 
-When the control is created, the selection defaults to item 0 (or  1 if the
+When the control is created, the selection defaults to item 0 (or -1 if the
 array is empty). Set the selection from your program with the CtrlVal command;
 the value is clamped to the valid range:
 
@@ -5389,7 +5391,7 @@ Creates a slider: a draggable thumb on a track for entering a continuous value
 by touch.
 
   Parameter  Description
-  #ref  Control reference number (1 ... OPTION CONTROLS   1)
+  #ref  Control reference number (1 ... OPTION CONTROLS - 1)
   x, y  Top-left corner of the control
   w, h  Width and height of the control
   fc  Foreground colour (track fill and thumb) (default: last colour used)
@@ -9256,8 +9258,8 @@ If a trigger arrives during pre-pulse delay, the pre-pulse delay is restarted
 from that trigger.  Triggers are not queued.  During pre-pulse delay, each new
 valid trigger replaces the previous pending delay and restarts timing.  This
 means the pulse starts only after a quiet gap at least as long as
-`prePulseDelay` following the most recent valid trigger.
-If triggers continue to arrive more frequently than `prePulseDelay`, the
+'prePulseDelay' following the most recent valid trigger.
+If triggers continue to arrive more frequently than 'prePulseDelay', the
 output transition can be deferred indefinitely until triggers stop.
 If a trigger arrives during the pulse, the pulse width timer is restarted from
 that trigger (the output stays in its active pulse state).
@@ -9733,7 +9735,7 @@ OPTION GPS
 Configures the PicoMite to interface with a GPS module. This integration
 allows the PicoMite to automatically parse NMEA data streams in the
 background, making location, time, and speed data available to the user
-program via the `GPS()` function.
+program via the 'GPS()' function.
 This is described in detail in the file Option_GPS_User_Manual.pdf included in
 the firmware download zip file.
 
@@ -11933,8 +11935,8 @@ RAY CELL x, y, value
 Write a value to a map cell at runtime.
 
   Parameter  Description
-  x  Cell X coordinate (0 to map width   1)
-  y  Cell Y coordinate (0 to map height   1)
+  x  Cell X coordinate (0 to map width - 1)
+  y  Cell Y coordinate (0 to map height - 1)
   value  Wall type: integer 0-31, or single character "0"-"9", "A"-"Z" (0 =
   empty)
 
@@ -12008,8 +12010,8 @@ RAY RENDER.
 Defaults (set by RAY MAP):
 
   Types  fg  bg  pattern  door
-  1-15  GREEN (6)  MIDGREEN (4)  type   1  0
-  16-31  YELLOW (14)  BROWN (12)  type   1  1
+  1-15  GREEN (6)  MIDGREEN (4)  type - 1  0
+  16-31  YELLOW (14)  BROWN (12)  type - 1  1
 
 Example - red brick walls for type 1:
 
@@ -12030,8 +12032,8 @@ RAY DOOR x, y, offset!
 Set a sliding door at a map cell with a given open offset.
 
   Parameter  Description
-  x  Cell X coordinate (0 to map width   1)
-  y  Cell Y coordinate (0 to map height   1)
+  x  Cell X coordinate (0 to map width - 1)
+  y  Cell Y coordinate (0 to map height - 1)
   offset!  Door offset: 0.0 = fully closed, 1.0 = fully open
 
 The map cell at (x, y) must contain a wall type whose definition has the door
@@ -12226,35 +12228,35 @@ Full details: Raycaster_User_Manual.pdf
 ~RAY(CASTDIST)
 RAY(CASTDIST)
 
-Distance from last `RAY CAST
+Distance from last 'RAY CAST
 
 Full details: Raycaster_User_Manual.pdf
 
 ~RAY(CASTSIDE)
 RAY(CASTSIDE)
 
-Side hit from last `RAY CAST` (0=X-side, 1=Y-side)
+Side hit from last 'RAY CAST' (0=X-side, 1=Y-side)
 
 Full details: Raycaster_User_Manual.pdf
 
 ~RAY(CASTWALL)
 RAY(CASTWALL)
 
-Wall type from last `RAY CAST
+Wall type from last 'RAY CAST
 
 Full details: Raycaster_User_Manual.pdf
 
 ~RAY(CASTX)
 RAY(CASTX)
 
-Map X cell from last `RAY CAST
+Map X cell from last 'RAY CAST
 
 Full details: Raycaster_User_Manual.pdf
 
 ~RAY(CASTY)
 RAY(CASTY)
 
-Map Y cell from last `RAY CAST
+Map Y cell from last 'RAY CAST
 
 Full details: Raycaster_User_Manual.pdf
 
@@ -12276,14 +12278,14 @@ Full details: Raycaster_User_Manual.pdf
 ~RAY(DIST)
 RAY(DIST col)
 
-Perpendicular wall distance at screen column `col
+Perpendicular wall distance at screen column 'col
 
 Full details: Raycaster_User_Manual.pdf
 
 ~RAY(DOOR)
 RAY(DOOR x, y)
 
-Door offset at (x, y), or  1.0 if not an active door
+Door offset at (x, y), or -1.0 if not an active door
 
 Full details: Raycaster_User_Manual.pdf
 
@@ -12311,21 +12313,21 @@ Full details: Raycaster_User_Manual.pdf
 ~RAY(SPRITEX)
 RAY(SPRITEX id)
 
-World X of sprite `id
+World X of sprite 'id
 
 Full details: Raycaster_User_Manual.pdf
 
 ~RAY(SPRITEY)
 RAY(SPRITEY id)
 
-World Y of sprite `id
+World Y of sprite 'id
 
 Full details: Raycaster_User_Manual.pdf
 
 ~RAY(WALL)
 RAY(WALL col)
 
-Wall type hit at screen column `col
+Wall type hit at screen column 'col
 
 Full details: Raycaster_User_Manual.pdf
 
