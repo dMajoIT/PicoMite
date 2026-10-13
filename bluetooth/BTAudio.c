@@ -1288,7 +1288,21 @@ static void bta_error_status(const char *what, uint8_t status)
     error("$", buf);
 }
 
-/* BLUETOOTH CONNECT name$ | addr$ [, pin$]
+/* SPEAKER or SERIAL in front of the name - not a variable such as serial$
+   (checkstring() ends a keyword at any character that cannot be in a name). */
+static unsigned char *connect_keyword(unsigned char *tp, const char *kw)
+{
+    unsigned char *p = checkstring(tp, (unsigned char *)kw);
+    if (p == NULL || *p == '$' || *p == '%' || *p == '!' || *p == '(')
+        return NULL;
+    return p;
+}
+
+/* BLUETOOTH CONNECT [SPEAKER | SERIAL] name$ | addr$ [, pin$]
+     SPEAKER - connect it as a speaker, SERIAL - connect its serial port as
+             COM7, whatever its Class of Device: for a device that is both,
+             such as an RN52 module, one CONNECT of each. Without either the
+             kind is chosen as below.
      name$ - a device name as the last BLUETOOTH SCAN listed it (any case)
      addr$ - its address, "AA:BB:CC:DD:EE:FF"
      pin$  - the PIN for a speaker or serial device that pairs the legacy
@@ -1299,6 +1313,18 @@ static void bta_error_status(const char *what, uint8_t status)
 static void bta_connect(unsigned char *tp)
 {
     bd_addr_t addr;
+    enum { CONNECT_ANY, CONNECT_SPEAKER, CONNECT_SERIAL } want = CONNECT_ANY;
+    unsigned char *p;
+    if ((p = connect_keyword(tp, "SPEAKER")) != NULL)
+    {
+        want = CONNECT_SPEAKER;
+        tp = p;
+    }
+    else if ((p = connect_keyword(tp, "SERIAL")) != NULL)
+    {
+        want = CONNECT_SERIAL;
+        tp = p;
+    }
     getargs(&tp, 3, (unsigned char *)",");
     if (argc == 0)
         error("Device name or address required");
@@ -1338,6 +1364,8 @@ static void bta_connect(unsigned char *tp)
     uint8_t le_type, le_service;
     if (d ? d->le : bt_serial_remembered_le(addr, &le_type, &le_service))
     {
+        if (want == CONNECT_SPEAKER)
+            error("A BLE device cannot be a speaker");
         if (argc == 3)
             error("A BLE device pairs without a PIN");
         if (d)
@@ -1350,7 +1378,7 @@ static void bta_connect(unsigned char *tp)
     }
     /* A keyboard, by its Class of Device in the last SCAN, or the
        remembered one given by address. */
-    if (d ? bt_ckbd_cod_is_keyboard(d->cod) : bt_ckbd_is_remembered(addr))
+    if (want == CONNECT_ANY && (d ? bt_ckbd_cod_is_keyboard(d->cod) : bt_ckbd_is_remembered(addr)))
     {
         if (argc == 3)
             error("No PIN for a keyboard: it is shown a code to type");
@@ -1360,11 +1388,18 @@ static void bta_connect(unsigned char *tp)
     /* Set before anything can pair; only the device being paired is
        answered with it (spk_pairing_allowed, bt_serial_owns_pairing). */
     strcpy(connect_pin, pin);
+    if (want == CONNECT_SERIAL)
+    {
+        if (!bt_serial_connect(addr))
+            error("The device has no serial port");
+        return;
+    }
     /* Anything else that is not audio - or an address the last SCAN did not
        list, unless it is the remembered speaker - may be a serial device:
        its SDP records say. One without a serial port is tried as a speaker. */
-    if (d ? !cod_is_audio(d->cod)
-          : !(have_remembered_speaker && memcmp(addr, remembered_speaker, sizeof(bd_addr_t)) == 0))
+    if (want == CONNECT_ANY &&
+        (d ? !cod_is_audio(d->cod)
+           : !(have_remembered_speaker && memcmp(addr, remembered_speaker, sizeof(bd_addr_t)) == 0)))
     {
         if (bt_serial_connect(addr))
             return;
