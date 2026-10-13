@@ -675,6 +675,17 @@ extern volatile int WIFIconnected;
 extern volatile int LastWifiErr;
 extern volatile int scantimer;
 extern int startupcomplete;
+#ifdef PICOMITEPC3
+/* OPTION RADIO (misc/FileIO.h, Option.Radio): the radio chip is up whenever
+   radioready is set; startupcomplete means the WiFi half is running too. */
+extern int radioready;
+#define RADIO_WIFI_OFF 1
+#define RADIO_BT_OFF 2
+#define PC3_WIFI_ON (!(Option.Radio & RADIO_WIFI_OFF))
+#define PC3_BT_ON (!(Option.Radio & RADIO_BT_OFF))
+#define PC3_RADIO_USED (PC3_WIFI_ON || PC3_BT_ON)
+#define PC3_HEARTBEAT_GP 25 /* OPTION RADIO NONE: the LED on GP25 instead of the chip's GPIO0 */
+#endif
 extern int WebScanActive; // WEB SCAN is waiting for results: ProcessWeb polls with no connection
 void WebHeartbeat(uint64_t timenow);
 #endif

@@ -1702,6 +1702,10 @@ static void bta_status(void)
 void cmd_bluetooth(void)
 {
     unsigned char *tp;
+#ifdef PICOMITEPC3
+    if (!PC3_BT_ON)
+        error("Bluetooth is off (OPTION RADIO)");
+#endif
     if ((tp = checkstring(cmdline, (unsigned char *)"SCAN")))
         bta_scan(tp);
     else if ((tp = checkstring(cmdline, (unsigned char *)"CONNECT")))

@@ -393,8 +393,13 @@
     {
         static int lastonoff = 0;
         static uint64_t lastheartmsec = 0;
+#ifdef PICOMITEPC3
+        if (!radioready) /* the chip is up in every OPTION RADIO setting; the WiFi need not be */
+            return;
+#else
         if (!startupcomplete)
             return;
+#endif
 #if defined(PICOMITEHDMIBTH)
         /* PC3: the one heartbeat for both radios (bt_keyboard_poll's blink is
            compiled out under PICOMITEWEB).  While a Bluetooth speaker streams the
@@ -560,7 +565,13 @@ void cmd_web(void)
 {
         unsigned char *tp;
         if (!startupcomplete) // the radio didn't start at boot: nothing here can reach it
+        {
+#ifdef PICOMITEPC3
+                if (!PC3_WIFI_ON)
+                        error("WiFi is off (OPTION RADIO)");
+#endif
                 error("WiFi radio not running");
+        }
 #ifdef PICOMITEPC3
         /* WEB IOVAR GET name$ [, index] and WEB IOVAR SET name$, value [, value2]:
            the radio firmware's variables through the driver's ioctl, for the

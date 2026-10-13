@@ -373,7 +373,16 @@ extern "C"
                    normal extensions[75], so the whole struct stays exactly 896
                    bytes (== 7 XMODEM blocks). */
                 float mousespeed;
+#ifdef PICOMITEPC3
+                /* OPTION RADIO (PC3 only), one byte from the extensions[] pool: 0 is
+                   BOTH, bit 0 (RADIO_WIFI_OFF) leaves the WiFi down, bit 1
+                   (RADIO_BT_OFF) leaves the Bluetooth host out, so every saved
+                   option set from before reads as BOTH and the MagicKey stands. */
+                uint8_t Radio;
+                unsigned char extensions[57]; // (58 before Radio)
+#else
                 unsigned char extensions[58]; // (63 before Compile, 62 before CYW43_ON..CYW43_CLK)
+#endif
 #else
         unsigned char extensions[66]; // 896 bytes == 7 XMODEM blocks (71 before Compile, 70 before CYW43_ON..CYW43_CLK)
 #endif

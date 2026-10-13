@@ -3477,6 +3477,10 @@ char *pinsearch(int pin)
 	else if (pin == Option.PSRAM_CS_PIN)
 		strcpy(buff, "PSRAM CS");
 #if CYW43_PIN_WL_DYNAMIC
+#ifdef PICOMITEPC3
+	else if (!PC3_RADIO_USED && (pin == PINMAP[cyw43_gp[0]] || pin == PINMAP[cyw43_gp[1]] || pin == PINMAP[cyw43_gp[2]] || pin == PINMAP[cyw43_gp[3]]))
+		; /* OPTION RADIO NONE: the chip is unused and these are ordinary I/O pins */
+#endif
 	else if (pin == PINMAP[cyw43_gp[0]])
 		strcpy(buff, "CYW43 WL_ON");
 	else if (pin == PINMAP[cyw43_gp[1]])

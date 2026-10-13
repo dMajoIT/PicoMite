@@ -695,6 +695,10 @@ void ReserveCYW43Pins(void)
                         for (int i = 0; i < 4; i++)
                                 cyw43_gp[i] = gp[i];
         }
+#ifdef PICOMITEPC3
+        if (!PC3_RADIO_USED) /* OPTION RADIO NONE: the chip is never started and its pins are ordinary I/O */
+                return;
+#endif
         for (int i = 0; i < 4; i++)
                 if (CheckPin(PINMAP[cyw43_gp[i]], CP_NOABORT))
                         ExtCfg(PINMAP[cyw43_gp[i]], EXT_BOOT_RESERVED, 0);
@@ -711,12 +715,18 @@ void ReserveCYW43Pins(void)
 void InitCYW43PIO(void)
 {
         uint pins[CYW43_PIN_INDEX_WL_COUNT];
-        pins[CYW43_PIN_INDEX_WL_REG_ON] = cyw43_gp[0];
-        pins[CYW43_PIN_INDEX_WL_DATA_OUT] = pins[CYW43_PIN_INDEX_WL_DATA_IN] = pins[CYW43_PIN_INDEX_WL_HOST_WAKE] = cyw43_gp[1];
-        pins[CYW43_PIN_INDEX_WL_CS] = cyw43_gp[2];
-        pins[CYW43_PIN_INDEX_WL_CLOCK] = cyw43_gp[3];
-        cyw43_set_pins_wl(pins);
-        piomap[2] = ((uint64_t)1 << cyw43_gp[1]) | ((uint64_t)1 << cyw43_gp[3]);
+        piomap[2] = 0;
+#ifdef PICOMITEPC3
+        if (PC3_RADIO_USED) /* OPTION RADIO NONE: no radio on PIO2, so I2S alone chooses its window */
+#endif
+        {
+                pins[CYW43_PIN_INDEX_WL_REG_ON] = cyw43_gp[0];
+                pins[CYW43_PIN_INDEX_WL_DATA_OUT] = pins[CYW43_PIN_INDEX_WL_DATA_IN] = pins[CYW43_PIN_INDEX_WL_HOST_WAKE] = cyw43_gp[1];
+                pins[CYW43_PIN_INDEX_WL_CS] = cyw43_gp[2];
+                pins[CYW43_PIN_INDEX_WL_CLOCK] = cyw43_gp[3];
+                cyw43_set_pins_wl(pins);
+                piomap[2] = ((uint64_t)1 << cyw43_gp[1]) | ((uint64_t)1 << cyw43_gp[3]);
+        }
         if (Option.audio_i2s_bclk)
         {
                 piomap[2] |= (uint64_t)1 << PinDef[Option.audio_i2s_data].GPno;

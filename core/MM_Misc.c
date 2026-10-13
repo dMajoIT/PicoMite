@@ -3297,6 +3297,10 @@ void MIPS16 printoptions(void)
         }
         PRet();
     }
+#ifdef PICOMITEPC3
+    if (Option.Radio) /* BOTH is the default and is not listed */
+        PO2Str("RADIO", Option.Radio == RADIO_BT_OFF ? "WEB" : Option.Radio == RADIO_WIFI_OFF ? "BLUETOOTH" : "NONE");
+#endif
     if (Option.TCP_PORT && Option.ServerResponceTime != 5000)
         PO3Int("TCP SERVER PORT", Option.TCP_PORT, Option.ServerResponceTime);
     if (Option.TCP_PORT && Option.ServerResponceTime == 5000)
@@ -6401,6 +6405,10 @@ void MIPS16 cmd_option(void)
                option is lost on reboot. No GPIO heartbeat on these
                builds, so keep heartbeatpin clear. */
             Option.heartbeatpin = 0;
+#ifdef PICOMITEPC3
+            if (!PC3_RADIO_USED) /* OPTION RADIO NONE: the LED is GP25 */
+                ExtCfg(PINMAP[PC3_HEARTBEAT_GP], EXT_NOT_CONFIG, 0);
+#endif
             SaveOptions();
             return;
 #endif
@@ -6419,6 +6427,16 @@ void MIPS16 cmd_option(void)
             {
                 Option.NoHeartbeat = 0;
                 Option.heartbeatpin = 0;
+#ifdef PICOMITEPC3
+                if (!PC3_RADIO_USED) /* OPTION RADIO NONE: the LED is GP25 */
+                {
+                    if (ExtCurrentConfig[PINMAP[PC3_HEARTBEAT_GP]] != EXT_NOT_CONFIG)
+                        StandardErrorParam2(27, PINMAP[PC3_HEARTBEAT_GP], PINMAP[PC3_HEARTBEAT_GP]);
+                    gpio_init(PC3_HEARTBEAT_GP);
+                    gpio_set_dir(PC3_HEARTBEAT_GP, GPIO_OUT);
+                    ExtCurrentConfig[PINMAP[PC3_HEARTBEAT_GP]] = EXT_HEARTBEAT;
+                }
+#endif
             }
             else
                 SyntaxError();
@@ -6681,6 +6699,37 @@ void MIPS16 cmd_option(void)
             return;
         }
     }
+#ifdef PICOMITEPC3
+    /* OPTION RADIO BOTH | WEB | BLUETOOTH | NONE: which halves of the radio the
+       next boot brings up.  With WEB or NONE the Bluetooth host is not started
+       (no stack, no firmware download, no poll); with BLUETOOTH or NONE the WiFi
+       is left down (no join, no servers) and the WEB commands refuse.  The chip
+       itself is initialised in every setting for the heartbeat LED.  The stored
+       WiFi network and the Bluetooth pairings are kept.  Saved, then a restart. */
+    tp = checkstring(cmdline, (unsigned char *)"RADIO");
+    if (tp)
+    {
+        uint8_t radio = 0;
+        if (CurrentLinePtr)
+            StandardError(10);
+        if (checkstring(tp, (unsigned char *)"BOTH"))
+            radio = 0;
+        else if (checkstring(tp, (unsigned char *)"WEB"))
+            radio = RADIO_BT_OFF;
+        else if (checkstring(tp, (unsigned char *)"BLUETOOTH"))
+            radio = RADIO_WIFI_OFF;
+        else if (checkstring(tp, (unsigned char *)"NONE"))
+            radio = RADIO_WIFI_OFF | RADIO_BT_OFF;
+        else
+            error("Syntax: OPTION RADIO BOTH | WEB | BLUETOOTH | NONE");
+        if ((radio & RADIO_BT_OFF) && AUDIO_BLUETOOTH)
+            error("Audio is on Bluetooth (OPTION AUDIO)");
+        Option.Radio = radio;
+        SaveOptions();
+        SoftReset(SOFT_RESET);
+        return;
+    }
+#endif
     tp = checkstring(cmdline, (unsigned char *)"WIFI");
     if (tp)
     {
@@ -7482,6 +7531,10 @@ void MIPS16 cmd_option(void)
             int idle = 60;
             if (*p)
                 idle = getint(p, 0, 250);
+#ifdef PICOMITEPC3
+            if (!PC3_BT_ON)
+                error("Bluetooth is off (OPTION RADIO)");
+#endif
             if (AUDIO_BLUETOOTH)
             { /* already the output: just the timeout changes, no restart */
                 Option.audio_bluetooth = idle + 1;

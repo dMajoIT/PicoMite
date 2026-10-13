@@ -248,6 +248,9 @@ uint8_t PSRAMpin;
     volatile int WIFIconnected = 0;
     volatile int LastWifiErr = 0;
     int startupcomplete = 0;
+#ifdef PICOMITEPC3
+    int radioready = 0; /* the chip answered at boot (OPTION RADIO: the LED needs no more) */
+#endif
     int WebScanActive = 0;
     void ProcessWeb(int mode);
     char LCDAttrib = 0;
@@ -2701,6 +2704,11 @@ int __not_in_flash_func(MMInkey)(void)
             if (ExtCurrentConfig[PinDef[HEARTBEATpin].pin] == EXT_HEARTBEAT)
                 gpio_xor_mask64((uint64_t)1 << PinDef[HEARTBEATpin].GPno);
 #endif
+#ifdef PICOMITEPC3
+            /* OPTION RADIO NONE: the heartbeat on GP25 (set up at boot, PC3_HEARTBEAT_GP) */
+            if (ExtCurrentConfig[PINMAP[PC3_HEARTBEAT_GP]] == EXT_HEARTBEAT)
+                gpio_xor_mask64((uint64_t)1 << PC3_HEARTBEAT_GP);
+#endif
         }
 
         return 1;
@@ -4479,6 +4487,21 @@ uint32_t testPSRAM(void)
             dma_channel_claim(DMACH_PING);
             dma_channel_claim(DMACH_PONG);
 #endif
+#ifdef PICOMITEPC3
+            if (!PC3_RADIO_USED)
+            {
+                /* OPTION RADIO NONE: the chip is never powered or initialised and its
+                   four pins stay ordinary I/O; the heartbeat is GP25, toggled by the
+                   millisecond timer as on the PicoMiteHDMIUSB. */
+                if (!Option.NoHeartbeat)
+                {
+                    gpio_init(PC3_HEARTBEAT_GP);
+                    gpio_set_dir(PC3_HEARTBEAT_GP, GPIO_OUT);
+                    ExtCurrentConfig[PINMAP[PC3_HEARTBEAT_GP]] = EXT_HEARTBEAT;
+                }
+            }
+            else
+#endif
             if (cyw43_arch_init_with_country(wifi_country_to_cyw43(Option.wifi_country_code)) == 0)
             {
                 uint32_t cyw43_div = (Option.CPU_Speed + 99999) / 100000;
@@ -4495,10 +4518,25 @@ uint32_t testPSRAM(void)
                 if (CYW43Responds())
 #endif
                 {
+#ifdef PICOMITEPC3
+                    /* OPTION RADIO: the chip is up in every setting (the heartbeat LED
+                       is its GPIO0); WiFi joins and the Bluetooth host starts only
+                       when their halves are on.  startupcomplete stays 0 with the
+                       WiFi off, so the WEB commands refuse as they do without a radio. */
+                    radioready = 1;
+                    if (PC3_WIFI_ON)
+                    {
+                        startupcomplete = 1;
+                        WebConnect();
+                    }
+                    if (PC3_BT_ON)
+                        bt_keyboard_init(); /* the Bluetooth host on the same radio */
+#else
                     startupcomplete = 1;
                     WebConnect();
 #if defined(PICOMITEHDMIBTH)
                     bt_keyboard_init(); /* (PC3: the Bluetooth host on the same radio) */
+#endif
 #endif
                 }
             }
