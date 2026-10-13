@@ -443,8 +443,10 @@ extern "C"
       btstack's hid_host.c) went 6.7 KB over.
       +16 KB (2026-10-10): the Bluetooth serial device on COM7 (BTSerial.c and
       btstack's rfcomm.c and sdp_client_rfcomm.c) is 12.8 KB on PicoMiteHDMIBTH;
-      about 1.7 KB was spare. */
-#define FLASH_TARGET_OFFSET (1520 * 1024)
+      about 1.7 KB was spare.
+      +16 KB (2026-10-13): main went 0.9 KB over after RC1; BLUETOOTH CONNECT
+      SPEAKER | SERIAL | KEYBOARD adds 0.4 KB. */
+#define FLASH_TARGET_OFFSET (1536 * 1024)
    /* +56 KB (2026-10-01): the variable table's records moved into the heap (compact-vars); ~4 KB of RAM margin left for the stack. */
    /* +20 KB (2026-10-02): the SUB/FUNCTION table's RAM (funtbl) given to the heap by the name index; ~3.9 KB of RAM margin left for the stack. */
    /* +4 KB (2026-10-02, Peter): libgcc's complex arithmetic left RAM; ~4.6 KB of RAM margin left for the stack. */
