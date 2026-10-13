@@ -2362,7 +2362,7 @@ static void fm_show_help_screen(void)
     FM_HELP_ROW("/", "Type-select", "H  ?", "Help");
     FM_HELP_ROW("T  F6", "Stop audio", "- +", "Volume up/dn");
     FM_HELP_ROW("Space", "Mark/unmark", "* \\", "Mark all/clr");
-    FM_HELP_ROW("ESC", "Exit FM", "", "");
+    FM_HELP_ROW("ESC", "Exit FM", ", .", "Prev/next track");
 
     if (y < bottom)
         y++; /* blank separator before the navigation block */
@@ -4063,24 +4063,20 @@ static void fm_adjust_volume(int delta, char *status, int status_len)
     snprintf(status, status_len, "Volume %d%%", v);
 }
 
-static int fm_play_audio_file(const fm_panel_t *panel, const fm_entry_t *entry, char *status, int status_len)
+/* Can a file of this audio type play on this board?  0 with the reason in
+   status - the checks ENTER on a file and a track list share. */
+static int fm_audio_type_ready(int audio_type, char *status, int status_len)
 {
-    char full[FM_PATH_MAX];
-    int audio_type = fm_name_audio_type(entry->name);
-
-    if (audio_type == FM_AUDIO_NONE)
-        return 0;
-
     if (!AUDIO_CONFIGURED)
     {
         snprintf(status, status_len, "Audio not enabled");
-        return 1;
+        return 0;
     }
 
     if (audio_type == FM_AUDIO_MIDI && !fm_audio_uses_vs1053())
     {
         snprintf(status, status_len, "MIDI needs VS1053 audio");
-        return 1;
+        return 0;
     }
 
     if (audio_type == FM_AUDIO_MOD)
@@ -4089,13 +4085,13 @@ static int fm_play_audio_file(const fm_panel_t *panel, const fm_entry_t *entry, 
         if (!(modbuff || PSRAMsize))
         {
             snprintf(status, status_len, "Mod playback not enabled");
-            return 1;
+            return 0;
         }
 #else
         if (!modbuff)
         {
             snprintf(status, status_len, "Mod playback not enabled");
-            return 1;
+            return 0;
         }
 #endif
     }
@@ -4104,15 +4100,29 @@ static int fm_play_audio_file(const fm_panel_t *panel, const fm_entry_t *entry, 
     if (audio_type == FM_AUDIO_MP3 && !fm_audio_uses_vs1053())
     {
         snprintf(status, status_len, "MP3 needs VS1053 audio");
-        return 1;
+        return 0;
     }
 #else
     if (audio_type == FM_AUDIO_MP3 && Option.CPU_Speed < 200000 && !fm_audio_uses_vs1053())
     {
         snprintf(status, status_len, "MP3 needs CPUSPEED >=200000");
-        return 1;
+        return 0;
     }
 #endif
+
+    return 1;
+}
+
+static int fm_play_audio_file(const fm_panel_t *panel, const fm_entry_t *entry, char *status, int status_len)
+{
+    char full[FM_PATH_MAX];
+    int audio_type = fm_name_audio_type(entry->name);
+
+    if (audio_type == FM_AUDIO_NONE)
+        return 0;
+
+    if (!fm_audio_type_ready(audio_type, status, status_len))
+        return 1;
 
     if (!fm_make_full_filename(panel->filesystem, panel->path, entry->name, full, sizeof(full)))
     {
@@ -4149,6 +4159,104 @@ static int fm_play_audio_file(const fm_panel_t *panel, const fm_entry_t *entry, 
         snprintf(status, status_len, "Unable to play %s", entry->name);
     else
         snprintf(status, status_len, "Playing %s", entry->name);
+    return 1;
+}
+
+/* The track list: ENTER with marked entries that are all audio files plays
+   them in panel order as the PLAY command's album (alist), so a finished
+   track starts the next and , . step back and forward, as PLAY PREVIOUS and
+   PLAY NEXT do.  Any other mix of marks leaves ENTER acting on the selected
+   entry as usual. */
+static int fm_marked_all_audio(const fm_panel_t *panel)
+{
+    int i;
+
+    if (panel->marked_count <= 0 || !panel->cache_valid || panel->marks == NULL)
+        return 0;
+    for (i = 1; i < panel->entry_count; i++)
+    {
+        if (!panel->marks[i])
+            continue;
+        if (panel->entries[i].is_dir || fm_name_audio_type(panel->entries[i].name) == FM_AUDIO_NONE)
+            return 0;
+    }
+    return 1;
+}
+
+static int fm_album_playing(void)
+{
+    return alist != NULL && (CurrentlyPlaying == P_WAV || CurrentlyPlaying == P_FLAC ||
+                             CurrentlyPlaying == P_MP3 || CurrentlyPlaying == P_MIDI);
+}
+
+static void fm_album_status(char *status, int status_len)
+{
+    const char *fn = alist[trackplaying].fn;
+    const char *base = strrchr(fn, '/');
+
+    snprintf(status, status_len, "Playing %d/%d %s", trackplaying + 1, trackstoplay + 1, base ? base + 1 : fn);
+}
+
+/* Play the marked files as a track list.  1 when the first track is playing,
+   0 with the reason in status; nothing is started unless every file passes. */
+static int fm_play_marked(fm_panel_t *panel, char *status, int status_len)
+{
+    char full[FM_PATH_MAX];
+    int i;
+    int n = 0;
+
+    if (!AUDIO_CONFIGURED)
+    {
+        snprintf(status, status_len, "Audio not enabled");
+        return 0;
+    }
+    if (panel->marked_count > MAXALBUM)
+    {
+        snprintf(status, status_len, "Too many marked for a track list (max %d)", MAXALBUM);
+        return 0;
+    }
+    for (i = 1; i < panel->entry_count; i++)
+    {
+        int audio_type;
+
+        if (!panel->marks[i])
+            continue;
+        audio_type = fm_name_audio_type(panel->entries[i].name);
+        if (audio_type == FM_AUDIO_MOD)
+        {
+            snprintf(status, status_len, "MOD files cannot be in a track list");
+            return 0;
+        }
+        if (!fm_audio_type_ready(audio_type, status, status_len))
+            return 0;
+        if (!fm_make_full_filename(panel->filesystem, panel->path, panel->entries[i].name, full, sizeof(full)) ||
+            strlen(full) >= sizeof(alist[0].fn))
+        {
+            snprintf(status, status_len, "Path too long: %s", panel->entries[i].name);
+            return 0;
+        }
+    }
+
+    fm_set_default_drive_dir(panel);
+    if (CurrentlyPlaying != P_NOTHING)
+        CloseAudio(1);
+    alist = GetMemory(sizeof(a_flist) * MAXALBUM);
+    for (i = 1; i < panel->entry_count; i++)
+    {
+        if (!panel->marks[i])
+            continue;
+        fm_make_full_filename(panel->filesystem, panel->path, panel->entries[i].name, alist[n].fn, sizeof(alist[n].fn));
+        n++;
+    }
+    trackstoplay = n - 1;
+    PlayAlbumTrack(0);
+    if (CurrentlyPlaying == P_NOTHING)
+    {
+        snprintf(status, status_len, "Unable to play %s", strrchr(alist[0].fn, '/') + 1);
+        CloseAudio(1);
+        return 0;
+    }
+    fm_album_status(status, status_len);
     return 1;
 }
 
@@ -4435,6 +4543,7 @@ void cmd_fm(void)
     int type_select_active = 0;
     int type_select_dirty = 0;
     uint64_t type_select_last_input_us = 0;
+    int album_shown = -1; /* track the status line shows, -1 when no track list is playing */
     int pi;
     unsigned char break_key_save = BreakKey;
     char type_select_prefix[FF_MAX_LFN + 1];
@@ -4681,6 +4790,23 @@ fm_relaunch:
         while (c == -1)
         {
             routinechecks();
+            /* A track list is playing: keep the status line on the current
+               track, and say when the list has finished. */
+            if (!type_select_active)
+            {
+                if (fm_album_playing() && trackplaying != album_shown)
+                {
+                    album_shown = trackplaying;
+                    fm_album_status(status, sizeof(status));
+                    fm_draw_field(0, Option.Height - 1, Option.Width, status, FM_ANSI_STATUS, YELLOW, BLACK);
+                }
+                else if (album_shown >= 0 && CurrentlyPlaying == P_NOTHING)
+                {
+                    album_shown = -1;
+                    snprintf(status, sizeof(status), "Track list finished");
+                    fm_draw_field(0, Option.Height - 1, Option.Width, status, FM_ANSI_STATUS, YELLOW, BLACK);
+                }
+            }
             if (type_select_active && type_select_dirty)
             {
                 if (time_us_64() - type_select_last_input_us >= 300000)
@@ -5026,6 +5152,12 @@ fm_relaunch:
         case F2:
         case '\r':
         case '\n':
+            if (fm_marked_all_audio(p))
+            {
+                album_shown = fm_play_marked(p, status, sizeof(status)) ? trackplaying : -1;
+                need_full_redraw = 1;
+                break;
+            }
             if (p->count > 0 && p->selected >= 0 && p->selected < p->count &&
                 fm_get_entry_at(p, p->selected, &entry, errmsg, sizeof(errmsg)))
             {
@@ -5069,6 +5201,7 @@ fm_relaunch:
                 }
                 else if (fm_play_audio_file(p, &entry, status, sizeof(status)))
                 {
+                    album_shown = -1; /* a single file: the track list, if any, is gone */
                     need_full_redraw = 1;
                 }
                 else if (fm_show_image_file(p, &entry, status, sizeof(status), oldmode_local, oldfont_local))
@@ -5318,6 +5451,7 @@ fm_relaunch:
             if (CurrentlyPlaying != P_NOTHING)
             {
                 CloseAudio(1);
+                album_shown = -1;
                 snprintf(status, sizeof(status), "Audio stopped");
             }
             else
@@ -5335,6 +5469,25 @@ fm_relaunch:
         case '+':
         case '=':
             fm_adjust_volume(FM_VOLUME_STEP, status, sizeof(status));
+            fm_draw_field(0, Option.Height - 1, Option.Width, status, FM_ANSI_STATUS, YELLOW, BLACK);
+            break;
+        case ',':
+        case '<':
+        case '.':
+        case '>':
+            /* Step through the track list, as PLAY PREVIOUS and PLAY NEXT do. */
+            if (!fm_album_playing())
+                snprintf(status, sizeof(status), "No track list playing");
+            else if ((c == ',' || c == '<') && trackplaying == 0)
+                snprintf(status, sizeof(status), "First track is playing");
+            else if ((c == '.' || c == '>') && trackplaying == trackstoplay)
+                snprintf(status, sizeof(status), "Last track is playing");
+            else
+            {
+                PlayAlbumTrack(trackplaying + ((c == '.' || c == '>') ? 1 : -1));
+                album_shown = trackplaying;
+                fm_album_status(status, sizeof(status));
+            }
             fm_draw_field(0, Option.Height - 1, Option.Width, status, FM_ANSI_STATUS, YELLOW, BLACK);
             break;
         case 'R':

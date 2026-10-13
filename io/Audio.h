@@ -220,6 +220,8 @@ extern char *streambuffer;
  * External variables - Playlist
  * ============================================================================ */
 extern a_flist *alist;
+#define MAXALBUM 20 /* tracks in an album: a directory played, or the file manager's marked files */
+extern int PlayAlbumTrack(int n);
 
 /* ============================================================================
  * BBC Micro sound engine (AudioBBC.c) - PLAY BBC SOUND / PLAY BBC ENVELOPE

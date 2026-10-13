@@ -83,6 +83,7 @@ Each command has a single mnemonic letter and a function key. Cursor movement an
 | Stop audio playback | `T` | `F6` | — |
 | Volume down | — | `F7` | `-` |
 | Volume up | — | `F8` | `+` or `=` |
+| Previous / next track of a track list | — | — | `,` or `<` / `.` or `>` |
 | Set filter | `F` | `F9` | — |
 | Clear filter | `W` | `F10` | — |
 | Make directory | `K` | `F11` | — |
@@ -98,6 +99,7 @@ Each command has a single mnemonic letter and a function key. Cursor movement an
 | Mark / unmark current item | — | — | `Space` |
 | Mark all items in panel | — | — | `*` |
 | Clear all marks in panel | — | — | `\` |
+| Play the marked audio files as a track list | — | `F2` | `Enter` (when every marked item is an audio file) |
 | Type-to-select by filename prefix | — | — | `/` then type (`Enter` opens, `Esc` cancels, `Backspace` edits prefix) |
 
 ## Navigation
@@ -148,7 +150,7 @@ Press `Enter` (or `F2`) on the selected item:
 
 - **Directory** — enters the directory.
 - **`.BAS` file** — saves FM context and launches the program. FM relaunches automatically when the program ends (see [Program Launch And Return](#program-launch-and-return)).
-- **Audio file** (`.WAV`, `.FLAC`, `.MP3`, `.MID`/`.MIDI`, `.MOD`) — starts background playback (see [Audio Playback](#audio-playback)).
+- **Audio file** (`.WAV`, `.FLAC`, `.MP3`, `.MID`/`.MIDI`, `.MOD`) — starts background playback (see [Audio Playback](#audio-playback)). When every marked item in the panel is an audio file, `Enter` plays the marked files as a track list instead, whatever is selected.
 - **Image file** (`.BMP`, `.JPG`, `.PNG`) — displays a full-screen preview (see [Image Preview](#image-preview)).
 - **Any other file** — no action; the filename is shown on the status line.
 
@@ -251,6 +253,15 @@ Audio plays in the background while FM remains fully interactive.
 - `F6` (`T`) — stops playback.
 - `F7` or `-` — decreases volume.
 - `F8`, `+`, or `=` — increases volume.
+- `.` or `>` / `,` or `<` — next / previous track of a track list.
+
+### Track Lists
+
+Mark two or more audio files with `Space` and press `Enter`. When every marked item in the panel is an audio file, FM plays the marked files in panel order as a track list: the same list that `PLAY WAV`, `PLAY FLAC`, `PLAY MP3` or `PLAY MIDI` builds from a directory, so each track starts when the one before it ends. A list may mix `.WAV`, `.FLAC`, `.MP3` and `.MID` files and holds at most 20 tracks; `.MOD` files cannot be in one ("MOD files cannot be in a track list"). Nothing is started unless every file in the list passes the hardware checks above.
+
+The status line shows `Playing 2/5 name` and follows the track that is playing; it says "Track list finished" when the last track ends. While the list plays, `.` or `>` skips to the next track and `,` or `<` returns to the previous one, as `PLAY NEXT` and `PLAY PREVIOUS` do ("Last track is playing" and "First track is playing" at the ends); `F6` (`T`) stops the list. `PLAY NEXT`, `PLAY PREVIOUS` and `PLAY STOP` act on the same list after FM exits.
+
+If any marked item is not an audio file (a directory, a program, an image), `Enter` acts on the selected item as usual.
 
 If audio output is not configured, FM shows "Audio not enabled" on the status line.
 

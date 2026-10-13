@@ -83,7 +83,6 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #define AUDIO_USES_VS1053 (Option.AUDIO_MISO_PIN != 0)
 #endif
 extern BYTE MDD_SDSPI_CardDetectState(void);
-#define MAXALBUM 20
 extern int InitSDCard(void);
 extern const int ErrorMap[21];
 extern char *GetCWD(void);
@@ -1452,6 +1451,33 @@ unsigned int readsamplearray(char *sbuff)
 #endif
 /*  @endcond */
 // The MMBasic command:  PLAY
+/* Start track n of the album - the files of a directory given to PLAY WAV,
+   FLAC, MP3 or MIDI, or the file manager's marked files - with the decoder
+   its extension needs, so one list may mix the four formats.  Sets
+   trackplaying; returns 0 when there is no such track or no decoder for it. */
+int PlayAlbumTrack(int n)
+{
+	char *fn, *ext;
+	if (alist == NULL || n < 0 || n > trackstoplay)
+		return 0;
+	trackplaying = n;
+	fn = alist[n].fn;
+	ext = strrchr(fn, '.');
+	if (ext == NULL)
+		return 0;
+	if (strcasecmp(ext, ".wav") == 0)
+		wavcallback(fn);
+	else if (strcasecmp(ext, ".flac") == 0)
+		flaccallback(fn);
+	else if (strcasecmp(ext, ".mp3") == 0)
+		mp3callback(fn, 0);
+	else if (strcasecmp(ext, ".mid") == 0 || strcasecmp(ext, ".midi") == 0)
+		midicallback(fn);
+	else
+		return 0;
+	return 1;
+}
+
 void MIPS16 cmd_play(void)
 {
 	unsigned char *tp;
@@ -1484,7 +1510,7 @@ void MIPS16 cmd_play(void)
 	}
 	if (checkstring(cmdline, (unsigned char *)"NEXT"))
 	{
-		if (CurrentlyPlaying == P_FLAC)
+		if (CurrentlyPlaying == P_FLAC || CurrentlyPlaying == P_WAV || CurrentlyPlaying == P_MP3 || CurrentlyPlaying == P_MIDI)
 		{
 			if (trackplaying == trackstoplay)
 			{
@@ -1492,41 +1518,7 @@ void MIPS16 cmd_play(void)
 					MMPrintString("Last track is playing\r\n");
 				return;
 			}
-			trackplaying++;
-			flaccallback(alist[trackplaying].fn);
-		}
-		else if (CurrentlyPlaying == P_WAV)
-		{
-			if (trackplaying == trackstoplay)
-			{
-				if (!CurrentLinePtr)
-					MMPrintString("Last track is playing\r\n");
-				return;
-			}
-			trackplaying++;
-			wavcallback(alist[trackplaying].fn);
-		}
-		else if (CurrentlyPlaying == P_MP3)
-		{
-			if (trackplaying == trackstoplay)
-			{
-				if (!CurrentLinePtr)
-					MMPrintString("Last track is playing\r\n");
-				return;
-			}
-			trackplaying++;
-			mp3callback(alist[trackplaying].fn, 0);
-		}
-		else if (CurrentlyPlaying == P_MIDI)
-		{
-			if (trackplaying == trackstoplay)
-			{
-				if (!CurrentLinePtr)
-					MMPrintString("Last track is playing\r\n");
-				return;
-			}
-			trackplaying++;
-			midicallback(alist[trackplaying].fn);
+			PlayAlbumTrack(trackplaying + 1);
 		}
 		else
 			error("Nothing to play");
@@ -1535,7 +1527,7 @@ void MIPS16 cmd_play(void)
 	}
 	if (checkstring(cmdline, (unsigned char *)"PREVIOUS"))
 	{
-		if (CurrentlyPlaying == P_FLAC)
+		if (CurrentlyPlaying == P_FLAC || CurrentlyPlaying == P_WAV || CurrentlyPlaying == P_MP3 || CurrentlyPlaying == P_MIDI)
 		{
 			if (trackplaying == 0)
 			{
@@ -1543,41 +1535,7 @@ void MIPS16 cmd_play(void)
 					MMPrintString("First track is playing\r\n");
 				return;
 			}
-			trackplaying--;
-			flaccallback(alist[trackplaying].fn);
-		}
-		else if (CurrentlyPlaying == P_WAV)
-		{
-			if (trackplaying == 0)
-			{
-				if (!CurrentLinePtr)
-					MMPrintString("First track is playing\r\n");
-				return;
-			}
-			trackplaying--;
-			wavcallback(alist[trackplaying].fn);
-		}
-		else if (CurrentlyPlaying == P_MP3)
-		{
-			if (trackplaying == 0)
-			{
-				if (!CurrentLinePtr)
-					MMPrintString("First track is playing\r\n");
-				return;
-			}
-			trackplaying--;
-			mp3callback(alist[trackplaying].fn, 0);
-		}
-		else if (CurrentlyPlaying == P_MIDI)
-		{
-			if (trackplaying == 0)
-			{
-				if (!CurrentLinePtr)
-					MMPrintString("First track is playing\r\n");
-				return;
-			}
-			trackplaying--;
-			midicallback(alist[trackplaying].fn);
+			PlayAlbumTrack(trackplaying - 1);
 		}
 		else
 			error("Nothing to play");
@@ -3704,28 +3662,9 @@ void checkWAVinput(void)
 		}
 		else
 		{
-			if (CurrentlyPlaying == P_WAV)
-			{
-				trackplaying++;
-				wavcallback(alist[trackplaying].fn);
-			}
-			else if (CurrentlyPlaying == P_FLAC)
-			{
-				trackplaying++;
-				flaccallback(alist[trackplaying].fn);
-			}
-			else if (CurrentlyPlaying == P_MP3)
-			{
-				trackplaying++;
-				mp3callback(alist[trackplaying].fn, 0);
-			}
-			else if (CurrentlyPlaying == P_MIDI)
-			{
-				if (AUDIO_USES_VS1053 && VSbuffer > 32)
-					return;
-				trackplaying++;
-				midicallback(alist[trackplaying].fn);
-			}
+			if (CurrentlyPlaying == P_MIDI && AUDIO_USES_VS1053 && VSbuffer > 32)
+				return;
+			PlayAlbumTrack(trackplaying + 1);
 		}
 	}
 }
