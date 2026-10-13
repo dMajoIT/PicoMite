@@ -1298,11 +1298,13 @@ static unsigned char *connect_keyword(unsigned char *tp, const char *kw)
     return p;
 }
 
-/* BLUETOOTH CONNECT [SPEAKER | SERIAL] name$ | addr$ [, pin$]
+/* BLUETOOTH CONNECT [SPEAKER | SERIAL | KEYBOARD] name$ | addr$ [, pin$]
      SPEAKER - connect it as a speaker, SERIAL - connect its serial port as
-             COM7, whatever its Class of Device: for a device that is both,
-             such as an RN52 module, one CONNECT of each. Without either the
-             kind is chosen as below.
+             COM7, KEYBOARD - connect it as a Classic keyboard, whatever its
+             Class of Device: for a device that is both a speaker and a
+             serial device, such as an RN52 module, one CONNECT of each; for
+             a keyboard whose Class of Device does not say so. Without any
+             of them the kind is chosen as below.
      name$ - a device name as the last BLUETOOTH SCAN listed it (any case)
      addr$ - its address, "AA:BB:CC:DD:EE:FF"
      pin$  - the PIN for a speaker or serial device that pairs the legacy
@@ -1313,7 +1315,7 @@ static unsigned char *connect_keyword(unsigned char *tp, const char *kw)
 static void bta_connect(unsigned char *tp)
 {
     bd_addr_t addr;
-    enum { CONNECT_ANY, CONNECT_SPEAKER, CONNECT_SERIAL } want = CONNECT_ANY;
+    enum { CONNECT_ANY, CONNECT_SPEAKER, CONNECT_SERIAL, CONNECT_KEYBOARD } want = CONNECT_ANY;
     unsigned char *p;
     if ((p = connect_keyword(tp, "SPEAKER")) != NULL)
     {
@@ -1323,6 +1325,11 @@ static void bta_connect(unsigned char *tp)
     else if ((p = connect_keyword(tp, "SERIAL")) != NULL)
     {
         want = CONNECT_SERIAL;
+        tp = p;
+    }
+    else if ((p = connect_keyword(tp, "KEYBOARD")) != NULL)
+    {
+        want = CONNECT_KEYBOARD;
         tp = p;
     }
     getargs(&tp, 3, (unsigned char *)",");
@@ -1366,6 +1373,8 @@ static void bta_connect(unsigned char *tp)
     {
         if (want == CONNECT_SPEAKER)
             error("A BLE device cannot be a speaker");
+        if (want == CONNECT_KEYBOARD)
+            error("BLE keyboards pair by themselves, without CONNECT");
         if (argc == 3)
             error("A BLE device pairs without a PIN");
         if (d)
@@ -1378,7 +1387,8 @@ static void bta_connect(unsigned char *tp)
     }
     /* A keyboard, by its Class of Device in the last SCAN, or the
        remembered one given by address. */
-    if (want == CONNECT_ANY && (d ? bt_ckbd_cod_is_keyboard(d->cod) : bt_ckbd_is_remembered(addr)))
+    if (want == CONNECT_KEYBOARD ||
+        (want == CONNECT_ANY && (d ? bt_ckbd_cod_is_keyboard(d->cod) : bt_ckbd_is_remembered(addr))))
     {
         if (argc == 3)
             error("No PIN for a keyboard: it is shown a code to type");
