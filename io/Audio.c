@@ -2340,13 +2340,18 @@ void MIPS16 cmd_play(void)
 			WAVInterrupt = (char *)GetIntAddress(argv[2]); // get the interrupt location
 			IntSignal();
 		}
-		if (FatFSFileSystem)
 		{
 			FRESULT fr;
 			FILINFO fno;
 			int i;
-			if (ExistsDir(q, q, &i))
+			/* A directory on the SD card or a USB drive, named with its drive
+			   letter or on the current drive: ExistsDir takes the drive from the
+			   argument, so "B:/music" plays from A: as well, and q is the path
+			   on that drive. */
+			q[0] = 0; /* for a bare name getfullfilename builds on what q holds, so start it empty */
+			if (ExistsDir(p, q, &i) == 1 && i != 0)
 			{
+				FatFSFileSystem = i;
 				alist = GetMemory(sizeof(a_flist) * MAXALBUM);
 				trackstoplay = 0;
 				trackplaying = 0;
@@ -2432,13 +2437,18 @@ void MIPS16 cmd_play(void)
 			WAVInterrupt = (char *)GetIntAddress(argv[2]); // get the interrupt location
 			IntSignal();
 		}
-		if (FatFSFileSystem)
 		{
 			FRESULT fr;
 			FILINFO fno;
 			int i;
-			if (ExistsDir(q, q, &i))
+			/* A directory on the SD card or a USB drive, named with its drive
+			   letter or on the current drive: ExistsDir takes the drive from the
+			   argument, so "B:/music" plays from A: as well, and q is the path
+			   on that drive. */
+			q[0] = 0; /* for a bare name getfullfilename builds on what q holds, so start it empty */
+			if (ExistsDir(p, q, &i) == 1 && i != 0)
 			{
+				FatFSFileSystem = i;
 				alist = GetMemory(sizeof(a_flist) * MAXALBUM);
 				trackstoplay = 0;
 				trackplaying = 0;
@@ -2667,13 +2677,18 @@ void MIPS16 cmd_play(void)
 			WAVInterrupt = (char *)GetIntAddress(argv[2]); // get the interrupt location
 			IntSignal();
 		}
-		if (FatFSFileSystem)
 		{
 			FRESULT fr;
 			FILINFO fno;
 			int i;
-			if (ExistsDir(q, q, &i))
+			/* A directory on the SD card or a USB drive, named with its drive
+			   letter or on the current drive: ExistsDir takes the drive from the
+			   argument, so "B:/music" plays from A: as well, and q is the path
+			   on that drive. */
+			q[0] = 0; /* for a bare name getfullfilename builds on what q holds, so start it empty */
+			if (ExistsDir(p, q, &i) == 1 && i != 0)
 			{
+				FatFSFileSystem = i;
 				alist = GetMemory(sizeof(a_flist) * MAXALBUM);
 				trackstoplay = 0;
 				trackplaying = 0;
@@ -2830,13 +2845,18 @@ void MIPS16 cmd_play(void)
 			WAVInterrupt = (char *)GetIntAddress(argv[2]); // get the interrupt location
 			IntSignal();
 		}
-		if (FatFSFileSystem)
 		{
 			FRESULT fr;
 			FILINFO fno;
 			int i;
-			if (ExistsDir(q, q, &i))
+			/* A directory on the SD card or a USB drive, named with its drive
+			   letter or on the current drive: ExistsDir takes the drive from the
+			   argument, so "B:/music" plays from A: as well, and q is the path
+			   on that drive. */
+			q[0] = 0; /* for a bare name getfullfilename builds on what q holds, so start it empty */
+			if (ExistsDir(p, q, &i) == 1 && i != 0)
 			{
+				FatFSFileSystem = i;
 				alist = GetMemory(sizeof(a_flist) * MAXALBUM);
 				trackstoplay = 0;
 				trackplaying = 0;
