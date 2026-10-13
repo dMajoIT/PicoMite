@@ -365,9 +365,35 @@ On the RP2040, keeping `SIN(b)` in a variable saved 2 µs. On the RP2350 interpr
 ### 4.9 Outside your program
 
 - **The clock.** Every time in this guide scales with the CPU clock. `OPTION CPUSPEED` sets it on the builds without video. On the VGA and HDMI builds the clock follows `OPTION RESOLUTION`. `MM.INFO(CPUSPEED)` reports it.
-- **The build.** At the same clock, the plain PicoMite builds are quicker than those that also run WiFi, a USB host or an HDMI display, by a few per cent up to about a fifth. Those builds do some housekeeping between statements.
+- **The build.** At the same clock, the plain PicoMite builds are quicker than those that also run WiFi, a USB host or an HDMI display, by a few per cent up to about a fifth. Those builds do some housekeeping between statements; section 4.10 measures what the wireless builds' housekeeping costs and how to switch it off.
 - **The console.** `PRINT` to a screen that has to scroll is slow, because every new line moves the whole screen. Print less inside loops, or send the output to the serial console with `OPTION CONSOLE SERIAL`.
 - **Interrupts.** An interrupt that is set up but not firing (a `SETTICK`, a pin, a COM port) costs almost nothing. Its routine is BASIC like any other, though, so keep it short.
+
+### 4.10 The wireless builds: what runs between statements
+
+The WiFi builds and the Bluetooth host builds (WebMite, PicoMiteHDMIWEB, PicoMiteRP2350BTH, PicoMiteHDMIBTH and PicoMitePC3) service their radio from the statement loop. Once a millisecond, or once every hundred statements if those are quicker, the interpreter polls the wireless chip, runs the Bluetooth stack's timers, gives the WiFi stack its turn when a network is joined, and feeds a Bluetooth speaker when one is playing. Nothing of this is tied to your program, so the cost is a slice of every millisecond: a long loop of short statements shows it most, a program that spends its time in a `MATH` command or a `PAUSE` hardly notices it.
+
+The table measures that slice on one board, a Pico Computer 3 at 315 MHz running the PicoMitePC3 build with `OPTION COMPILE OFF`, which can switch each half of its radio off with `OPTION RADIO`. The anchor is solar_eclipse, a 70 KB interpreted program; the empty loop is `FOR i = 1 TO 20000 ... NEXT` with nothing inside, per pass. Runs repeat within 2%.
+
+| Running between statements | solar_eclipse | empty loop | cost |
+|---|---|---|---|
+| nothing: `OPTION RADIO NONE` (the PicoMiteHDMIUSB's speed) | 14.15 s | 1.21 µs | - |
+| the WiFi stack, a network joined (`OPTION RADIO WEB`) | 14.57 s | 1.53 µs | +3% |
+| the Bluetooth host, nothing connected (`OPTION RADIO BLUETOOTH`) | 15.11 s | 1.45 µs | +7% |
+| both, audio on the I2S DAC (`OPTION RADIO BOTH`) | 15.04 s | 1.68 µs | +6% |
+| both, `OPTION AUDIO DISABLE` | 15.07 s | 1.78 µs | +7% |
+| both, a Bluetooth speaker connected and silent | 15.06 s | 1.76 µs | +6% |
+| both, the speaker playing | 18.04 s | 2.04 µs | +27% |
+
+What the rows say:
+
+- **WiFi costs about 3% while a network is joined**, and nothing while it is not: the stack has nothing to do until there are packets. A busy connection (a TFTP transfer, a web page being served) costs more for as long as it lasts.
+- **The Bluetooth host costs about 7% with nothing connected.** Most of that is the scan for a keyboard, which runs whenever no BLE keyboard is connected, and the stack's own housekeeping. It is the same on the PicoMiteRP2350BTH and PicoMiteHDMIBTH, which cannot switch it off.
+- **An audio output that is not playing costs nothing**, whether it is the I2S DAC, nothing at all, or a Bluetooth speaker sitting connected and silent. Before V7 RC1 a configured speaker cost a third of the interpreter's time even when silent; it no longer does.
+- **A Bluetooth speaker that is playing costs about a quarter.** The SBC encoder takes a tenth of the processor by itself, and the rest is the packets going out through the radio. The I2S DAC plays the same files through a DMA buffer and costs nothing you can measure. The cost stops the moment the sound stops.
+- **`SAVE` and other flash writes pause a playing speaker** for as long as they take, because a flash write runs with interrupts off and the stack is not polled meanwhile: a 250 KB `SAVE` silences the speaker for about five seconds. The stream carries on afterwards.
+
+So on a PicoMitePC3 that is used as an HDMI computer, `OPTION RADIO NONE` gives it the plain PicoMiteHDMIUSB's speed; a WebMite-style use is `OPTION RADIO WEB`; and with both radios in use the only cost worth planning around is a speaker that is playing while the program runs.
 
 ## 5. Let the firmware do the loop: MATH, ARRAY, SORT, MEMORY and the graphics array forms
 
