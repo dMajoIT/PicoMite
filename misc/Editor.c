@@ -4672,6 +4672,11 @@ fm_relaunch:
                 fm_flush_keyboard_buffer();
             need_panel_redraw = 0;
         }
+        /* Type-select reads its prefix here with MMInkey, so it shows the
+           typing cursor itself: after the status text while it waits, hidden
+           again before anything repaints or acts on the key. */
+        if (type_select_active)
+            fm_prompt_cursor(strlen(status), 1);
         c = -1;
         while (c == -1)
         {
@@ -4702,15 +4707,16 @@ fm_relaunch:
                     {
                         snprintf(status, sizeof(status), "Type-select: type filename prefix");
                     }
-                    need_full_redraw = 1;
-                    if (need_full_redraw)
-                    {
-                        fm_draw_ui(panels, active, status);
-                        need_full_redraw = 0;
-                    }
+                    ShowCursor(0);
+                    fm_prompt_cursor(strlen(status), 0);
+                    fm_draw_ui(panels, active, status);
+                    need_full_redraw = 0;
+                    fm_prompt_cursor(strlen(status), 1);
                     continue;
                 }
             }
+            if (type_select_active)
+                ShowCursor(1); // the local display's cursor blinks from here, as MMgetchar's does
             c = MMInkey();
 #if defined(GUICONTROLS) && defined(USBKEYBOARD)
             ProcessTouch();
@@ -4762,7 +4768,14 @@ fm_relaunch:
                             p = &panels[active];
                             p->selected = idx;
                             fm_set_status_to_selected(p, status, sizeof(status));
+                            if (type_select_active)
+                            {
+                                ShowCursor(0);
+                                fm_prompt_cursor(strlen(status), 0);
+                            }
                             fm_draw_ui(panels, active, status);
+                            if (type_select_active)
+                                fm_prompt_cursor(strlen(status), 1);
                         }
                     }
                 }
@@ -4775,6 +4788,8 @@ fm_relaunch:
             int consumed = 0;
             int len = strlen(type_select_prefix);
 
+            ShowCursor(0);
+            fm_prompt_cursor(strlen(status), 0);
             if (c == ESC)
             {
                 type_select_active = 0;
