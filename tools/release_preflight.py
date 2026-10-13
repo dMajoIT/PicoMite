@@ -31,6 +31,7 @@ VARIANTS = [
     "PicoMiteRP2350VGA", "PicoMiteRP2350VGAUSB",
     "PicoMiteRP2350BT", "PicoMiteRP2350BTH",
     "PicoMiteHDMI", "PicoMiteHDMIUSB", "PicoMiteHDMIWEB", "PicoMiteHDMIBTH",
+    "PicoMitePC3",
     "WebMiteRP2040", "WebMiteRP2350",
 ]
 
