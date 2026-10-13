@@ -1537,6 +1537,20 @@ static void fm_draw_field(int x, int y, int width, const char *text, const char 
     }
 }
 
+/* The cursor of a status-line prompt.  FM hides the terminal's cursor when it
+   opens (ESC[?25l), and a field paint leaves both consoles' text position after
+   the padded line, so a prompt that reads keys shows the cursor where the
+   typing goes - the terminal's through SCursor and ESC[?25h, the local
+   display's through the text position MMgetchar's ShowCursor draws at - and
+   hides it again when it has read its key. */
+static void fm_prompt_cursor(int col, int show)
+{
+    if (col > Option.Width - 1)
+        col = Option.Width - 1;
+    SCursor(col, Option.Height - 1);
+    PrintString(show ? "[?25h" : "[?25l");
+}
+
 static void fm_fill_padded_line(char *out, int width, const char *text)
 {
     int n = 0;
@@ -2416,7 +2430,9 @@ static int fm_prompt_text(const char *label, const char *initial, char *out, int
         }
         strncat(line, temp, sizeof(line) - strlen(line) - 1);
         fm_draw_field(0, Option.Height - 1, Option.Width, line, FM_ANSI_STATUS, YELLOW, BLACK);
+        fm_prompt_cursor(strlen(line), 1);
         c = MMgetchar();
+        fm_prompt_cursor(strlen(line), 0);
         if (c == '\r' || c == '\n')
         {
             strncpy(out, temp, outlen - 1);
@@ -3483,7 +3499,9 @@ static int fm_prompt_filter(fm_panel_t *panel)
     {
         snprintf(line, sizeof(line), "Filter %c: %s", fm_drive_letter(panel->filesystem), temp);
         fm_draw_field(0, Option.Height - 1, Option.Width, line, FM_ANSI_STATUS, YELLOW, BLACK);
+        fm_prompt_cursor(strlen(line), 1);
         c = MMgetchar();
+        fm_prompt_cursor(strlen(line), 0);
         if (c == '\r' || c == '\n')
         {
             if (len == 0)
