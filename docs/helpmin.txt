@@ -2211,7 +2211,8 @@ FM
 NOT PICOMITEMIN Opens the full screen, two panel file manager for managing the
 files on the A:, B: and C: drives. Files can be browsed, sorted, filtered,
 copied, moved, renamed and deleted; BASIC programs can be run, edited, listed
-and created; audio files can be played and image files displayed.
+and created; audio files can be played, singly or as a track list of marked
+files, and image files displayed.
 
 ~FONT
 FONT [#]font-number, scaling
