@@ -5012,6 +5012,12 @@ static const struct optmap_s OptionMap[] = {
     OPT(Resolution, OPT_U8),
     OPT(Multi, OPT_U8),
     OPT(Compile, OPT_U8),
+#ifdef PICOMITEHDMIWEB
+    OPT(mousespeed, OPT_FLT), // HDMIWEB (and the PC3) keep it here, not in the network overlay
+#endif
+#ifdef PICOMITEPC3
+    OPT(Radio, OPT_U8),
+#endif
 };
 #define OPTIONMAP_COUNT (sizeof(OptionMap) / sizeof(OptionMap[0]))
 
@@ -5186,7 +5192,7 @@ static void OptionSaveText(int fnbr)
             char fb[40];
             double v = *(float *)((char *)&Option + m->off);
             FloatToStr(fb, v, 0, STR_AUTO_PRECISION, ' '); // pico printf %g is broken; use MMBasic's formatter
-            snprintf(line, sizeof(line), "%s=%s\r\n", m->name, fb + (v >= 0 ? 1 : 0));
+            snprintf(line, sizeof(line), "%s=%s\r\n", m->name, fb); // no leading space with width 0
         }
         else
         {
